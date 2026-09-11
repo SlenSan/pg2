@@ -1,0 +1,49 @@
+# Entornos virtuales
+venv/
+env/
+ENV/
+.venv/
+
+# Variables de entorno / secretos
+.env
+
+# Bytecode / cache de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+
+# Distribución / empaquetado
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Tests / cobertura
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Android Studio / Gradle (app del paseador)
+*.iml
+.gradle/
+local.properties
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Editores / SO
+.vscode/
+.DS_Store
+Thumbs.db
