@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}Bienvenida — Canigo{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-8 text-center">
+    <h1 class="h3">¡Hola, {{ nombre }}! 🐕</h1>
+    <p class="text-muted">Iniciaste sesión correctamente en Canigo.</p>
+    <a href="{% url 'usuarios:logout' %}" class="btn btn-outline-secondary">Cerrar sesión</a>
+  </div>
+</div>
+{% endblock %}

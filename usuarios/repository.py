@@ -1,0 +1,59 @@
+"""
+Acceso a la coleccion `usuarios` de MongoDB.
+
+Esta capa no sabe nada de HTTP ni de la vista web/API que la llama:
+solo lee y escribe documentos en la coleccion `usuarios`, siguiendo el
+esquema definido en el documento de grado.
+"""
+
+from datetime import datetime, timezone
+
+from bson import ObjectId
+from bson.errors import InvalidId
+
+from core.mongo import get_db
+
+
+def obtener_por_correo(correo):
+    return get_db().usuarios.find_one({'correo': correo})
+
+
+def obtener_por_id(id_usuario):
+    try:
+        oid = ObjectId(id_usuario)
+    except (InvalidId, TypeError):
+        return None
+    return get_db().usuarios.find_one({'_id': oid})
+
+
+def crear_usuario(*, nombre, correo, contrasena_hash, telefono, rol, direccion='', descripcion=''):
+    """Inserta un usuario nuevo. `rol` debe ser 'dueño' o 'paseador'."""
+    usuario = {
+        'nombre': nombre,
+        'correo': correo,
+        'contrasena': contrasena_hash,
+        'telefono': telefono,
+        'rol': rol,
+        'foto_perfil': '',
+        'direccion': direccion,
+        'fecha_registro': datetime.now(timezone.utc),
+    }
+    if rol == 'paseador':
+        usuario.update({
+            'calificacion_promedio': None,
+            'verificado': False,
+            'descripcion': descripcion,
+        })
+
+    resultado = get_db().usuarios.insert_one(usuario)
+    usuario['_id'] = resultado.inserted_id
+    return usuario
+
+
+def a_json(usuario):
+    """Representacion de un usuario segura para exponer por la API (sin la contrasena)."""
+    data = {k: v for k, v in usuario.items() if k != 'contrasena'}
+    data['_id'] = str(data['_id'])
+    if isinstance(data.get('fecha_registro'), datetime):
+        data['fecha_registro'] = data['fecha_registro'].isoformat()
+    return data
