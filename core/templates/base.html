@@ -13,6 +13,12 @@
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container">
       <a class="navbar-brand" href="{% url 'home' %}">🐾 Canigo</a>
+      {% if request.session.id_usuario %}
+      <div class="navbar-nav flex-row gap-3">
+        <a class="nav-link text-white" href="{% url 'mascotas:lista' %}">Mis mascotas</a>
+        <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
+      </div>
+      {% endif %}
     </div>
   </nav>
 

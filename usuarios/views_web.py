@@ -10,6 +10,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.shortcuts import redirect, render
 
 from usuarios import repository
+from usuarios.decorators import requiere_dueno
 from usuarios.forms import LoginForm, RegistroDuenoForm
 
 
@@ -60,9 +61,8 @@ def logout_dueno(request):
     return redirect('usuarios:login')
 
 
+@requiere_dueno
 def bienvenida(request):
-    if not request.session.get('id_usuario'):
-        return redirect('usuarios:login')
     return render(request, 'usuarios/bienvenida.html', {
         'nombre': request.session.get('nombre'),
     })

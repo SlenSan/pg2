@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Mis mascotas — Canigo{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h4 mb-0">Mis mascotas</h1>
+  <a href="{% url 'mascotas:registro' %}" class="btn btn-primary">+ Registrar mascota</a>
+</div>
+
+{% if mascotas %}
+<div class="row row-cols-1 row-cols-md-2 g-3">
+  {% for mascota in mascotas %}
+  <div class="col">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title">{{ mascota.nombre }}</h2>
+        <p class="card-text mb-1"><strong>Raza:</strong> {{ mascota.raza }}</p>
+        <p class="card-text mb-1"><strong>Edad:</strong> {{ mascota.edad }} años</p>
+        <p class="card-text mb-1"><strong>Peso:</strong> {{ mascota.peso }} kg</p>
+        {% if mascota.observaciones %}
+        <p class="card-text text-muted"><small>{{ mascota.observaciones }}</small></p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-muted">Todavía no has registrado ninguna mascota.</p>
+{% endif %}
+{% endblock %}
