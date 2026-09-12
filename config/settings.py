@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'core',
     'usuarios',
     'mascotas',
+    'paseos',
 ]
 
 MIDDLEWARE = [

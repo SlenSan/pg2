@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from bson.errors import InvalidId
 
-from core.mongo import get_db
+from core.mongo import get_db, mapear_por_id
 
 
 def obtener_por_correo(correo):
@@ -24,6 +24,11 @@ def obtener_por_id(id_usuario):
     except (InvalidId, TypeError):
         return None
     return get_db().usuarios.find_one({'_id': oid})
+
+
+def obtener_varios_por_id(ids):
+    """Devuelve {ObjectId: usuario} para una lista de ids (p.ej. id_paseador)."""
+    return mapear_por_id('usuarios', ids)
 
 
 def crear_usuario(*, nombre, correo, contrasena_hash, telefono, rol, direccion='', descripcion=''):

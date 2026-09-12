@@ -14,7 +14,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from usuarios import repository
-from usuarios.auth_token import generar_token, verificar_token
+from usuarios.api_auth import requiere_paseador
+from usuarios.auth_token import generar_token
 
 _CAMPOS_REQUERIDOS_REGISTRO = ('nombre', 'correo', 'contrasena', 'telefono')
 
@@ -24,17 +25,6 @@ def _leer_json(request):
         return json.loads(request.body or b'{}')
     except json.JSONDecodeError:
         return None
-
-
-def _usuario_autenticado(request):
-    auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
-        return None
-    token = auth_header.removeprefix('Bearer ').strip()
-    id_usuario = verificar_token(token)
-    if not id_usuario:
-        return None
-    return repository.obtener_por_id(id_usuario)
 
 
 @csrf_exempt
@@ -94,8 +84,6 @@ def login_paseador(request):
 
 
 @require_http_methods(['GET'])
+@requiere_paseador
 def perfil_paseador(request):
-    usuario = _usuario_autenticado(request)
-    if not usuario:
-        return JsonResponse({'error': 'Token inválido o expirado.'}, status=401)
-    return JsonResponse({'usuario': repository.a_json(usuario)})
+    return JsonResponse({'usuario': repository.a_json(request.usuario)})

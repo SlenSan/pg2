@@ -12,6 +12,7 @@ Uso:
     db.usuarios.find_one(...)
 """
 
+from bson import ObjectId
 from django.conf import settings
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
@@ -35,3 +36,16 @@ def get_client() -> MongoClient:
 def get_db():
     """Devuelve la base de datos de Canigo configurada en MONGO_DB_NAME."""
     return get_client()[settings.MONGO_DB_NAME]
+
+
+def mapear_por_id(coleccion, ids):
+    """
+    Resuelve una lista de referencias (p.ej. id_paseador, id_mascota) en un
+    solo round-trip. Devuelve {ObjectId: documento}; ids invalidos o None se
+    ignoran.
+    """
+    ids_unicos = list({i for i in ids if isinstance(i, ObjectId)})
+    if not ids_unicos:
+        return {}
+    documentos = get_db()[coleccion].find({'_id': {'$in': ids_unicos}})
+    return {documento['_id']: documento for documento in documentos}

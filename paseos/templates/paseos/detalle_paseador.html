@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}{{ paseador.nombre }} — Canigo{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-6">
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <h1 class="h4">
+          {{ paseador.nombre }}
+          {% if paseador.verificado %}<span class="badge bg-success">Verificado</span>{% endif %}
+        </h1>
+        <p class="mb-1">
+          <strong>Calificación:</strong>
+          {% if paseador.calificacion_promedio %}{{ paseador.calificacion_promedio }} / 5{% else %}Sin calificaciones aún{% endif %}
+        </p>
+        {% if paseador.descripcion %}<p>{{ paseador.descripcion }}</p>{% endif %}
+        <p class="text-muted small mb-0">Teléfono: {{ paseador.telefono }}</p>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5 mb-3">Inscribir mi mascota</h2>
+        {% if form.fields.id_mascota.choices %}
+        <form method="post" novalidate>
+          {% csrf_token %}
+          {% for field in form %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for error in field.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+              {% endfor %}
+            </div>
+          {% endfor %}
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+          {% endif %}
+          <button type="submit" class="btn btn-primary w-100">Inscribir</button>
+        </form>
+        {% else %}
+        <p class="text-muted mb-0">
+          Necesitas registrar al menos una mascota antes de inscribirla.
+          <a href="{% url 'mascotas:registro' %}">Registrar mascota</a>.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -23,6 +23,8 @@ urlpatterns = [
     path('', RedirectView.as_view(pattern_name='usuarios:login'), name='home'),
     path('cuentas/', include('usuarios.urls_web')),
     path('mascotas/', include('mascotas.urls')),
+    path('paseos/', include('paseos.urls_web')),
     path('api/', include('core.urls')),
     path('api/', include('usuarios.urls_api')),
+    path('api/', include('paseos.urls_api')),
 ]
