@@ -2,3 +2,5 @@ Django>=5.2,<5.3
 pymongo>=4.18,<5
 dnspython>=2.8,<3
 python-dotenv>=1.2,<2
+cloudinary>=1.41,<2
+Pillow>=11,<12

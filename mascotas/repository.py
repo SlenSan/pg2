@@ -8,14 +8,14 @@ from bson.errors import InvalidId
 from core.mongo import get_db
 
 
-def crear_mascota(*, id_dueno, nombre, raza, edad, peso, observaciones=''):
+def crear_mascota(*, id_dueno, nombre, raza, edad, peso, observaciones='', foto=''):
     mascota = {
         'id_dueno': ObjectId(id_dueno),
         'nombre': nombre,
         'raza': raza,
         'edad': edad,
         'peso': peso,
-        'foto': '',
+        'foto': foto,
         'observaciones': observaciones,
         'fecha_registro': datetime.now(timezone.utc),
     }

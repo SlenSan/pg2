@@ -101,6 +101,12 @@ DATABASES = {
 MONGO_URI = os.environ.get('MONGO_URI', '')
 MONGO_DB_NAME = os.environ.get('MONGO_DB_NAME', 'canigo')
 
+# Cloudinary (almacenamiento de imagenes: foto_perfil, foto de mascota,
+# fotos de paseo, evidencia de incidentes). Se usa en vez del filesystem de
+# Render porque este ultimo es efimero (se borra en cada redeploy).
+# Formato: cloudinary://<api_key>:<api_secret>@<cloud_name>
+CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL', '')
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

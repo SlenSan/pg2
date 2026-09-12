@@ -29,3 +29,8 @@ class MascotaForm(forms.Form):
         label='Observaciones (alergias, comportamiento, etc.)',
         widget=forms.Textarea(attrs={'class': _INPUT_CLASS, 'rows': 3}),
     )
+    foto = forms.ImageField(
+        required=False,
+        label='Foto (opcional)',
+        widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
+    )

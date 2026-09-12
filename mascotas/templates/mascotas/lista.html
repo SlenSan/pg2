@@ -13,6 +13,9 @@
   {% for mascota in mascotas %}
   <div class="col">
     <div class="card h-100">
+      {% if mascota.foto %}
+      <img src="{{ mascota.foto }}" class="card-img-top" alt="Foto de {{ mascota.nombre }}" style="max-height: 220px; object-fit: cover;">
+      {% endif %}
       <div class="card-body">
         <h2 class="h5 card-title">{{ mascota.nombre }}</h2>
         <p class="card-text mb-1"><strong>Raza:</strong> {{ mascota.raza }}</p>
