@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 from bson.errors import InvalidId
+from pymongo import ReturnDocument
 
 from core.mongo import get_db
 
@@ -74,6 +75,54 @@ def inscribir_mascota(*, id_paseo, id_dueno, id_mascota):
         {'$set': {'id_dueno': oid_dueno, 'id_mascota': oid_mascota}},
     )
     return resultado.modified_count == 1
+
+
+def iniciar_paseo(*, id_paseo, id_paseador):
+    """
+    Pasa un paseo de 'disponible' a 'en_vivo' y registra hora_inicio.
+    Solo si le pertenece a ese paseador y ya tiene una mascota inscrita
+    (no tiene sentido iniciar un paseo que nadie tomo todavia).
+    Devuelve el documento actualizado, o None si no se cumplen las
+    condiciones (no existe, no es suyo, ya no esta 'disponible', o no
+    tiene id_mascota asignado).
+    """
+    try:
+        oid_paseo = ObjectId(id_paseo)
+    except (InvalidId, TypeError):
+        return None
+
+    return get_db().paseos.find_one_and_update(
+        {
+            '_id': oid_paseo,
+            'id_paseador': id_paseador,
+            'estado': 'disponible',
+            'id_mascota': {'$ne': None},
+        },
+        {'$set': {'estado': 'en_vivo', 'hora_inicio': datetime.now(timezone.utc)}},
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+def finalizar_paseo(*, id_paseo, id_paseador):
+    """
+    Pasa un paseo de 'en_vivo' a 'historico' y registra hora_fin. Solo si
+    le pertenece a ese paseador y esta actualmente en curso. Devuelve el
+    documento actualizado, o None si no se cumplen las condiciones.
+    """
+    try:
+        oid_paseo = ObjectId(id_paseo)
+    except (InvalidId, TypeError):
+        return None
+
+    return get_db().paseos.find_one_and_update(
+        {
+            '_id': oid_paseo,
+            'id_paseador': id_paseador,
+            'estado': 'en_vivo',
+        },
+        {'$set': {'estado': 'historico', 'hora_fin': datetime.now(timezone.utc)}},
+        return_document=ReturnDocument.AFTER,
+    )
 
 
 def listar_por_dueno(id_dueno):

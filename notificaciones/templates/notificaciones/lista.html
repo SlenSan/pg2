@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Notificaciones — Canigo{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-4">Notificaciones</h1>
+
+{% if notificaciones %}
+<div class="list-group">
+  {% for n in notificaciones %}
+  <div class="list-group-item">
+    <div class="d-flex justify-content-between align-items-start">
+      <span>{{ n.mensaje }}</span>
+      <small class="text-muted text-nowrap ms-3">{{ n.fecha }}</small>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-muted">No tienes notificaciones todavía.</p>
+{% endif %}
+{% endblock %}

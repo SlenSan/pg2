@@ -13,6 +13,10 @@
       <div>
         <strong>{{ item.mascota.nombre|default:"—" }}</strong>
         con <strong>{{ item.paseador.nombre|default:"—" }}</strong>
+        <div class="text-muted small">
+          {% if item.paseo.hora_inicio %}Inicio: {{ item.paseo.hora_inicio }}{% endif %}
+          {% if item.paseo.hora_fin %} · Fin: {{ item.paseo.hora_fin }}{% endif %}
+        </div>
       </div>
       <span class="badge
         {% if item.paseo.estado == 'disponible' %}bg-secondary
