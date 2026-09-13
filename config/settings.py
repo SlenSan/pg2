@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'notificaciones',
     'coordenadas',
     'incidentes',
+    'calificaciones',
 ]
 
 MIDDLEWARE = [

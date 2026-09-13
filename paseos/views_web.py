@@ -6,6 +6,7 @@ ver su perfil, inscribir una mascota, y ver el estado de "mis paseos".
 from django.contrib import messages
 from django.shortcuts import redirect, render
 
+from calificaciones import repository as calificaciones_repository
 from mascotas import repository as mascotas_repository
 from paseos import repository
 from paseos.forms import InscribirMascotaForm
@@ -77,12 +78,16 @@ def mis_paseos(request):
     mascotas_por_id = mascotas_repository.obtener_varias_por_id(
         [p['id_mascota'] for p in paseos if p.get('id_mascota')]
     )
+    ids_calificados = {
+        c['id_paseo'] for c in calificaciones_repository.listar_por_paseos([p['_id'] for p in paseos])
+    }
     items = [
         {
             'id_paseo': str(p['_id']),
             'paseo': p,
             'paseador': paseadores_por_id.get(p['id_paseador']),
             'mascota': mascotas_por_id.get(p['id_mascota']),
+            'calificado': p['_id'] in ids_calificados,
         }
         for p in paseos
     ]

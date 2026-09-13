@@ -55,6 +55,11 @@ def crear_usuario(*, nombre, correo, contrasena_hash, telefono, rol, direccion='
     return usuario
 
 
+def actualizar_calificacion_promedio(id_paseador, promedio):
+    oid = id_paseador if isinstance(id_paseador, ObjectId) else ObjectId(id_paseador)
+    get_db().usuarios.update_one({'_id': oid}, {'$set': {'calificacion_promedio': promedio}})
+
+
 def a_json(usuario):
     """Representacion de un usuario segura para exponer por la API (sin la contrasena)."""
     data = {k: v for k, v in usuario.items() if k != 'contrasena'}

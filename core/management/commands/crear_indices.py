@@ -32,3 +32,8 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             'coordenadas_detalle: indice id_paseo + TTL de 90 dias OK'
         ))
+
+        db.calificaciones.create_index('id_paseo', unique=True)
+        self.stdout.write(self.style.SUCCESS(
+            'calificaciones.id_paseo: indice unico OK (evita calificar el mismo paseo dos veces)'
+        ))

@@ -30,6 +30,15 @@
           <a href="{% url 'coordenadas:mapa_paseo' item.id_paseo %}" class="btn btn-sm btn-outline-primary">Ver mapa</a>
         </div>
         {% endif %}
+        {% if item.paseo.estado == 'historico' %}
+        <div class="mt-1">
+          {% if item.calificado %}
+          <span class="text-muted small">Ya calificado</span>
+          {% else %}
+          <a href="{% url 'calificaciones:calificar_paseo' item.id_paseo %}" class="btn btn-sm btn-outline-success">Calificar</a>
+          {% endif %}
+        </div>
+        {% endif %}
       </div>
     </div>
   </div>
