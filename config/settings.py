@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'paseos',
     'notificaciones',
     'coordenadas',
+    'incidentes',
 ]
 
 MIDDLEWARE = [

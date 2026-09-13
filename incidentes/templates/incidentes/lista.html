@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Incidentes — Canigo{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-4">Historial de incidentes</h1>
+
+{% if items %}
+<div class="row row-cols-1 row-cols-md-2 g-3">
+  {% for item in items %}
+  <div class="col">
+    <div class="card h-100 border-danger">
+      {% if item.incidente.evidencia_foto %}
+      <img src="{{ item.incidente.evidencia_foto }}" class="card-img-top" alt="Evidencia del incidente" style="max-height: 220px; object-fit: cover;">
+      {% endif %}
+      <div class="card-body">
+        <span class="badge bg-danger mb-2">{{ item.incidente.tipo }}</span>
+        <p class="card-text">{{ item.incidente.descripcion }}</p>
+        <p class="card-text text-muted small mb-1">
+          Mascota: {{ item.mascota.nombre|default:"—" }} · Paseador: {{ item.paseador.nombre|default:"—" }}
+        </p>
+        <p class="card-text text-muted small mb-0">{{ item.incidente.fecha_hora }}</p>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-muted">No se han registrado incidentes en tus paseos.</p>
+{% endif %}
+{% endblock %}

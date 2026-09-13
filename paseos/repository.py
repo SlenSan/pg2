@@ -135,12 +135,21 @@ def incrementar_total_puntos(id_paseo):
     return resultado['total_puntos'] if resultado else None
 
 
+def marcar_emergencia(id_paseo):
+    """Deja registrado que se activo el boton de emergencia en este paseo."""
+    get_db().paseos.update_one({'_id': id_paseo}, {'$set': {'emergencia': True}})
+
+
 def listar_por_dueno(id_dueno):
     try:
         oid = ObjectId(id_dueno)
     except (InvalidId, TypeError):
         return []
     return list(get_db().paseos.find({'id_dueno': oid}).sort('fecha', -1))
+
+
+def listar_por_paseador(id_paseador):
+    return list(get_db().paseos.find({'id_paseador': id_paseador}).sort('fecha', -1))
 
 
 def a_json(paseo):
