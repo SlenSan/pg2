@@ -18,12 +18,19 @@
           {% if item.paseo.hora_fin %} · Fin: {{ item.paseo.hora_fin }}{% endif %}
         </div>
       </div>
-      <span class="badge
-        {% if item.paseo.estado == 'disponible' %}bg-secondary
-        {% elif item.paseo.estado == 'en_vivo' %}bg-success
-        {% else %}bg-dark{% endif %}">
-        {{ item.paseo.estado }}
-      </span>
+      <div class="text-end">
+        <span class="badge
+          {% if item.paseo.estado == 'disponible' %}bg-secondary
+          {% elif item.paseo.estado == 'en_vivo' %}bg-success
+          {% else %}bg-dark{% endif %}">
+          {{ item.paseo.estado }}
+        </span>
+        {% if item.paseo.hora_inicio %}
+        <div class="mt-1">
+          <a href="{% url 'coordenadas:mapa_paseo' item.id_paseo %}" class="btn btn-sm btn-outline-primary">Ver mapa</a>
+        </div>
+        {% endif %}
+      </div>
     </div>
   </div>
   {% endfor %}

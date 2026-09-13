@@ -125,6 +125,16 @@ def finalizar_paseo(*, id_paseo, id_paseador):
     )
 
 
+def incrementar_total_puntos(id_paseo):
+    """Suma 1 a total_puntos cada vez que llega una coordenada GPS nueva."""
+    resultado = get_db().paseos.find_one_and_update(
+        {'_id': id_paseo},
+        {'$inc': {'total_puntos': 1}},
+        return_document=ReturnDocument.AFTER,
+    )
+    return resultado['total_puntos'] if resultado else None
+
+
 def listar_por_dueno(id_dueno):
     try:
         oid = ObjectId(id_dueno)

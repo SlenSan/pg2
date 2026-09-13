@@ -79,6 +79,7 @@ def mis_paseos(request):
     )
     items = [
         {
+            'id_paseo': str(p['_id']),
             'paseo': p,
             'paseador': paseadores_por_id.get(p['id_paseador']),
             'mascota': mascotas_por_id.get(p['id_mascota']),

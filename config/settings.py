@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'mascotas',
     'paseos',
     'notificaciones',
+    'coordenadas',
 ]
 
 MIDDLEWARE = [

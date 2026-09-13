@@ -25,7 +25,9 @@ urlpatterns = [
     path('mascotas/', include('mascotas.urls')),
     path('paseos/', include('paseos.urls_web')),
     path('notificaciones/', include('notificaciones.urls')),
+    path('coordenadas/', include('coordenadas.urls_web')),
     path('api/', include('core.urls')),
     path('api/', include('usuarios.urls_api')),
     path('api/', include('paseos.urls_api')),
+    path('api/', include('coordenadas.urls_api')),
 ]

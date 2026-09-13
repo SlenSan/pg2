@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Seguimiento del paseo — Canigo{% endblock %}
+
+{% block extra_head %}
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+  crossorigin=""
+>
+{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Seguimiento del paseo</h1>
+<p class="text-muted" id="estado-paseo">Estado: {{ paseo.estado }}</p>
+<div id="mapa" style="height: 500px; border-radius: .5rem;"></div>
+<p class="text-muted small mt-2" id="sin-puntos" hidden>
+  Todavía no hay puntos GPS registrados para este paseo.
+</p>
+{% endblock %}
+
+{% block extra_js %}
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin=""
+></script>
+<script>
+(function () {
+  var urlDatos = "{% url 'coordenadas:datos_paseo' id_paseo %}";
+  var estadoInicial = "{{ paseo.estado }}";
+
+  // Bucaramanga como centro por defecto, hasta que lleguen puntos reales.
+  var mapa = L.map('mapa').setView([7.1193, -73.1227], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(mapa);
+
+  var linea = L.polyline([], { color: '#0d6efd' }).addTo(mapa);
+  var marcador = null;
+  var vistaAjustada = false;
+  var intervalo = null;
+
+  function actualizar() {
+    fetch(urlDatos)
+      .then(function (resp) { return resp.json(); })
+      .then(function (data) {
+        document.getElementById('estado-paseo').textContent = 'Estado: ' + data.estado;
+
+        var puntos = data.puntos.map(function (p) { return [p.latitud, p.longitud]; });
+        document.getElementById('sin-puntos').hidden = puntos.length > 0;
+
+        if (puntos.length > 0) {
+          linea.setLatLngs(puntos);
+          var ultima = puntos[puntos.length - 1];
+          if (!marcador) {
+            marcador = L.marker(ultima).addTo(mapa);
+          } else {
+            marcador.setLatLng(ultima);
+          }
+          if (!vistaAjustada) {
+            mapa.fitBounds(linea.getBounds(), { maxZoom: 16 });
+            vistaAjustada = true;
+          } else if (data.estado === 'en_vivo') {
+            mapa.panTo(ultima);
+          }
+        }
+
+        if (data.estado === 'historico' && intervalo) {
+          clearInterval(intervalo);
+          intervalo = null;
+        }
+      });
+  }
+
+  actualizar();
+  if (estadoInicial === 'en_vivo') {
+    intervalo = setInterval(actualizar, 10000);
+  }
+})();
+</script>
+{% endblock %}
