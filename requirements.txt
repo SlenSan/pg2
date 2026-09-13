@@ -4,3 +4,5 @@ dnspython>=2.8,<3
 python-dotenv>=1.2,<2
 cloudinary>=1.41,<2
 Pillow>=11,<12
+gunicorn>=23,<24
+whitenoise>=6,<7

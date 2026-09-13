@@ -37,6 +37,26 @@ ALLOWED_HOSTS = [
     h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()
 ]
 
+# Render inyecta esta variable automaticamente con el hostname publico del
+# servicio (p.ej. "canigo.onrender.com") - la agregamos sola, sin que haya
+# que configurar DJANGO_ALLOWED_HOSTS a mano en cada deploy.
+_RENDER_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if _RENDER_HOSTNAME:
+    ALLOWED_HOSTS.append(_RENDER_HOSTNAME)
+    CSRF_TRUSTED_ORIGINS = [f'https://{_RENDER_HOSTNAME}']
+else:
+    CSRF_TRUSTED_ORIGINS = [
+        o.strip() for o in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
+    ]
+
+# Render sirve todo detras de un proxy TLS: sin esto, Django no reconoce
+# los requests como HTTPS (rompe CSRF y las cookies "secure").
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 
 # Application definition
 
@@ -59,6 +79,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -96,6 +117,16 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+# El disco de un Render web service es efimero (se reinicia en cada deploy),
+# asi que esta sqlite tampoco sobrevive entre deploys. Como solo la usamos
+# para la maquinaria interna de Django (admin/auth/contenttypes, que no
+# usamos activamente), no perdemos datos de negocio - esos viven en Mongo.
+# Pero las sesiones (login web del dueño) SI nos importan, y por defecto
+# tambien viven en esa sqlite: las guardamos en una cookie firmada en vez de
+# en la base de datos para que un dueño no quede deslogueado cada vez que
+# se hace un nuevo deploy.
+SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
 
 # MongoDB Atlas (base de datos de negocio de Canigo)
 # El ORM de Django + sqlite de arriba solo sostiene el propio maquinaria de
@@ -146,8 +177,18 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
+# Bootstrap/Leaflet se cargan por CDN (ver core/templates/base.html), asi
+# que lo unico que Django sirve como estatico es el CSS del admin. WhiteNoise
+# lo sirve directamente desde el proceso de Django (comprimido, con cache
+# busting), sin necesitar Nginx ni un bucket aparte.
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
