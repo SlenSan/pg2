@@ -275,3 +275,105 @@ a:hover {
   border-bottom-left-radius: var(--radius);
   border-bottom-right-radius: var(--radius);
 }
+
+/* ===== Pantalla de login / registro (split screen, diseño Figma) =====
+   Los rgba() de abajo son variantes translucidas de --color-primary-foreground
+   (255,255,255) y --color-foreground/--color-card sobre el panel de marca;
+   no son colores nuevos, solo esos mismos tokens con opacidad. */
+
+.auth-panel-izquierdo {
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+.auth-logo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, .18);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.auth-logo-text {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: var(--color-primary-foreground);
+}
+
+.auth-logo-text-dark {
+  color: var(--color-foreground);
+}
+
+.auth-panel-imagen {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 16px;
+}
+
+.auth-panel-titulo {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  color: var(--color-primary-foreground);
+}
+
+.auth-panel-texto {
+  color: rgba(255, 255, 255, .85);
+}
+
+.auth-panel-datos {
+  color: rgba(255, 255, 255, .85);
+  font-size: .85rem;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.auth-form-wrapper {
+  width: 100%;
+  max-width: 420px;
+}
+
+.auth-toggle {
+  display: flex;
+  background-color: var(--color-card);
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(44, 26, 14, .08);
+  padding: .25rem;
+}
+
+.auth-toggle-btn {
+  flex: 1;
+  text-align: center;
+  padding: .5rem 1rem;
+  border-radius: 999px;
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+  text-decoration: none;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.auth-toggle-btn.active {
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+.auth-toggle-btn:not(.active):hover {
+  color: var(--color-foreground);
+  text-decoration: none;
+}
+
+.auth-link {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.auth-link:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
+}

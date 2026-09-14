@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% comment %}
+Layout compartido de login/registro (split screen del diseño de Figma).
+login.html y registro.html extienden este archivo y solo rellenan
+auth_titulo / auth_subtitulo / auth_form — así el selector tipo pastilla,
+el panel izquierdo y el logo móvil se mantienen idénticos en ambas
+pantallas sin duplicar HTML.
+
+Sin navbar: estas dos pantallas son la puerta de entrada (usuario aún no
+autenticado), la marca vive en el panel izquierdo / logo móvil, no en la
+barra superior del resto del sitio.
+{% endcomment %}
+
+{% block navbar %}{% endblock %}
+
+{% block body %}
+<div class="row g-0 min-vh-100">
+  <div class="col-md-6 d-none d-md-flex flex-column justify-content-between p-5 auth-panel-izquierdo">
+    <div class="d-flex align-items-center gap-2">
+      <span class="auth-logo-icon">🐾</span>
+      <span class="auth-logo-text">Canigo</span>
+    </div>
+
+    <div class="text-center px-3">
+      <img
+        src="https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=600&h=400&fit=crop&auto=format"
+        alt="Perro feliz siendo paseado"
+        class="auth-panel-imagen mb-4"
+      >
+      <h2 class="auth-panel-titulo h3 mb-2">Tu mascota, en las mejores manos</h2>
+      <p class="auth-panel-texto mb-0">
+        Paseadores verificados, seguimiento en tiempo real y tranquilidad
+        total para ti y tu compañero.
+      </p>
+    </div>
+
+    <div class="d-flex justify-content-between auth-panel-datos">
+      <span>🐾 +320 mascotas felices</span>
+      <span>✅ Paseadores verificados</span>
+      <span>📍 Bucaramanga</span>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-6 d-flex align-items-center justify-content-center py-5 px-3">
+    <div class="auth-form-wrapper">
+      <div class="text-center d-md-none mb-4">
+        <span class="auth-logo-icon">🐾</span>
+        <span class="auth-logo-text auth-logo-text-dark ms-2">Canigo</span>
+      </div>
+
+      <div class="auth-toggle mb-4">
+        <a
+          href="{% url 'usuarios:login' %}"
+          class="auth-toggle-btn {% if modo == 'login' %}active{% endif %}"
+        >
+          Iniciar sesión
+        </a>
+        <a
+          href="{% url 'usuarios:registro' %}"
+          class="auth-toggle-btn {% if modo == 'registro' %}active{% endif %}"
+        >
+          Crear cuenta
+        </a>
+      </div>
+
+      <h1 class="h3 mb-1">{% block auth_titulo %}{% endblock %}</h1>
+      <p class="text-muted mb-4">{% block auth_subtitulo %}{% endblock %}</p>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+
+      {% block auth_form %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% endblock %}

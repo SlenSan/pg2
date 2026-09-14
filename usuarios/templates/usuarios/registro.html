@@ -1,34 +1,61 @@
-{% extends "base.html" %}
+{% extends "usuarios/base_auth.html" %}
 
 {% block title %}Crear cuenta — Canigo{% endblock %}
+{% block auth_titulo %}Únete a Canigo{% endblock %}
+{% block auth_subtitulo %}Crea tu cuenta gratis en menos de 2 minutos.{% endblock %}
 
-{% block content %}
-<div class="row justify-content-center">
-  <div class="col-12 col-md-6 col-lg-5">
-    <div class="card shadow-sm">
-      <div class="card-body p-4">
-        <h1 class="h4 mb-4">Crea tu cuenta de dueño</h1>
-        <form method="post" novalidate>
-          {% csrf_token %}
-          {% for field in form %}
-            <div class="mb-3">
-              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-              {{ field }}
-              {% for error in field.errors %}
-                <div class="text-danger small mt-1">{{ error }}</div>
-              {% endfor %}
-            </div>
-          {% endfor %}
-          {% if form.non_field_errors %}
-            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
-          {% endif %}
-          <button type="submit" class="btn btn-primary w-100">Registrarme</button>
-        </form>
-        <p class="mt-3 mb-0 text-center">
-          ¿Ya tienes cuenta? <a href="{% url 'usuarios:login' %}">Inicia sesión</a>
-        </p>
-      </div>
-    </div>
+{% block auth_form %}
+<form method="post" novalidate>
+  {% csrf_token %}
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.nombre.id_for_label }}">{{ form.nombre.label }}</label>
+    {{ form.nombre }}
+    {% for error in form.nombre.errors %}
+    <div class="text-danger small mt-1">{{ error }}</div>
+    {% endfor %}
   </div>
-</div>
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.telefono.id_for_label }}">{{ form.telefono.label }}</label>
+    {{ form.telefono }}
+    {% for error in form.telefono.errors %}
+    <div class="text-danger small mt-1">{{ error }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.correo.id_for_label }}">{{ form.correo.label }}</label>
+    {{ form.correo }}
+    {% for error in form.correo.errors %}
+    <div class="text-danger small mt-1">{{ error }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.contrasena.id_for_label }}">{{ form.contrasena.label }}</label>
+    {{ form.contrasena }}
+    {% for error in form.contrasena.errors %}
+    <div class="text-danger small mt-1">{{ error }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.confirmar_contrasena.id_for_label }}">{{ form.confirmar_contrasena.label }}</label>
+    {{ form.confirmar_contrasena }}
+    {% for error in form.confirmar_contrasena.errors %}
+    <div class="text-danger small mt-1">{{ error }}</div>
+    {% endfor %}
+  </div>
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <button type="submit" class="btn btn-primary w-100">Crear cuenta gratis</button>
+  <p class="text-muted small mt-3 mb-0 text-center">
+    Al crear tu cuenta aceptas los Términos de servicio y la Política de
+    privacidad de Canigo.
+  </p>
+</form>
 {% endblock %}

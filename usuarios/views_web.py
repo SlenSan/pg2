@@ -35,7 +35,7 @@ def registro_dueno(request):
                 return redirect('usuarios:bienvenida')
     else:
         form = RegistroDuenoForm()
-    return render(request, 'usuarios/registro.html', {'form': form})
+    return render(request, 'usuarios/registro.html', {'form': form, 'modo': 'registro'})
 
 
 def login_dueno(request):
@@ -53,7 +53,7 @@ def login_dueno(request):
                 return redirect('usuarios:bienvenida')
     else:
         form = LoginForm()
-    return render(request, 'usuarios/login.html', {'form': form})
+    return render(request, 'usuarios/login.html', {'form': form, 'modo': 'login'})
 
 
 def logout_dueno(request):
