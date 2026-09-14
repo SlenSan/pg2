@@ -1,0 +1,277 @@
+/*
+ * Canigo — tema visual
+ *
+ * Paleta y tipografia exactas del diseño en Figma. Se carga DESPUES del
+ * CSS de Bootstrap (ver core/templates/base.html) para sobreescribir sus
+ * estilos por defecto sin tocar la estructura HTML de las plantillas.
+ *
+ * Nota: las clases de utilidades de Bootstrap (bg-*, border-*, text-muted,
+ * text-danger, etc.) se compilan con !important, asi que sus overrides
+ * aqui tambien necesitan !important para ganar la cascada. Las clases de
+ * componentes (btn, card, form-control, navbar, alert, badge...) no usan
+ * !important en Bootstrap, asi que basta con que este archivo se cargue
+ * despues.
+ */
+
+:root {
+  --color-background: #FBF7F2;
+  --color-foreground: #2C1A0E;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #2C1A0E;
+  --color-primary: #D9703A;
+  --color-primary-hover: #C45F2A;
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: #F5EDE3;
+  --color-secondary-foreground: #6B3F1A;
+  --color-muted: #EFE7DC;
+  --color-muted-foreground: #8C7060;
+  --color-accent: #5A9E6F;
+  --color-accent-foreground: #FFFFFF;
+  --color-border: #E3D4C5;
+  --color-ring: #D9703A;
+  --color-danger: #C4502E;
+  --color-danger-foreground: #FFFFFF;
+  --radius: 14px;
+}
+
+/* Base */
+
+body {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 400;
+}
+
+body.bg-light {
+  background-color: var(--color-background) !important;
+  color: var(--color-foreground);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  color: var(--color-foreground);
+}
+
+a {
+  color: var(--color-primary);
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+.text-muted {
+  color: var(--color-muted-foreground) !important;
+}
+
+.text-danger {
+  color: var(--color-danger) !important;
+}
+
+/* Navbar */
+
+.navbar.bg-primary {
+  background-color: var(--color-primary) !important;
+}
+
+.navbar-brand {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+
+/* Cards */
+
+.card {
+  background-color: var(--color-card);
+  color: var(--color-card-foreground);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(44, 26, 14, .06), 0 1px 2px rgba(44, 26, 14, .08);
+}
+
+.card.border-danger {
+  border-color: #E3A18C !important;
+}
+
+.card-img-top {
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+}
+
+/* Botones */
+
+.btn {
+  border-radius: 12px;
+  font-weight: 600;
+  padding: .875rem 1.5rem;
+  transition: background-color .15s ease, border-color .15s ease,
+    box-shadow .15s ease, transform .1s ease;
+}
+
+.btn-sm {
+  padding: .4rem .9rem;
+  border-radius: 10px;
+}
+
+.btn:active {
+  transform: scale(.98);
+}
+
+.btn:focus,
+.btn.focus {
+  box-shadow: 0 0 0 3px rgba(217, 112, 58, .25);
+}
+
+.btn-primary {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+.btn-primary:hover,
+.btn-primary:active {
+  background-color: var(--color-primary-hover) !important;
+  border-color: var(--color-primary-hover) !important;
+  color: var(--color-primary-foreground);
+  box-shadow: 0 4px 10px rgba(217, 112, 58, .25);
+}
+
+.btn-outline-primary {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background-color: transparent;
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+.btn-outline-secondary {
+  color: var(--color-secondary-foreground);
+  border-color: var(--color-border);
+  background-color: transparent;
+}
+
+.btn-outline-secondary:hover {
+  background-color: var(--color-secondary);
+  border-color: var(--color-border);
+  color: var(--color-secondary-foreground);
+}
+
+.btn-outline-success {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background-color: transparent;
+}
+
+.btn-outline-success:hover {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-foreground);
+}
+
+/* Formularios */
+
+.form-control,
+.form-select {
+  background-color: var(--color-card);
+  color: var(--color-foreground);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: .65rem .9rem;
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: var(--color-card);
+  color: var(--color-foreground);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(217, 112, 58, .15);
+}
+
+.form-control::placeholder {
+  color: var(--color-muted-foreground);
+  opacity: 1;
+}
+
+.form-label {
+  font-weight: 600;
+  color: var(--color-foreground);
+  margin-bottom: .4rem;
+}
+
+/* Badges */
+
+.badge.bg-success {
+  background-color: var(--color-accent) !important;
+  color: var(--color-accent-foreground);
+}
+
+.badge.bg-secondary {
+  background-color: var(--color-muted) !important;
+  color: var(--color-muted-foreground);
+}
+
+.badge.bg-dark {
+  background-color: var(--color-foreground) !important;
+  color: var(--color-background);
+}
+
+.badge.bg-danger {
+  background-color: var(--color-danger) !important;
+  color: var(--color-danger-foreground);
+}
+
+/* Alertas — incluye alert-error, que Django genera para messages.error()
+   y que Bootstrap no trae por defecto (su clase es alert-danger). */
+
+.alert {
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+
+.alert-success {
+  background-color: rgba(90, 158, 111, .12);
+  border-color: rgba(90, 158, 111, .3);
+  color: #3E7350;
+}
+
+.alert-danger,
+.alert-error {
+  background-color: rgba(196, 80, 46, .1);
+  border-color: rgba(196, 80, 46, .3);
+  color: #A8412A;
+}
+
+.alert-warning {
+  background-color: rgba(217, 112, 58, .1);
+  border-color: rgba(217, 112, 58, .3);
+  color: #9C5225;
+}
+
+.alert-info {
+  background-color: var(--color-secondary);
+  border-color: var(--color-border);
+  color: var(--color-secondary-foreground);
+}
+
+/* Listas tipo tarjeta (mis paseos, notificaciones) */
+
+.list-group-item {
+  background-color: var(--color-card);
+  border-color: var(--color-border);
+  color: var(--color-card-foreground);
+}
+
+.list-group-item:first-child {
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+}
+
+.list-group-item:last-child {
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+}
