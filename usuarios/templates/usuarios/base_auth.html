@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% comment %}
 Layout compartido de login/registro (split screen del diseño de Figma).
 login.html y registro.html extienden este archivo y solo rellenan
@@ -17,8 +18,8 @@ autenticado).
   <div class="col-md-6 d-none d-md-flex flex-column justify-content-center p-5 auth-panel-izquierdo">
     <div class="text-center px-3">
       <img
-        src="https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=600&h=400&fit=crop&auto=format"
-        alt="Perro feliz siendo paseado"
+        src="{% static 'img/canigo-logo.png' %}"
+        alt="Logo de Canigo"
         class="auth-panel-imagen mb-4"
       >
       <h2 class="auth-panel-titulo h3 mb-2">Tu mascota, en las mejores manos</h2>
