@@ -10,4 +10,6 @@ urlpatterns = [
     path('paseadores/<str:id_paseo>/', views_web.detalle_paseador, name='detalle_paseador'),
     path('paseador/publicar-disponibilidad/', views_web.publicar_disponibilidad, name='publicar_disponibilidad'),
     path('paseador/historial/', views_web.historial_paseador, name='historial_paseador'),
+    path('paseador/paseos/<str:id_paseo>/iniciar/', views_web.iniciar_paseo, name='iniciar_paseo'),
+    path('paseador/paseos/<str:id_paseo>/finalizar/', views_web.finalizar_paseo, name='finalizar_paseo'),
 ]

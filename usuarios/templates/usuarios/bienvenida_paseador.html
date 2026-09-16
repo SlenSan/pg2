@@ -9,14 +9,33 @@
   <div class="card-body">
     {% if paseo_activo %}
       {% if paseo_activo.estado == 'en_vivo' %}
-      <span class="badge bg-success mb-2">Paseo en curso</span>
-      <p class="mb-0">Tienes un paseo activo en este momento.</p>
+        <span class="badge bg-success mb-2">Paseo en curso</span>
+        <p class="mb-3">
+          Estás paseando a <strong>{{ paseo_activo.mascota_nombre|default:"tu mascota asignada" }}</strong>
+          {% if paseo_activo.dueno_nombre %}(de {{ paseo_activo.dueno_nombre }}){% endif %}.
+        </p>
+        <form method="post" action="{% url 'paseos:finalizar_paseo' paseo_activo.id_paseo %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary w-100">Finalizar paseo</button>
+        </form>
+        <p class="text-muted small mt-2 mb-0" id="estado-gps">Compartiendo tu ubicación...</p>
+      {% elif paseo_activo.mascota_nombre %}
+        <span class="badge bg-secondary mb-2">Disponible</span>
+        <p class="mb-3">
+          <strong>{{ paseo_activo.mascota_nombre }}</strong>
+          {% if paseo_activo.dueno_nombre %}(de {{ paseo_activo.dueno_nombre }}){% endif %}
+          te está esperando.
+        </p>
+        <form method="post" action="{% url 'paseos:iniciar_paseo' paseo_activo.id_paseo %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary w-100">Iniciar paseo</button>
+        </form>
       {% else %}
-      <span class="badge bg-secondary mb-2">Disponible</span>
-      <p class="mb-0">
-        Publicaste tu disponibilidad. En cuanto un dueño inscriba a su
-        mascota vas a poder iniciar el paseo.
-      </p>
+        <span class="badge bg-secondary mb-2">Disponible</span>
+        <p class="mb-0">
+          Publicaste tu disponibilidad. En cuanto un dueño inscriba a su
+          mascota vas a poder iniciar el paseo.
+        </p>
       {% endif %}
     {% else %}
       <p class="text-muted mb-3">Todavía no has publicado tu disponibilidad.</p>
@@ -27,4 +46,55 @@
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if paseo_activo.estado == 'en_vivo' %}
+<script>
+(function () {
+  function leerCookie(nombre) {
+    var fila = document.cookie.split('; ').find(function (c) { return c.startsWith(nombre + '='); });
+    return fila ? decodeURIComponent(fila.split('=')[1]) : null;
+  }
+
+  var csrftoken = leerCookie('csrftoken');
+  var urlCoordenadas = "{% url 'coordenadas:registrar_coordenada' paseo_activo.id_paseo %}";
+  var estadoEl = document.getElementById('estado-gps');
+
+  function enviarPosicion(position) {
+    fetch(urlCoordenadas, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken,
+      },
+      body: JSON.stringify({
+        latitud: position.coords.latitude,
+        longitud: position.coords.longitude,
+        altitud: position.coords.altitude,
+      }),
+    }).then(function (resp) {
+      estadoEl.textContent = resp.ok
+        ? 'Compartiendo tu ubicación...'
+        : 'No se pudo enviar tu ubicación. Reintentando...';
+    }).catch(function () {
+      estadoEl.textContent = 'No se pudo enviar tu ubicación. Reintentando...';
+    });
+  }
+
+  function capturarYEnviar() {
+    if (!navigator.geolocation) {
+      estadoEl.textContent = 'Tu navegador no soporta geolocalización.';
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(enviarPosicion, function () {
+      estadoEl.textContent = 'No se pudo acceder a tu ubicación. Revisa los permisos del navegador.';
+    });
+  }
+
+  capturarYEnviar();
+  setInterval(capturarYEnviar, 10000);
+})();
+</script>
+{% endif %}
 {% endblock %}

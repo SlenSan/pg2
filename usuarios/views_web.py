@@ -13,6 +13,7 @@ from django.contrib import messages
 from django.contrib.auth.hashers import check_password, make_password
 from django.shortcuts import redirect, render
 
+from mascotas import repository as mascotas_repository
 from paseos import repository as paseos_repository
 from usuarios import repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
@@ -105,7 +106,23 @@ def bienvenida(request):
 @requiere_paseador
 def bienvenida_paseador(request):
     id_paseador = ObjectId(request.session['id_usuario'])
-    paseo_activo = paseos_repository.obtener_activo_de_paseador(id_paseador)
+    paseo = paseos_repository.obtener_activo_de_paseador(id_paseador)
+
+    paseo_activo = None
+    if paseo:
+        mascota = None
+        dueno = None
+        if paseo.get('id_mascota'):
+            mascota = mascotas_repository.obtener_varias_por_id([paseo['id_mascota']]).get(paseo['id_mascota'])
+        if paseo.get('id_dueno'):
+            dueno = repository.obtener_por_id(paseo['id_dueno'])
+        paseo_activo = {
+            'id_paseo': str(paseo['_id']),
+            'estado': paseo['estado'],
+            'mascota_nombre': mascota['nombre'] if mascota else None,
+            'dueno_nombre': dueno['nombre'] if dueno else None,
+        }
+
     return render(request, 'usuarios/bienvenida_paseador.html', {
         'nombre': request.session.get('nombre'),
         'paseo_activo': paseo_activo,

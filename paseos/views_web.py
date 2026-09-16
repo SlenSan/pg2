@@ -13,6 +13,7 @@ from django.views.decorators.http import require_POST
 
 from calificaciones import repository as calificaciones_repository
 from mascotas import repository as mascotas_repository
+from notificaciones import repository as notificaciones_repository
 from paseos import repository
 from paseos.forms import InscribirMascotaForm
 from usuarios import repository as usuarios_repository
@@ -110,6 +111,43 @@ def publicar_disponibilidad(request):
     id_paseador = ObjectId(request.session['id_usuario'])
     if not repository.obtener_activo_de_paseador(id_paseador):
         repository.crear_disponibilidad(id_paseador=id_paseador)
+    return redirect('usuarios:bienvenida_paseador')
+
+
+@require_POST
+@requiere_paseador
+def iniciar_paseo(request, id_paseo):
+    """Version web (sesion) del mismo iniciar_paseo que ya existia en la API."""
+    id_paseador = ObjectId(request.session['id_usuario'])
+    paseo = repository.iniciar_paseo(id_paseo=id_paseo, id_paseador=id_paseador)
+    if not paseo:
+        messages.error(
+            request,
+            'No se pudo iniciar el paseo: ya no está disponible o no tiene mascota inscrita.',
+        )
+    else:
+        notificaciones_repository.crear(
+            id_usuario=paseo['id_dueno'],
+            tipo='inicio_paseo',
+            mensaje=f'{request.session.get("nombre")} inició el paseo de tu mascota.',
+        )
+    return redirect('usuarios:bienvenida_paseador')
+
+
+@require_POST
+@requiere_paseador
+def finalizar_paseo(request, id_paseo):
+    """Version web (sesion) del mismo finalizar_paseo que ya existia en la API."""
+    id_paseador = ObjectId(request.session['id_usuario'])
+    paseo = repository.finalizar_paseo(id_paseo=id_paseo, id_paseador=id_paseador)
+    if not paseo:
+        messages.error(request, 'No se pudo finalizar el paseo: ya no estaba en curso.')
+    else:
+        notificaciones_repository.crear(
+            id_usuario=paseo['id_dueno'],
+            tipo='fin_paseo',
+            mensaje=f'{request.session.get("nombre")} finalizó el paseo de tu mascota.',
+        )
     return redirect('usuarios:bienvenida_paseador')
 
 
