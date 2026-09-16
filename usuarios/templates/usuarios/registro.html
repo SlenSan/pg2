@@ -2,11 +2,18 @@
 
 {% block title %}Crear cuenta — Canigo{% endblock %}
 {% block auth_titulo %}Únete a Canigo{% endblock %}
-{% block auth_subtitulo %}Crea tu cuenta gratis en menos de 2 minutos.{% endblock %}
+{% block auth_subtitulo %}
+  {% if rol == 'paseador' %}
+    Crea tu cuenta de paseador en menos de 2 minutos.
+  {% else %}
+    Crea tu cuenta gratis en menos de 2 minutos.
+  {% endif %}
+{% endblock %}
 
 {% block auth_form %}
 <form method="post" novalidate>
   {% csrf_token %}
+  <input type="hidden" name="rol" value="{{ rol }}">
 
   <div class="mb-3">
     <label class="form-label" for="{{ form.nombre.id_for_label }}">{{ form.nombre.label }}</label>
@@ -47,6 +54,16 @@
     <div class="text-danger small mt-1">{{ error }}</div>
     {% endfor %}
   </div>
+
+  {% if form.descripcion %}
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.descripcion.id_for_label }}">{{ form.descripcion.label }}</label>
+    {{ form.descripcion }}
+    {% for error in form.descripcion.errors %}
+    <div class="text-danger small mt-1">{{ error }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   {% if form.non_field_errors %}
   <div class="alert alert-danger">{{ form.non_field_errors }}</div>

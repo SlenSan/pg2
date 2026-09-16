@@ -17,17 +17,16 @@
 <div class="row g-3">
   <div class="col-12 col-sm-6">
     {% comment %}
-    Por ahora ambas tarjetas llevan al mismo login, solo marcando la
-    eleccion via ?rol= en la URL. Diferenciar el flujo real de
-    autenticacion/registro por rol es el siguiente paso.
+    El rol solo afecta el registro (que formulario mostrarle a alguien
+    nuevo); el login es el mismo para cualquier rol, ya existente.
     {% endcomment %}
-    <a href="{% url 'usuarios:login' %}?rol=paseador" class="rol-tarjeta">
+    <a href="{% url 'usuarios:registro' %}?rol=paseador" class="rol-tarjeta">
       <span class="rol-tarjeta-icono"><i class="bi bi-person-walking"></i></span>
       <span class="rol-tarjeta-titulo">Paseador</span>
     </a>
   </div>
   <div class="col-12 col-sm-6">
-    <a href="{% url 'usuarios:login' %}?rol=dueno" class="rol-tarjeta">
+    <a href="{% url 'usuarios:registro' %}?rol=dueno" class="rol-tarjeta">
       <span class="rol-tarjeta-icono"><i class="bi bi-person-heart"></i></span>
       <span class="rol-tarjeta-titulo">Cliente</span>
     </a>

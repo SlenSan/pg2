@@ -6,27 +6,44 @@ te lo pida explícitamente — impleméntalas tal como están descritas aquí.
 
 ## Arquitectura
 
-Modelo cliente-servidor centrado en un backend único (Python + Django), que atiende
-de dos formas distintas a los dos actores del sistema:
+> **Corrección de alcance (2026-09-16):** la versión original del documento de
+> grado planteaba una app Android nativa para el paseador. Esa decisión CAMBIÓ
+> y ya está corregida en el documento (arquitectura, diagramas, alcance): ya no
+> existe app nativa. Dueño y paseador usan la misma plataforma web. Si ves
+> referencias a "app Android" en comentarios de código o en secciones viejas de
+> este archivo que no se hayan actualizado todavía, son residuos de la versión
+> anterior — no las repliques ni las tomes como la decisión vigente.
 
-- **Dueño de mascota → Plataforma Web**: Django renderiza y sirve las páginas
-  directamente (server-side rendering) usando **Django Templates + Bootstrap**
-  (vía CDN, sin Node/bundlers). No hay frontend JS separado. JavaScript se usa
-  solo puntualmente para el mapa de seguimiento en tiempo real (Leaflet.js).
-- **Paseador → App Android nativa (Kotlin)**: consume una **API REST (JSON)**
-  expuesta por el mismo backend Django.
+Modelo cliente-servidor con un backend único (Python + Django) que sirve una
+única plataforma web para los dos actores del sistema:
+
+- **Dueño de mascota y Paseador → Plataforma Web (ambos)**: Django renderiza y
+  sirve las páginas directamente (server-side rendering) usando **Django
+  Templates + Bootstrap** (vía CDN, sin Node/bundlers). No hay frontend JS
+  separado. JavaScript se usa solo puntualmente para el mapa de seguimiento en
+  tiempo real (Leaflet.js). Login/logout son comunes a ambos roles; el
+  registro usa un formulario distinto según el rol elegido en una pantalla de
+  selección previa (`nombre`, `correo`, `contraseña`, `teléfono` para ambos,
+  más `descripcion` para paseador).
 - **Base de datos**: MongoDB Atlas (NoSQL, orientada a documentos). Se eligió
   NoSQL sobre relacional por la variabilidad de estructura de los datos y el
   volumen/frecuencia de las coordenadas GPS (un punto cada 10-30s durante un
   paseo activo).
 - **Mapas**: Leaflet.js + OpenStreetMap (no Google Maps API, por costos).
 - **Despliegue**: Render (backend), con MongoDB Atlas como base de datos externa.
-- **IDE Android**: Android Studio.
 
 No propongas cambiar Django Templates por React/Vue, ni MongoDB por SQL, ni Google
 Maps por Leaflet — esas decisiones ya están tomadas y justificadas en el documento
 de grado (por recomendación explícita del director, priorizando herramientas
 sencillas con bajo consumo de tiempo).
+
+**Nota de implementación pendiente:** el código todavía conserva de la
+arquitectura anterior una API REST con tokens Bearer bajo `/api/paseador/...`
+(apps `usuarios.views_api`, `usuarios.api_auth`, `usuarios.auth_token`, y los
+`views_api.py` de `paseos`/`coordenadas`/`incidentes`), pensada para la app
+Android que ya no existe. No se ha decidido todavía si se elimina, se
+reutiliza para otra cosa, o se deja en desuso — no asumas que sigue vigente
+sin confirmarlo primero.
 
 ## Actores del sistema
 
@@ -155,15 +172,6 @@ Retención: ~90 días (trazabilidad y validación, no almacenamiento permanente 
 }
 ```
 
-### Estructuras locales en la App Android (NO son colecciones de MongoDB)
-Datos temporales que viven solo en el dispositivo del paseador mientras el
-paseo está activo, y se descartan/sincronizan después:
-- `sesion_paseo_activo`: id_paseo_temporal, id_paseador, id_mascota,
-  hora_inicio_local, ultima_ubicacion {lat, lng}, tiempo_transcurrido_seg
-- `buffer_puntos_gps`: lat, lng, altitud, timestamp_local, enviado (Boolean)
-- `cache_perfil_mascota`: id_mascota, nombre, raza, foto, observaciones
-- `cache_perfil_usuario`: id_usuario, nombre, rol, foto_perfil, token_sesion
-
 ## Requisitos funcionales (resumen — ver documento completo para el detalle)
 
 | Código | Categoría | Resumen |
@@ -184,27 +192,27 @@ paseo está activo, y se descartan/sincronizan después:
 - **RNF2**: actualizar ubicación en intervalos ≤10s durante el paseo.
 - **RNF3**: responder a acciones del usuario en ≤3s.
 - **RNF4-RNF5**: interfaz intuitiva, sin necesidad de asistencia; accesible desde
-  navegadores y dispositivos móviles (plataforma Web) / nativa Android (app paseador).
+  navegadores y dispositivos móviles (plataforma Web, para ambos actores).
 - **RNF6**: disponibilidad ≥95%.
 - **RNF7**: soportar ≥15.000 usuarios concurrentes, respuesta ≤3s en funciones principales.
 
 ## Flujo de referencia: reporte de un incidente (el más crítico del sistema)
 
-1. Paseador activa botón de emergencia en la app.
-2. App solicita tipo de incidente + descripción + foto.
-3. App envía `POST /incidentes` al backend (tipo, descripción, foto, GPS, id_paseo).
+1. Paseador activa botón de emergencia en la plataforma web.
+2. Se solicita tipo de incidente + descripción + foto.
+3. Se envía la información al backend (tipo, descripción, foto, GPS, id_paseo).
 4. Backend inserta documento en `incidentes`.
 5. Backend inserta documento en `notificaciones` (tipo: "emergencia").
 6. Dueño ve la alerta en la plataforma Web.
-7. Backend confirma a la app que el incidente quedó registrado.
+7. Backend confirma que el incidente quedó registrado.
 
 ## Flujo de referencia: ciclo de vida completo del paseo
 
 1. Paseador publica disponibilidad → `paseos` se crea con `estado: "disponible"`.
 2. Dueño consulta paseadores disponibles, inscribe su mascota.
 3. Paseador inicia el paseo → `estado: "en_vivo"`, se registra `hora_inicio`.
-4. Mientras `estado = "en_vivo"`: cada 10-30s, la app envía un punto GPS →
-   se inserta en `coordenadas_detalle`.
+4. Mientras `estado = "en_vivo"`: cada 10-30s, el dispositivo del paseador
+   envía un punto GPS → se inserta en `coordenadas_detalle`.
 5. Paseador finaliza el paseo → `estado: "historico"`, se registra `hora_fin`.
 6. Backend notifica al dueño la finalización.
 
@@ -233,7 +241,6 @@ paseo está activo, y se descartan/sincronizan después:
 - No garantiza que un incidente no ocurra.
 - No emite certificaciones oficiales de idoneidad.
 - No integra pasarela de pagos.
-- La app del paseador es exclusivamente Android (no iOS) en esta versión.
 - No hay verificación automática/externa de las credenciales que el paseador declara
   (el campo `verificado` lo administra la plataforma, no una fuente externa).
 

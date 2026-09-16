@@ -3,7 +3,10 @@ from django import forms
 _INPUT_CLASS = 'form-control'
 
 
-class RegistroDuenoForm(forms.Form):
+class _RegistroBaseForm(forms.Form):
+    """Campos comunes a los dos roles. dueño y paseador comparten la misma
+    plataforma web (ver CLAUDE.md) — solo cambia si se pide `descripcion`."""
+
     nombre = forms.CharField(
         max_length=150,
         label='Nombre completo',
@@ -16,12 +19,6 @@ class RegistroDuenoForm(forms.Form):
     telefono = forms.CharField(
         max_length=30,
         label='Teléfono',
-        widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
-    )
-    direccion = forms.CharField(
-        max_length=255,
-        required=False,
-        label='Dirección',
         widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
     )
     contrasena = forms.CharField(
@@ -43,7 +40,27 @@ class RegistroDuenoForm(forms.Form):
         return cleaned
 
 
+class RegistroDuenoForm(_RegistroBaseForm):
+    direccion = forms.CharField(
+        max_length=255,
+        required=False,
+        label='Dirección',
+        widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
+    )
+
+
+class RegistroPaseadorForm(_RegistroBaseForm):
+    descripcion = forms.CharField(
+        required=False,
+        label='Cuéntale a los dueños sobre ti',
+        widget=forms.Textarea(attrs={'class': _INPUT_CLASS, 'rows': 3}),
+    )
+
+
 class LoginForm(forms.Form):
+    """Un solo formulario para ambos roles: el rol lo determina la cuenta
+    que ya existe, no lo que el usuario elige al iniciar sesión."""
+
     correo = forms.EmailField(
         label='Correo electrónico',
         widget=forms.EmailInput(attrs={'class': _INPUT_CLASS}),

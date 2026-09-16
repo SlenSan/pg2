@@ -1,8 +1,14 @@
 """
-Vistas web (Django Templates + Bootstrap) para el dueño de mascota.
+Vistas web (Django Templates + Bootstrap) de autenticación.
 
-El paseador NO usa estas vistas: solo tiene la app Android (ver
-views_api.py). Por eso aquí se valida explícitamente rol == "dueño".
+Compartidas por dueño y paseador: ambos usan la misma plataforma web (ya
+no existe una app Android separada para el paseador — ver CLAUDE.md).
+registro()/login()/logout() son comunes a los dos roles; el resto de
+vistas de este archivo (bienvenida, etc.) siguen siendo del dueño por
+ahora. El dashboard propio del paseador es un paso pendiente: hoy, si un
+paseador inicia sesión, `usuarios.decorators.requiere_dueno` lo rebota de
+vuelta al login en cualquier página protegida (bienvenida incluida),
+porque sigue exigiendo rol == "dueño".
 """
 
 from django.contrib import messages
@@ -11,25 +17,33 @@ from django.shortcuts import redirect, render
 
 from usuarios import repository
 from usuarios.decorators import requiere_dueno
-from usuarios.forms import LoginForm, RegistroDuenoForm
+from usuarios.forms import LoginForm, RegistroDuenoForm, RegistroPaseadorForm
+
+_ROLES_VALIDOS = ('dueno', 'paseador')
+_ROL_MONGO = {'dueno': 'dueño', 'paseador': 'paseador'}
 
 
 def seleccionar_rol(request):
     """
     Pantalla de entrada del sitio ("¿Eres paseador o dueño?"). Si ya hay
     sesion activa, no tiene sentido mostrarla: se salta directo al
-    dashboard. Los botones de rol todavia no distinguen el flujo de
-    autenticacion (eso llega en un paso posterior) - por ahora solo
-    marcan la eleccion en la URL de login via ?rol=.
+    dashboard. Los botones de rol solo afectan el flujo de REGISTRO (que
+    formulario mostrarle a alguien nuevo) - el login es el mismo para
+    cualquier rol.
     """
     if request.session.get('id_usuario'):
         return redirect('usuarios:bienvenida')
     return render(request, 'usuarios/seleccionar_rol.html')
 
 
-def registro_dueno(request):
+def registro(request):
+    rol = request.POST.get('rol') or request.GET.get('rol')
+    rol = rol if rol in _ROLES_VALIDOS else 'dueno'
+    rol_mongo = _ROL_MONGO[rol]
+    FormClass = RegistroPaseadorForm if rol == 'paseador' else RegistroDuenoForm
+
     if request.method == 'POST':
-        form = RegistroDuenoForm(request.POST)
+        form = FormClass(request.POST)
         if form.is_valid():
             correo = form.cleaned_data['correo']
             if repository.obtener_por_correo(correo):
@@ -40,18 +54,24 @@ def registro_dueno(request):
                     correo=correo,
                     contrasena_hash=make_password(form.cleaned_data['contrasena']),
                     telefono=form.cleaned_data['telefono'],
-                    rol='dueño',
+                    rol=rol_mongo,
                     direccion=form.cleaned_data.get('direccion', ''),
+                    descripcion=form.cleaned_data.get('descripcion', ''),
                 )
                 _iniciar_sesion(request, usuario)
                 messages.success(request, f'¡Bienvenido, {usuario["nombre"]}! Tu cuenta fue creada.')
                 return redirect('usuarios:bienvenida')
     else:
-        form = RegistroDuenoForm()
-    return render(request, 'usuarios/registro.html', {'form': form, 'modo': 'registro'})
+        form = FormClass()
+
+    return render(request, 'usuarios/registro.html', {
+        'form': form,
+        'modo': 'registro',
+        'rol': rol,
+    })
 
 
-def login_dueno(request):
+def login(request):
     if request.method == 'POST':
         form = LoginForm(request.POST)
         if form.is_valid():
@@ -59,8 +79,6 @@ def login_dueno(request):
             contrasena = form.cleaned_data['contrasena']
             if not usuario or not check_password(contrasena, usuario['contrasena']):
                 form.add_error(None, 'Correo o contraseña incorrectos.')
-            elif usuario['rol'] != 'dueño':
-                form.add_error(None, 'Esta cuenta es de paseador. Usa la app de Canigo para paseadores.')
             else:
                 _iniciar_sesion(request, usuario)
                 return redirect('usuarios:bienvenida')
@@ -69,7 +87,7 @@ def login_dueno(request):
     return render(request, 'usuarios/login.html', {'form': form, 'modo': 'login'})
 
 
-def logout_dueno(request):
+def logout(request):
     request.session.flush()
     return redirect('usuarios:login')
 
