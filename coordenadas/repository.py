@@ -23,6 +23,18 @@ def registrar_punto(*, id_paseo, latitud, longitud, altitud=None, fecha_captura=
     return punto
 
 
+def obtener_ultimo_punto(id_paseo):
+    """El punto GPS mas reciente de un paseo, o None si todavia no hay ninguno."""
+    try:
+        oid = ObjectId(id_paseo)
+    except (InvalidId, TypeError):
+        return None
+    return get_db().coordenadas_detalle.find_one(
+        {'id_paseo': oid},
+        sort=[('fecha_captura', -1)],
+    )
+
+
 def listar_por_paseo(id_paseo):
     try:
         oid = ObjectId(id_paseo)

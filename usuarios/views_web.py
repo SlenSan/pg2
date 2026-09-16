@@ -13,6 +13,7 @@ from django.contrib import messages
 from django.contrib.auth.hashers import check_password, make_password
 from django.shortcuts import redirect, render
 
+from incidentes.forms import ReportarIncidenteForm
 from mascotas import repository as mascotas_repository
 from paseos import repository as paseos_repository
 from usuarios import repository
@@ -123,9 +124,14 @@ def bienvenida_paseador(request):
             'dueno_nombre': dueno['nombre'] if dueno else None,
         }
 
+    incidente_form = None
+    if paseo_activo and paseo_activo['estado'] == 'en_vivo':
+        incidente_form = ReportarIncidenteForm()
+
     return render(request, 'usuarios/bienvenida_paseador.html', {
         'nombre': request.session.get('nombre'),
         'paseo_activo': paseo_activo,
+        'incidente_form': incidente_form,
     })
 
 

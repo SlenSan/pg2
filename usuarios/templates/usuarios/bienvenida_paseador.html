@@ -18,7 +18,10 @@
           {% csrf_token %}
           <button type="submit" class="btn btn-primary w-100">Finalizar paseo</button>
         </form>
-        <p class="text-muted small mt-2 mb-0" id="estado-gps">Compartiendo tu ubicación...</p>
+        <p class="text-muted small mt-2 mb-3" id="estado-gps">Compartiendo tu ubicación...</p>
+        <button type="button" class="btn btn-emergencia w-100" data-bs-toggle="modal" data-bs-target="#modalEmergencia">
+          Reportar emergencia
+        </button>
       {% elif paseo_activo.mascota_nombre %}
         <span class="badge bg-secondary mb-2">Disponible</span>
         <p class="mb-3">
@@ -46,6 +49,63 @@
     {% endif %}
   </div>
 </div>
+
+{% if incidente_form %}
+<div class="modal fade" id="modalEmergencia" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+
+      <div id="emergenciaConfirmar">
+        <div class="modal-header">
+          <h2 class="h5 modal-title">¿Seguro que quieres reportar una emergencia?</h2>
+        </div>
+        <div class="modal-body">
+          <p class="mb-0">
+            Vas a registrar un incidente durante este paseo. El dueño será
+            notificado de inmediato.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-emergencia" id="btnConfirmarEmergencia">Sí, reportar</button>
+        </div>
+      </div>
+
+      <form
+        id="emergenciaFormulario"
+        method="post"
+        enctype="multipart/form-data"
+        action="{% url 'incidentes:reportar_incidente' paseo_activo.id_paseo %}"
+        hidden
+      >
+        {% csrf_token %}
+        <div class="modal-header">
+          <h2 class="h5 modal-title">Reportar emergencia</h2>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label" for="{{ incidente_form.tipo.id_for_label }}">{{ incidente_form.tipo.label }}</label>
+            {{ incidente_form.tipo }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="{{ incidente_form.descripcion.id_for_label }}">{{ incidente_form.descripcion.label }}</label>
+            {{ incidente_form.descripcion }}
+          </div>
+          <div class="mb-0">
+            <label class="form-label" for="{{ incidente_form.foto.id_for_label }}">{{ incidente_form.foto.label }}</label>
+            {{ incidente_form.foto }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-emergencia">Enviar reporte</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -94,6 +154,28 @@
 
   capturarYEnviar();
   setInterval(capturarYEnviar, 10000);
+})();
+</script>
+
+<script>
+(function () {
+  var modalEl = document.getElementById('modalEmergencia');
+  if (!modalEl) return;
+
+  var pasoConfirmar = document.getElementById('emergenciaConfirmar');
+  var pasoFormulario = document.getElementById('emergenciaFormulario');
+
+  document.getElementById('btnConfirmarEmergencia').addEventListener('click', function () {
+    pasoConfirmar.hidden = true;
+    pasoFormulario.hidden = false;
+  });
+
+  // Si cancelan y vuelven a abrir el modal, que arranque otra vez en el
+  // paso de confirmacion (no directo en el formulario).
+  modalEl.addEventListener('hidden.bs.modal', function () {
+    pasoConfirmar.hidden = false;
+    pasoFormulario.hidden = true;
+  });
 })();
 </script>
 {% endif %}

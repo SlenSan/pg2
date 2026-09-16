@@ -19,6 +19,14 @@
         <p class="card-text text-muted small mb-1">
           Mascota: {{ item.mascota.nombre|default:"—" }} · Paseador: {{ item.paseador.nombre|default:"—" }}
         </p>
+        <p class="card-text text-muted small mb-1">
+          Ubicación:
+          {% if item.incidente.latitud and item.incidente.longitud %}
+            {{ item.incidente.latitud }}, {{ item.incidente.longitud }}
+          {% else %}
+            no disponible
+          {% endif %}
+        </p>
         <p class="card-text text-muted small mb-0">{{ item.incidente.fecha_hora }}</p>
       </div>
     </div>
