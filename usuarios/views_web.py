@@ -14,6 +14,19 @@ from usuarios.decorators import requiere_dueno
 from usuarios.forms import LoginForm, RegistroDuenoForm
 
 
+def seleccionar_rol(request):
+    """
+    Pantalla de entrada del sitio ("¿Eres paseador o dueño?"). Si ya hay
+    sesion activa, no tiene sentido mostrarla: se salta directo al
+    dashboard. Los botones de rol todavia no distinguen el flujo de
+    autenticacion (eso llega en un paso posterior) - por ahora solo
+    marcan la eleccion en la URL de login via ?rol=.
+    """
+    if request.session.get('id_usuario'):
+        return redirect('usuarios:bienvenida')
+    return render(request, 'usuarios/seleccionar_rol.html')
+
+
 def registro_dueno(request):
     if request.method == 'POST':
         form = RegistroDuenoForm(request.POST)

@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% load static %}
 {% comment %}
-Layout compartido de login/registro (split screen del diseño de Figma).
-login.html y registro.html extienden este archivo y solo rellenan
-auth_titulo / auth_subtitulo / auth_form — así el selector tipo pastilla
-y el panel izquierdo se mantienen idénticos en ambas pantallas sin
-duplicar HTML.
+Layout compartido de las pantallas previas al dashboard (split screen del
+diseño de Figma): login, registro y seleccionar_rol lo extienden y solo
+rellenan auth_titulo / auth_subtitulo / auth_form, así el panel izquierdo
+no se duplica. El selector tipo pastilla vive en {% block auth_toggle %}
+para que seleccionar_rol.html pueda ocultarlo (ahí no hay un modo
+login/registro que resaltar todavía).
 
 Sin navbar: estas dos pantallas son la puerta de entrada (usuario aún no
 autenticado).
@@ -32,6 +33,7 @@ autenticado).
 
   <div class="col-12 col-md-6 d-flex align-items-center justify-content-center py-5 px-3">
     <div class="auth-form-wrapper">
+      {% block auth_toggle %}
       <div class="auth-toggle mb-4">
         <a
           href="{% url 'usuarios:login' %}"
@@ -46,6 +48,7 @@ autenticado).
           Crear cuenta
         </a>
       </div>
+      {% endblock %}
 
       <h1 class="h3 mb-1">{% block auth_titulo %}{% endblock %}</h1>
       <p class="text-muted mb-4">{% block auth_subtitulo %}{% endblock %}</p>

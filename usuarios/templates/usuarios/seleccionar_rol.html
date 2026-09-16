@@ -1,0 +1,36 @@
+{% extends "usuarios/base_auth.html" %}
+
+{% block title %}Bienvenido a Canigo{% endblock %}
+
+{% block extra_head %}
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+>
+{% endblock %}
+
+{% block auth_toggle %}{% endblock %}
+
+{% block auth_form %}
+<h1 class="h3 text-center mb-4">Eres...</h1>
+
+<div class="row g-3">
+  <div class="col-12 col-sm-6">
+    {% comment %}
+    Por ahora ambas tarjetas llevan al mismo login, solo marcando la
+    eleccion via ?rol= en la URL. Diferenciar el flujo real de
+    autenticacion/registro por rol es el siguiente paso.
+    {% endcomment %}
+    <a href="{% url 'usuarios:login' %}?rol=paseador" class="rol-tarjeta">
+      <span class="rol-tarjeta-icono"><i class="bi bi-person-walking"></i></span>
+      <span class="rol-tarjeta-titulo">Paseador</span>
+    </a>
+  </div>
+  <div class="col-12 col-sm-6">
+    <a href="{% url 'usuarios:login' %}?rol=dueno" class="rol-tarjeta">
+      <span class="rol-tarjeta-icono"><i class="bi bi-person-heart"></i></span>
+      <span class="rol-tarjeta-titulo">Cliente</span>
+    </a>
+  </div>
+</div>
+{% endblock %}
