@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Inicio — Canigo{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Hola, {{ nombre }}</h1>
+
+<div class="card">
+  <div class="card-body">
+    {% if paseo_activo %}
+      {% if paseo_activo.estado == 'en_vivo' %}
+      <span class="badge bg-success mb-2">Paseo en curso</span>
+      <p class="mb-0">Tienes un paseo activo en este momento.</p>
+      {% else %}
+      <span class="badge bg-secondary mb-2">Disponible</span>
+      <p class="mb-0">
+        Publicaste tu disponibilidad. En cuanto un dueño inscriba a su
+        mascota vas a poder iniciar el paseo.
+      </p>
+      {% endif %}
+    {% else %}
+      <p class="text-muted mb-3">Todavía no has publicado tu disponibilidad.</p>
+      <form method="post" action="{% url 'paseos:publicar_disponibilidad' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary w-100">Publicar disponibilidad</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

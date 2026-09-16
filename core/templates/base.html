@@ -22,6 +22,15 @@
   {% block navbar %}
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container">
+      {% if request.session.rol == 'paseador' %}
+      <a class="navbar-brand" href="{% url 'usuarios:bienvenida_paseador' %}">🐾 Canigo</a>
+      <div class="navbar-nav flex-row gap-3">
+        <a class="nav-link text-white" href="{% url 'usuarios:perfil_paseador' %}">Mi perfil</a>
+        <a class="nav-link text-white" href="{% url 'paseos:historial_paseador' %}">Historial de paseos</a>
+        <a class="nav-link text-white" href="{% url 'notificaciones:lista' %}">Notificaciones</a>
+        <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
+      </div>
+      {% else %}
       <a class="navbar-brand" href="{% url 'home' %}">🐾 Canigo</a>
       {% if request.session.id_usuario %}
       <div class="navbar-nav flex-row gap-3">
@@ -32,6 +41,7 @@
         <a class="nav-link text-white" href="{% url 'incidentes:lista' %}">Incidentes</a>
         <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
       </div>
+      {% endif %}
       {% endif %}
     </div>
   </nav>

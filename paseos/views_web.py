@@ -1,17 +1,22 @@
 """
-Vistas web (dueño) del modulo de paseos: listar paseadores disponibles,
-ver su perfil, inscribir una mascota, y ver el estado de "mis paseos".
+Vistas web del modulo de paseos.
+
+Dueño: listar paseadores disponibles, ver su perfil, inscribir una
+mascota, y ver el estado de "mis paseos".
+Paseador: publicar disponibilidad y ver su historial de paseos.
 """
 
+from bson import ObjectId
 from django.contrib import messages
 from django.shortcuts import redirect, render
+from django.views.decorators.http import require_POST
 
 from calificaciones import repository as calificaciones_repository
 from mascotas import repository as mascotas_repository
 from paseos import repository
 from paseos.forms import InscribirMascotaForm
 from usuarios import repository as usuarios_repository
-from usuarios.decorators import requiere_dueno
+from usuarios.decorators import requiere_dueno, requiere_paseador
 
 
 @requiere_dueno
@@ -92,3 +97,38 @@ def mis_paseos(request):
         for p in paseos
     ]
     return render(request, 'paseos/mis_paseos.html', {'items': items})
+
+
+@require_POST
+@requiere_paseador
+def publicar_disponibilidad(request):
+    """
+    Boton "Publicar disponibilidad" del dashboard del paseador. Reutiliza
+    la misma logica de negocio que ya usaba la API (paseos.repository):
+    no publica una segunda vez si ya tiene un paseo activo.
+    """
+    id_paseador = ObjectId(request.session['id_usuario'])
+    if not repository.obtener_activo_de_paseador(id_paseador):
+        repository.crear_disponibilidad(id_paseador=id_paseador)
+    return redirect('usuarios:bienvenida_paseador')
+
+
+@requiere_paseador
+def historial_paseador(request):
+    id_paseador = ObjectId(request.session['id_usuario'])
+    paseos = repository.listar_por_paseador(id_paseador)
+    duenos_por_id = usuarios_repository.obtener_varios_por_id(
+        [p['id_dueno'] for p in paseos if p.get('id_dueno')]
+    )
+    mascotas_por_id = mascotas_repository.obtener_varias_por_id(
+        [p['id_mascota'] for p in paseos if p.get('id_mascota')]
+    )
+    items = [
+        {
+            'paseo': p,
+            'dueno': duenos_por_id.get(p.get('id_dueno')),
+            'mascota': mascotas_por_id.get(p.get('id_mascota')),
+        }
+        for p in paseos
+    ]
+    return render(request, 'paseos/historial_paseador.html', {'items': items})
