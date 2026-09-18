@@ -15,7 +15,9 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
 from coordenadas import repository
+from mascotas import repository as mascotas_repository
 from paseos import repository as paseos_repository
+from usuarios import repository as usuarios_repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
 
 
@@ -26,14 +28,37 @@ def _paseo_del_dueno_o_none(request, id_paseo):
     return paseo
 
 
+def _fecha_iso_utc(valor):
+    """
+    Los datetimes que devuelve pymongo son naive (UTC sin tzinfo - ver
+    core/mongo.py): hay que marcarlos explicitamente como UTC ("Z") antes
+    de mandarlos al navegador, o `new Date(...)` en JS los interpreta como
+    hora LOCAL del navegador y el tiempo transcurrido queda mal calculado
+    por el desfase horario (Colombia es UTC-5).
+    """
+    return valor.strftime('%Y-%m-%dT%H:%M:%SZ') if valor else None
+
+
 @requiere_dueno
 def mapa_paseo(request, id_paseo):
     paseo = _paseo_del_dueno_o_none(request, id_paseo)
     if not paseo:
         return redirect('paseos:mis_paseos')
+
+    mascota = None
+    paseador = None
+    if paseo.get('id_mascota'):
+        mascota = mascotas_repository.obtener_varias_por_id([paseo['id_mascota']]).get(paseo['id_mascota'])
+    if paseo.get('id_paseador'):
+        paseador = usuarios_repository.obtener_por_id(paseo['id_paseador'])
+
     return render(request, 'coordenadas/mapa.html', {
         'paseo': paseo,
         'id_paseo': str(paseo['_id']),
+        'mascota': mascota,
+        'paseador': paseador,
+        'hora_inicio_iso': _fecha_iso_utc(paseo.get('hora_inicio')),
+        'hora_fin_iso': _fecha_iso_utc(paseo.get('hora_fin')),
     })
 
 
@@ -46,6 +71,7 @@ def coordenadas_de_paseo(request, id_paseo):
     puntos = repository.listar_por_paseo(id_paseo)
     return JsonResponse({
         'estado': paseo['estado'],
+        'emergencia': paseo.get('emergencia', False),
         'puntos': [repository.a_json(p) for p in puntos],
     })
 
