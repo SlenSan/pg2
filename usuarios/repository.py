@@ -60,6 +60,19 @@ def actualizar_calificacion_promedio(id_paseador, promedio):
     get_db().usuarios.update_one({'_id': oid}, {'$set': {'calificacion_promedio': promedio}})
 
 
+def actualizar_perfil_paseador(*, id_usuario, telefono, descripcion, foto_perfil):
+    """
+    Solo los campos que el propio paseador puede editar (ver
+    usuarios.forms.EditarPerfilPaseadorForm): correo/rol/
+    calificacion_promedio/verificado se quedan fuera a propósito.
+    """
+    oid = id_usuario if isinstance(id_usuario, ObjectId) else ObjectId(id_usuario)
+    get_db().usuarios.update_one(
+        {'_id': oid},
+        {'$set': {'telefono': telefono, 'descripcion': descripcion, 'foto_perfil': foto_perfil}},
+    )
+
+
 def a_json(usuario):
     """Representacion de un usuario segura para exponer por la API (sin la contrasena)."""
     data = {k: v for k, v in usuario.items() if k != 'contrasena'}

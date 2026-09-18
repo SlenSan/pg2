@@ -13,12 +13,13 @@ from django.contrib import messages
 from django.contrib.auth.hashers import check_password, make_password
 from django.shortcuts import redirect, render
 
+from core.media import ErrorSubidaImagen, subir_imagen
 from incidentes.forms import ReportarIncidenteForm
 from mascotas import repository as mascotas_repository
 from paseos import repository as paseos_repository
 from usuarios import repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
-from usuarios.forms import LoginForm, RegistroDuenoForm, RegistroPaseadorForm
+from usuarios.forms import EditarPerfilPaseadorForm, LoginForm, RegistroDuenoForm, RegistroPaseadorForm
 
 _ROLES_VALIDOS = ('dueno', 'paseador')
 _ROL_MONGO = {'dueno': 'dueño', 'paseador': 'paseador'}
@@ -141,9 +142,41 @@ def bienvenida_paseador(request):
 
 @requiere_paseador
 def perfil_paseador(request):
-    """Solo lectura por ahora - editar el perfil queda para un paso posterior."""
     usuario = repository.obtener_por_id(request.session['id_usuario'])
-    return render(request, 'usuarios/perfil_paseador.html', {'usuario': usuario})
+    tenia_descripcion = bool(usuario.get('descripcion'))
+
+    if request.method == 'POST':
+        form = EditarPerfilPaseadorForm(
+            request.POST, request.FILES, tenia_descripcion=tenia_descripcion
+        )
+        if form.is_valid():
+            foto_perfil_url = usuario.get('foto_perfil', '')
+            foto = form.cleaned_data.get('foto_perfil')
+            if foto:
+                try:
+                    foto_perfil_url = subir_imagen(foto, carpeta='usuarios')
+                except ErrorSubidaImagen as exc:
+                    form.add_error('foto_perfil', str(exc))
+
+            if not form.errors:
+                repository.actualizar_perfil_paseador(
+                    id_usuario=request.session['id_usuario'],
+                    telefono=form.cleaned_data['telefono'],
+                    descripcion=form.cleaned_data['descripcion'],
+                    foto_perfil=foto_perfil_url,
+                )
+                messages.success(request, 'Tu perfil se actualizó correctamente.')
+                return redirect('usuarios:perfil_paseador')
+    else:
+        form = EditarPerfilPaseadorForm(
+            initial={
+                'telefono': usuario.get('telefono', ''),
+                'descripcion': usuario.get('descripcion', ''),
+            },
+            tenia_descripcion=tenia_descripcion,
+        )
+
+    return render(request, 'usuarios/perfil_paseador.html', {'usuario': usuario, 'form': form})
 
 
 def _iniciar_sesion(request, usuario):

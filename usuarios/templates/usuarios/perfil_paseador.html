@@ -5,24 +5,71 @@
 {% block content %}
 <h1 class="h4 mb-4">Mi perfil</h1>
 
+<div class="card mb-3">
+  <div class="card-body d-flex align-items-center gap-3">
+    {% if usuario.foto_perfil %}
+    <img
+      src="{{ usuario.foto_perfil }}"
+      alt="Foto de perfil"
+      class="rounded-circle"
+      style="width: 72px; height: 72px; object-fit: cover;"
+    >
+    {% endif %}
+    <div>
+      <p class="mb-2"><strong>Nombre:</strong> {{ usuario.nombre }}</p>
+      <p class="mb-2"><strong>Correo:</strong> {{ usuario.correo }}</p>
+      <p class="mb-2">
+        <strong>Verificado:</strong>
+        {% if usuario.verificado %}
+        <span class="badge bg-success">Sí</span>
+        {% else %}
+        <span class="badge bg-secondary">No</span>
+        {% endif %}
+      </p>
+      <p class="mb-0">
+        <strong>Calificación promedio:</strong>
+        {% if usuario.calificacion_promedio %}{{ usuario.calificacion_promedio }} / 5{% else %}Sin calificaciones aún{% endif %}
+      </p>
+    </div>
+  </div>
+</div>
+
 <div class="card">
   <div class="card-body">
-    <p class="mb-2"><strong>Nombre:</strong> {{ usuario.nombre }}</p>
-    <p class="mb-2"><strong>Correo:</strong> {{ usuario.correo }}</p>
-    <p class="mb-2"><strong>Teléfono:</strong> {{ usuario.telefono }}</p>
-    <p class="mb-2">
-      <strong>Verificado:</strong>
-      {% if usuario.verificado %}
-      <span class="badge bg-success">Sí</span>
-      {% else %}
-      <span class="badge bg-secondary">No</span>
+    <h2 class="h5 mb-3">Editar perfil</h2>
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.telefono.id_for_label }}">{{ form.telefono.label }}</label>
+        {{ form.telefono }}
+        {% for error in form.telefono.errors %}
+        <div class="text-danger small mt-1">{{ error }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.descripcion.id_for_label }}">{{ form.descripcion.label }}</label>
+        {{ form.descripcion }}
+        {% for error in form.descripcion.errors %}
+        <div class="text-danger small mt-1">{{ error }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.foto_perfil.id_for_label }}">{{ form.foto_perfil.label }}</label>
+        {{ form.foto_perfil }}
+        {% for error in form.foto_perfil.errors %}
+        <div class="text-danger small mt-1">{{ error }}</div>
+        {% endfor %}
+      </div>
+
+      {% if form.non_field_errors %}
+      <div class="alert alert-danger">{{ form.non_field_errors }}</div>
       {% endif %}
-    </p>
-    <p class="mb-2">
-      <strong>Calificación promedio:</strong>
-      {% if usuario.calificacion_promedio %}{{ usuario.calificacion_promedio }} / 5{% else %}Sin calificaciones aún{% endif %}
-    </p>
-    <p class="mb-0"><strong>Descripción:</strong> {{ usuario.descripcion|default:"—" }}</p>
+
+      <button type="submit" class="btn btn-primary w-100">Guardar cambios</button>
+    </form>
   </div>
 </div>
 {% endblock %}

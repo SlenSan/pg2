@@ -57,6 +57,42 @@ class RegistroPaseadorForm(_RegistroBaseForm):
     )
 
 
+class EditarPerfilPaseadorForm(forms.Form):
+    """
+    correo/rol/calificacion_promedio/verificado no se editan aqui: correo
+    es el identificador de login, y los otros tres los administra el
+    sistema (ver CLAUDE.md), no el propio paseador.
+    """
+
+    telefono = forms.CharField(
+        max_length=30,
+        label='Teléfono',
+        widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
+    )
+    descripcion = forms.CharField(
+        required=False,
+        label='Cuéntale a los dueños sobre ti',
+        widget=forms.Textarea(attrs={'class': _INPUT_CLASS, 'rows': 3}),
+    )
+    foto_perfil = forms.ImageField(
+        required=False,
+        label='Foto de perfil',
+        widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
+    )
+
+    def __init__(self, *args, tenia_descripcion=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._tenia_descripcion = tenia_descripcion
+
+    def clean_descripcion(self):
+        descripcion = self.cleaned_data.get('descripcion', '').strip()
+        if self._tenia_descripcion and not descripcion:
+            raise forms.ValidationError(
+                'Ya tenías una descripción escrita: no puedes dejarla vacía, solo cambiarla.'
+            )
+        return descripcion
+
+
 class LoginForm(forms.Form):
     """Un solo formulario para ambos roles: el rol lo determina la cuenta
     que ya existe, no lo que el usuario elige al iniciar sesión."""
