@@ -46,3 +46,18 @@ def calcular_promedio(id_paseador):
     ]
     resultado = list(get_db().calificaciones.aggregate(pipeline))
     return round(resultado[0]['promedio'], 1) if resultado else None
+
+
+def calcular_promedio_dado_por_dueno(id_dueno):
+    """
+    Promedio de las puntuaciones que ESTE dueño le ha dado a sus
+    paseadores (no la de un paseador especifico) - estadistica del
+    dashboard del dueño. None si todavia no ha calificado ningun paseo.
+    """
+    oid = id_dueno if isinstance(id_dueno, ObjectId) else ObjectId(id_dueno)
+    pipeline = [
+        {'$match': {'id_dueno': oid}},
+        {'$group': {'_id': None, 'promedio': {'$avg': '$puntuacion'}}},
+    ]
+    resultado = list(get_db().calificaciones.aggregate(pipeline))
+    return round(resultado[0]['promedio'], 1) if resultado else None

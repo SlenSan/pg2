@@ -1,14 +1,142 @@
 {% extends "base.html" %}
 
-{% block title %}Bienvenida — Canigo{% endblock %}
+{% block title %}Inicio — Canigo{% endblock %}
+
+{% block extra_head %}
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+>
+{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-12 col-md-8 text-center">
-    <h1 class="h3">¡Hola, {{ nombre }}! 🐕</h1>
-    <p class="text-muted">Iniciaste sesión correctamente en Canigo.</p>
-    <a href="{% url 'mascotas:lista' %}" class="btn btn-primary">Mis mascotas</a>
-    <a href="{% url 'usuarios:logout' %}" class="btn btn-outline-secondary">Cerrar sesión</a>
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <div class="dashboard-fecha">{% now "j \d\e F \d\e Y" %}</div>
+    <h1 class="h3 dashboard-saludo mb-0">Hola, {{ nombre }}</h1>
+  </div>
+  <a href="{% url 'notificaciones:lista' %}" class="dashboard-campana" aria-label="Notificaciones">
+    <i class="bi bi-bell"></i>
+    {% if hay_notificaciones_sin_leer %}
+    <span class="dashboard-campana-punto"></span>
+    {% endif %}
+  </a>
+</div>
+
+{% if paseo_activo %}
+<a
+  href="{% url 'coordenadas:mapa_paseo' paseo_activo.id_paseo %}"
+  class="banner-paseo-activo d-flex align-items-center gap-3 mb-4"
+>
+  <span class="banner-paseo-icono">
+    <i class="bi bi-geo-alt-fill"></i>
+  </span>
+  <div class="flex-grow-1">
+    <div class="banner-paseo-etiqueta">Paseo activo ahora</div>
+    <div class="fw-bold">{{ paseo_activo.mascota_nombre }} está de paseo</div>
+    <div class="banner-paseo-detalle">
+      Con {{ paseo_activo.paseador_nombre }} · {{ paseo_activo.minutos }} min transcurridos
+    </div>
+  </div>
+  <div class="d-flex align-items-center gap-1">
+    Ver <i class="bi bi-chevron-right"></i>
+  </div>
+</a>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="h5 mb-0">Mis mascotas</h2>
+  <a href="{% url 'mascotas:lista' %}" class="auth-link small">Ver todas</a>
+</div>
+
+{% if mascotas_tarjetas %}
+<div class="row row-cols-1 row-cols-md-3 g-3 mb-4">
+  {% for item in mascotas_tarjetas %}
+  <div class="col">
+    <div class="card h-100">
+      <div class="card-body d-flex align-items-center gap-3">
+        {% if item.mascota.foto %}
+        <img src="{{ item.mascota.foto }}" alt="{{ item.mascota.nombre }}" class="mascota-avatar">
+        {% else %}
+        <span class="mascota-avatar-vacio">{{ item.mascota.nombre|slice:":1" }}</span>
+        {% endif %}
+        <div class="flex-grow-1">
+          <div class="fw-bold">{{ item.mascota.nombre }}</div>
+          <div class="text-muted small">{{ item.mascota.raza }}</div>
+          <div class="text-muted small">
+            {% if item.fecha_ultimo_paseo %}
+              Último paseo: {{ item.fecha_ultimo_paseo|date:"j \d\e F" }}
+            {% else %}
+              Sin paseos aún
+            {% endif %}
+          </div>
+        </div>
+        <span class="badge {% if item.en_paseo %}badge-en-paseo{% else %}badge-en-casa{% endif %}">
+          {% if item.en_paseo %}en paseo{% else %}en casa{% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-muted mb-4">Todavía no has registrado ninguna mascota.</p>
+{% endif %}
+
+<h2 class="h5 mb-3">Acciones rápidas</h2>
+<div class="row row-cols-1 row-cols-md-2 g-3 mb-4">
+  <div class="col">
+    <a href="{% url 'paseos:lista_disponibles' %}" class="accion-rapida">
+      <span class="accion-rapida-icono accion-rapida-icono-naranja"><i class="bi bi-people-fill"></i></span>
+      <div class="accion-rapida-titulo">Solicitar paseo</div>
+      <div class="accion-rapida-desc">Elige un paseador</div>
+    </a>
+  </div>
+  <div class="col">
+    <a href="{% url 'mascotas:registro' %}" class="accion-rapida">
+      <span class="accion-rapida-icono accion-rapida-icono-verde"><i class="bi bi-plus-lg"></i></span>
+      <div class="accion-rapida-titulo">Agregar mascota</div>
+      <div class="accion-rapida-desc">Registra a tu peludito</div>
+    </a>
+  </div>
+  <div class="col">
+    <a href="{% url 'paseos:mis_paseos' %}" class="accion-rapida">
+      <span class="accion-rapida-icono accion-rapida-icono-ambar"><i class="bi bi-clock-history"></i></span>
+      <div class="accion-rapida-titulo">Ver historial</div>
+      <div class="accion-rapida-desc">Todos los paseos</div>
+    </a>
+  </div>
+  <div class="col">
+    {% if id_paseo_sin_calificar %}
+    <a href="{% url 'calificaciones:calificar_paseo' id_paseo_sin_calificar %}" class="accion-rapida">
+    {% else %}
+    <span class="accion-rapida deshabilitada">
+    {% endif %}
+      <span class="accion-rapida-icono accion-rapida-icono-amarillo"><i class="bi bi-star-fill"></i></span>
+      <div class="accion-rapida-titulo">Calificar paseo</div>
+      <div class="accion-rapida-desc">
+        {% if id_paseo_sin_calificar %}Último paseo pendiente{% else %}No tienes paseos por calificar{% endif %}
+      </div>
+    {% if id_paseo_sin_calificar %}
+    </a>
+    {% else %}
+    </span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row text-center g-3">
+  <div class="col-4">
+    <div class="stat-valor">{{ paseos_este_mes }}</div>
+    <div class="stat-etiqueta">Paseos este mes</div>
+  </div>
+  <div class="col-4">
+    <div class="stat-valor">{% if calificacion_promedio_dada %}{{ calificacion_promedio_dada }}{% else %}—{% endif %}</div>
+    <div class="stat-etiqueta">Calificación promedio</div>
+  </div>
+  <div class="col-4">
+    <div class="stat-valor">{{ paseadores_distintos }}</div>
+    <div class="stat-etiqueta">Paseadores favoritos</div>
   </div>
 </div>
 {% endblock %}

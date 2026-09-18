@@ -38,6 +38,15 @@
   --color-emergencia: #DC2626;
   --color-emergencia-hover: #B91C1C;
   --color-emergencia-foreground: #FFFFFF;
+  /* La paleta original solo trae naranja (primary) y verde (accent); el
+     dashboard del dueño pide 4 colores suaves distintos para los iconos
+     de "Acciones rapidas". Estos dos son una extension mia, coherente con
+     la familia terracota - reemplazar por los hex exactos de Figma si se
+     consiguen mas adelante. */
+  --color-quick-amber-bg: #FBEBD2;
+  --color-quick-amber-fg: #9C6B1F;
+  --color-quick-yellow-bg: #FCF3C7;
+  --color-quick-yellow-fg: #92790C;
   --radius: 14px;
 }
 
@@ -446,4 +455,208 @@ a:hover {
 .btn-emergencia:focus,
 .btn-emergencia.focus {
   box-shadow: 0 0 0 3px rgba(220, 38, 38, .3);
+}
+
+/* ===== Dashboard del dueño ===== */
+
+.dashboard-fecha {
+  color: var(--color-muted-foreground);
+  font-size: .85rem;
+}
+
+.dashboard-saludo {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+}
+
+.dashboard-campana {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background-color: var(--color-card);
+  border: 1px solid var(--color-border);
+  color: var(--color-foreground);
+  text-decoration: none;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.dashboard-campana:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.dashboard-campana-punto {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background-color: var(--color-primary);
+  border: 2px solid var(--color-background);
+}
+
+/* Banner de paseo activo */
+
+.banner-paseo-activo {
+  display: block;
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+  border-radius: 16px;
+  text-decoration: none;
+  padding: 1.25rem 1.5rem;
+  transition: box-shadow .15s ease, transform .1s ease;
+}
+
+.banner-paseo-activo:hover {
+  color: var(--color-primary-foreground);
+  box-shadow: 0 6px 16px rgba(44, 26, 14, .15);
+}
+
+.banner-paseo-activo:active {
+  transform: scale(.99);
+}
+
+.banner-paseo-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, .2);
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.banner-paseo-etiqueta {
+  font-size: .8rem;
+  color: rgba(255, 255, 255, .85);
+}
+
+.banner-paseo-detalle {
+  font-size: .85rem;
+  color: rgba(255, 255, 255, .85);
+}
+
+/* Mascotas del dashboard */
+
+.mascota-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background-color: var(--color-secondary);
+}
+
+.mascota-avatar-vacio {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background-color: var(--color-secondary);
+  color: var(--color-secondary-foreground);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.badge-en-paseo {
+  background-color: var(--color-accent) !important;
+  color: var(--color-accent-foreground);
+}
+
+.badge-en-casa {
+  background-color: var(--color-muted) !important;
+  color: var(--color-muted-foreground);
+}
+
+/* Acciones rapidas */
+
+.accion-rapida {
+  display: block;
+  background-color: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 1.25rem;
+  text-decoration: none;
+  color: var(--color-foreground);
+  height: 100%;
+  transition: box-shadow .15s ease, transform .1s ease;
+}
+
+.accion-rapida:hover {
+  box-shadow: 0 4px 12px rgba(44, 26, 14, .1);
+  color: var(--color-foreground);
+}
+
+.accion-rapida:active {
+  transform: scale(.99);
+}
+
+.accion-rapida.deshabilitada {
+  opacity: .5;
+  pointer-events: none;
+}
+
+.accion-rapida-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 12px;
+  font-size: 1.25rem;
+  margin-bottom: .75rem;
+}
+
+.accion-rapida-icono-naranja {
+  background-color: rgba(217, 112, 58, .15);
+  color: var(--color-primary);
+}
+
+.accion-rapida-icono-verde {
+  background-color: rgba(90, 158, 111, .15);
+  color: var(--color-accent);
+}
+
+.accion-rapida-icono-ambar {
+  background-color: var(--color-quick-amber-bg);
+  color: var(--color-quick-amber-fg);
+}
+
+.accion-rapida-icono-amarillo {
+  background-color: var(--color-quick-yellow-bg);
+  color: var(--color-quick-yellow-fg);
+}
+
+.accion-rapida-titulo {
+  font-weight: 700;
+  margin-bottom: .15rem;
+}
+
+.accion-rapida-desc {
+  font-size: .85rem;
+  color: var(--color-muted-foreground);
+}
+
+/* Estadisticas */
+
+.stat-valor {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 1.75rem;
+  color: var(--color-foreground);
+}
+
+.stat-etiqueta {
+  font-size: .85rem;
+  color: var(--color-muted-foreground);
 }
