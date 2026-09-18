@@ -19,6 +19,23 @@
           <button type="submit" class="btn btn-primary w-100">Finalizar paseo</button>
         </form>
         <p class="text-muted small mt-2 mb-3" id="estado-gps">Compartiendo tu ubicación...</p>
+
+        {% if paseo_activo.fotos_pendientes %}
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          {% for momento in paseo_activo.fotos_pendientes %}
+          <button
+            type="button"
+            class="btn btn-outline-primary btn-sm flex-fill"
+            data-bs-toggle="modal"
+            data-bs-target="#modalFoto"
+            data-momento="{{ momento }}"
+          >
+            Foto de {{ momento }}
+          </button>
+          {% endfor %}
+        </div>
+        {% endif %}
+
         <button type="button" class="btn btn-emergencia w-100" data-bs-toggle="modal" data-bs-target="#modalEmergencia">
           Reportar emergencia
         </button>
@@ -106,6 +123,26 @@
   </div>
 </div>
 {% endif %}
+
+{% if paseo_activo.fotos_pendientes %}
+<div class="modal fade" id="modalFoto" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form id="formFoto" method="post" enctype="multipart/form-data" class="modal-content">
+      {% csrf_token %}
+      <div class="modal-header">
+        <h2 class="h5 modal-title" id="modalFotoTitulo">Subir foto</h2>
+      </div>
+      <div class="modal-body">
+        <input type="file" name="foto" accept="image/*" class="form-control" required>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Subir</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -175,6 +212,26 @@
   modalEl.addEventListener('hidden.bs.modal', function () {
     pasoConfirmar.hidden = false;
     pasoFormulario.hidden = true;
+  });
+})();
+</script>
+
+<script>
+(function () {
+  var modalFoto = document.getElementById('modalFoto');
+  if (!modalFoto) return;
+
+  // La URL trae un placeholder de texto en vez del momento real, porque
+  // Django arma la URL en tiempo de render con todos sus argumentos; el
+  // JS lo reemplaza segun el boton que abrio el modal.
+  var urlBase = "{% url 'paseos:subir_foto' paseo_activo.id_paseo 'MOMENTO_PLACEHOLDER' %}";
+  var formFoto = document.getElementById('formFoto');
+  var tituloFoto = document.getElementById('modalFotoTitulo');
+
+  modalFoto.addEventListener('show.bs.modal', function (event) {
+    var momento = event.relatedTarget.getAttribute('data-momento');
+    formFoto.action = urlBase.replace('MOMENTO_PLACEHOLDER', momento);
+    tituloFoto.textContent = 'Foto de ' + momento;
   });
 })();
 </script>

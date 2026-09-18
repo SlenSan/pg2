@@ -12,4 +12,5 @@ urlpatterns = [
     path('paseador/historial/', views_web.historial_paseador, name='historial_paseador'),
     path('paseador/paseos/<str:id_paseo>/iniciar/', views_web.iniciar_paseo, name='iniciar_paseo'),
     path('paseador/paseos/<str:id_paseo>/finalizar/', views_web.finalizar_paseo, name='finalizar_paseo'),
+    path('paseador/paseos/<str:id_paseo>/fotos/<str:momento>/', views_web.subir_foto, name='subir_foto'),
 ]

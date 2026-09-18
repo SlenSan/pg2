@@ -18,6 +18,29 @@
 <p class="text-muted small mt-2" id="sin-puntos" hidden>
   Todavía no hay puntos GPS registrados para este paseo.
 </p>
+
+{% if paseo.fotos %}
+<div class="mt-4">
+  <h2 class="h5 mb-3">Fotos del paseo</h2>
+  <div class="row row-cols-2 row-cols-md-3 g-3">
+    {% for foto in paseo.fotos %}
+    <div class="col">
+      <div class="card h-100">
+        <img
+          src="{{ foto.url }}"
+          class="card-img-top"
+          alt="Foto de {{ foto.momento }}"
+          style="height: 160px; object-fit: cover;"
+        >
+        <div class="card-body py-2">
+          <span class="badge bg-secondary text-capitalize">{{ foto.momento }}</span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}

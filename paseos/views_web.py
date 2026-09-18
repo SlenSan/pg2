@@ -12,10 +12,11 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
 from calificaciones import repository as calificaciones_repository
+from core.media import ErrorSubidaImagen, subir_imagen
 from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository
-from paseos.forms import InscribirMascotaForm
+from paseos.forms import InscribirMascotaForm, SubirFotoPaseoForm
 from usuarios import repository as usuarios_repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
 
@@ -148,6 +149,44 @@ def finalizar_paseo(request, id_paseo):
             tipo='fin_paseo',
             mensaje=f'{request.session.get("nombre")} finalizó el paseo de tu mascota.',
         )
+    return redirect('usuarios:bienvenida_paseador')
+
+
+@require_POST
+@requiere_paseador
+def subir_foto(request, id_paseo, momento):
+    """
+    Registro fotografico del paseo (RF15) - distinto de la evidencia de
+    incidentes: son las 3 fotos normales de inicio/mitad/fin, guardadas
+    en paseos.fotos. Un boton explicito por momento (ver
+    bienvenida_paseador.html) en vez de adivinar el momento
+    automaticamente, para que el paseador siempre sepa exactamente que
+    esta subiendo.
+    """
+    if momento not in repository.MOMENTOS_FOTO_VALIDOS:
+        messages.error(request, 'Momento de foto inválido.')
+        return redirect('usuarios:bienvenida_paseador')
+
+    form = SubirFotoPaseoForm(request.POST, request.FILES)
+    if not form.is_valid():
+        messages.error(request, 'No se pudo subir la foto: selecciona un archivo de imagen válido.')
+        return redirect('usuarios:bienvenida_paseador')
+
+    try:
+        url = subir_imagen(form.cleaned_data['foto'], carpeta='paseos')
+    except ErrorSubidaImagen as exc:
+        messages.error(request, f'No se pudo subir la foto: {exc}')
+        return redirect('usuarios:bienvenida_paseador')
+
+    id_paseador = ObjectId(request.session['id_usuario'])
+    paseo = repository.agregar_foto(id_paseo=id_paseo, id_paseador=id_paseador, momento=momento, url=url)
+    if not paseo:
+        messages.error(
+            request,
+            'No se pudo registrar la foto: el paseo ya no está activo o ya subiste una foto de ese momento.',
+        )
+    else:
+        messages.success(request, f'Foto de {momento} guardada correctamente.')
     return redirect('usuarios:bienvenida_paseador')
 
 

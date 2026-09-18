@@ -1,6 +1,13 @@
 from django import forms
 
 
+class SubirFotoPaseoForm(forms.Form):
+    foto = forms.ImageField(
+        label='Foto',
+        widget=forms.ClearableFileInput(attrs={'class': 'form-control'}),
+    )
+
+
 class InscribirMascotaForm(forms.Form):
     id_mascota = forms.ChoiceField(
         label='Elige tu mascota',

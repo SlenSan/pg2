@@ -14,6 +14,8 @@ from pymongo import ReturnDocument
 
 from core.mongo import get_db
 
+MOMENTOS_FOTO_VALIDOS = ('inicio', 'mitad', 'fin')
+
 
 def crear_disponibilidad(id_paseador):
     paseo = {
@@ -133,6 +135,34 @@ def incrementar_total_puntos(id_paseo):
         return_document=ReturnDocument.AFTER,
     )
     return resultado['total_puntos'] if resultado else None
+
+
+def agregar_foto(*, id_paseo, id_paseador, momento, url):
+    """
+    Agrega una foto (RF15) al arreglo `fotos` de un paseo propio y
+    "en_vivo". El filtro 'fotos.momento': {'$ne': momento} hace que sea
+    atomico y evite duplicar una foto del mismo momento (verificado
+    manualmente: en Mongo, $ne sobre un campo dentro de un array de
+    subdocumentos solo matchea si NINGUN elemento tiene ese valor).
+    Devuelve el documento actualizado, o None si no se cumplen las
+    condiciones (no existe, no es suyo, no esta "en_vivo", o ya tiene una
+    foto de ese momento).
+    """
+    try:
+        oid_paseo = ObjectId(id_paseo)
+    except (InvalidId, TypeError):
+        return None
+
+    return get_db().paseos.find_one_and_update(
+        {
+            '_id': oid_paseo,
+            'id_paseador': id_paseador,
+            'estado': 'en_vivo',
+            'fotos.momento': {'$ne': momento},
+        },
+        {'$push': {'fotos': {'url': url, 'momento': momento}}},
+        return_document=ReturnDocument.AFTER,
+    )
 
 
 def marcar_emergencia(id_paseo):

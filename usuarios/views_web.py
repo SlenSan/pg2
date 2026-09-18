@@ -117,11 +117,15 @@ def bienvenida_paseador(request):
             mascota = mascotas_repository.obtener_varias_por_id([paseo['id_mascota']]).get(paseo['id_mascota'])
         if paseo.get('id_dueno'):
             dueno = repository.obtener_por_id(paseo['id_dueno'])
+        fotos_existentes = {f['momento'] for f in paseo.get('fotos', [])}
         paseo_activo = {
             'id_paseo': str(paseo['_id']),
             'estado': paseo['estado'],
             'mascota_nombre': mascota['nombre'] if mascota else None,
             'dueno_nombre': dueno['nombre'] if dueno else None,
+            'fotos_pendientes': [
+                m for m in paseos_repository.MOMENTOS_FOTO_VALIDOS if m not in fotos_existentes
+            ],
         }
 
     incidente_form = None
