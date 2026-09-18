@@ -47,8 +47,20 @@ def seleccionar_rol(request):
 
 
 def registro(request):
+    """
+    BUG corregido: antes, si no llegaba un `rol` valido (por ejemplo,
+    entrando por /cuentas/registro/ sin pasar por la pantalla de
+    seleccion), se asumia 'dueno' en silencio - sin ningun indicio visual
+    de que el formulario habia cambiado de tipo. La cuenta quedaba creada
+    de verdad como rol="dueño" en Mongo, asi que el redirect posterior
+    (aca y en login) era tecnicamente correcto para esa cuenta - el
+    problema era que el rol nunca se habia elegido explicitamente. Ahora,
+    sin un rol valido, se manda a la pantalla de seleccion en vez de
+    adivinar.
+    """
     rol = request.POST.get('rol') or request.GET.get('rol')
-    rol = rol if rol in _ROLES_VALIDOS else 'dueno'
+    if rol not in _ROLES_VALIDOS:
+        return redirect('home')
     rol_mongo = _ROL_MONGO[rol]
     FormClass = RegistroPaseadorForm if rol == 'paseador' else RegistroDuenoForm
 

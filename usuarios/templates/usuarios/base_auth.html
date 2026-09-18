@@ -41,8 +41,15 @@ autenticado).
         >
           Iniciar sesión
         </a>
+        {% comment %}
+        Sin ?rol=, no a usuarios:registro directo: eso es justo lo que
+        causaba que alguien terminara registrado como "dueño" sin darse
+        cuenta (ver el fix en usuarios.views_web.registro). Si ya estamos
+        en el registro, este link mantiene el rol actual en vez de mandar
+        de nuevo a elegir.
+        {% endcomment %}
         <a
-          href="{% url 'usuarios:registro' %}"
+          href="{% if modo == 'registro' %}?rol={{ rol }}{% else %}{% url 'home' %}{% endif %}"
           class="auth-toggle-btn {% if modo == 'registro' %}active{% endif %}"
         >
           Crear cuenta
