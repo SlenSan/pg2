@@ -64,9 +64,7 @@ def _parsear_fecha(valor):
 def registrar_coordenada(request, id_paseo):
     """
     Recibe un punto GPS desde el navegador del propio paseador mientras
-    su paseo esta "en_vivo". Misma validacion que el endpoint de la API
-    (coordenadas.views_api.registrar_coordenada), pero autenticado por
-    sesion en vez de token Bearer.
+    su paseo esta "en_vivo" (autenticado por sesion).
     """
     paseo = paseos_repository.obtener_por_id(id_paseo)
     if not paseo or str(paseo.get('id_paseador')) != request.session.get('id_usuario') or paseo['estado'] != 'en_vivo':

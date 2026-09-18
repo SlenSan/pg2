@@ -30,8 +30,4 @@ urlpatterns = [
     path('incidentes/', include('incidentes.urls_web')),
     path('calificaciones/', include('calificaciones.urls_web')),
     path('api/', include('core.urls')),
-    path('api/', include('usuarios.urls_api')),
-    path('api/', include('paseos.urls_api')),
-    path('api/', include('coordenadas.urls_api')),
-    path('api/', include('incidentes.urls_api')),
 ]

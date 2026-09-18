@@ -105,9 +105,8 @@ def mis_paseos(request):
 @requiere_paseador
 def publicar_disponibilidad(request):
     """
-    Boton "Publicar disponibilidad" del dashboard del paseador. Reutiliza
-    la misma logica de negocio que ya usaba la API (paseos.repository):
-    no publica una segunda vez si ya tiene un paseo activo.
+    Boton "Publicar disponibilidad" del dashboard del paseador. No
+    publica una segunda vez si ya tiene un paseo activo.
     """
     id_paseador = ObjectId(request.session['id_usuario'])
     if not repository.obtener_activo_de_paseador(id_paseador):
@@ -118,7 +117,7 @@ def publicar_disponibilidad(request):
 @require_POST
 @requiere_paseador
 def iniciar_paseo(request, id_paseo):
-    """Version web (sesion) del mismo iniciar_paseo que ya existia en la API."""
+    """Pasa un paseo propio de 'disponible' a 'en_vivo' y notifica al dueño."""
     id_paseador = ObjectId(request.session['id_usuario'])
     paseo = repository.iniciar_paseo(id_paseo=id_paseo, id_paseador=id_paseador)
     if not paseo:
@@ -138,7 +137,7 @@ def iniciar_paseo(request, id_paseo):
 @require_POST
 @requiere_paseador
 def finalizar_paseo(request, id_paseo):
-    """Version web (sesion) del mismo finalizar_paseo que ya existia en la API."""
+    """Pasa un paseo propio de 'en_vivo' a 'historico' y notifica al dueño."""
     id_paseador = ObjectId(request.session['id_usuario'])
     paseo = repository.finalizar_paseo(id_paseo=id_paseo, id_paseador=id_paseador)
     if not paseo:

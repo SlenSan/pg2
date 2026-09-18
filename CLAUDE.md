@@ -9,10 +9,11 @@ te lo pida explícitamente — impleméntalas tal como están descritas aquí.
 > **Corrección de alcance (2026-09-16):** la versión original del documento de
 > grado planteaba una app Android nativa para el paseador. Esa decisión CAMBIÓ
 > y ya está corregida en el documento (arquitectura, diagramas, alcance): ya no
-> existe app nativa. Dueño y paseador usan la misma plataforma web. Si ves
-> referencias a "app Android" en comentarios de código o en secciones viejas de
-> este archivo que no se hayan actualizado todavía, son residuos de la versión
-> anterior — no las repliques ni las tomes como la decisión vigente.
+> existe app nativa. Dueño y paseador usan la misma plataforma web. La API REST
+> con tokens Bearer que existía para esa app (bajo `/api/paseador/...`) ya se
+> eliminó del código (2026-09-18) una vez confirmado que ninguna vista web la
+> usaba — si ves algo que la referencia, es un resto viejo, no la decisión
+> vigente.
 
 Modelo cliente-servidor con un backend único (Python + Django) que sirve una
 única plataforma web para los dos actores del sistema:
@@ -36,14 +37,6 @@ No propongas cambiar Django Templates por React/Vue, ni MongoDB por SQL, ni Goog
 Maps por Leaflet — esas decisiones ya están tomadas y justificadas en el documento
 de grado (por recomendación explícita del director, priorizando herramientas
 sencillas con bajo consumo de tiempo).
-
-**Nota de implementación pendiente:** el código todavía conserva de la
-arquitectura anterior una API REST con tokens Bearer bajo `/api/paseador/...`
-(apps `usuarios.views_api`, `usuarios.api_auth`, `usuarios.auth_token`, y los
-`views_api.py` de `paseos`/`coordenadas`/`incidentes`), pensada para la app
-Android que ya no existe. No se ha decidido todavía si se elimina, se
-reutiliza para otra cosa, o se deja en desuso — no asumas que sigue vigente
-sin confirmarlo primero.
 
 ## Actores del sistema
 
