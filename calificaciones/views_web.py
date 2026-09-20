@@ -25,6 +25,9 @@ def calificar_paseo(request, id_paseo):
         return redirect('paseos:mis_paseos')
 
     paseador = usuarios_repository.obtener_por_id(paseo['id_paseador'])
+    duracion_min = None
+    if paseo.get('hora_inicio') and paseo.get('hora_fin'):
+        duracion_min = int((paseo['hora_fin'] - paseo['hora_inicio']).total_seconds() // 60)
 
     if request.method == 'POST':
         form = CalificacionForm(request.POST)
@@ -48,12 +51,17 @@ def calificar_paseo(request, id_paseo):
                 tipo='calificacion',
                 mensaje=f'Recibiste una calificación de {puntuacion}/5.',
             )
-            messages.success(request, '¡Gracias por calificar!')
-            return redirect('paseos:mis_paseos')
+            # Pantalla de confirmacion en vez de redirect+flash: se renderiza
+            # directamente (no hay un segundo POST que evitar) y no hace
+            # falta una URL nueva. Un refresh del navegador reenviaria el
+            # POST, pero repository.crear() ya lo cubre con el
+            # DuplicateKeyError de arriba.
+            return render(request, 'calificaciones/calificacion_enviada.html')
     else:
         form = CalificacionForm()
 
     return render(request, 'calificaciones/calificar.html', {
         'form': form,
         'paseador': paseador,
+        'duracion_min': duracion_min,
     })

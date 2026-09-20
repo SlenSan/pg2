@@ -2,27 +2,107 @@
 
 {% block title %}Calificar paseo — Canigo{% endblock %}
 
+{% block extra_head %}
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+>
+{% endblock %}
+
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-12 col-md-6">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <h1 class="h4 mb-3">Califica a {{ paseador.nombre }}</h1>
-        <form method="post" novalidate>
-          {% csrf_token %}
-          {% for field in form %}
-          <div class="mb-3">
-            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-            {{ field }}
-            {% for error in field.errors %}
-            <div class="text-danger small mt-1">{{ error }}</div>
+
+    <div class="text-center mb-4">
+      {% if paseador.foto_perfil %}
+      <img
+        src="{{ paseador.foto_perfil }}"
+        alt="{{ paseador.nombre }}"
+        class="rounded-circle"
+        style="width: 80px; height: 80px; object-fit: cover;"
+      >
+      {% else %}
+      <span class="persona-avatar-vacio" style="width: 80px; height: 80px; font-size: 2rem;">
+        {{ paseador.nombre|default:"?"|slice:":1" }}
+      </span>
+      {% endif %}
+      <h1 class="h4 mt-3 mb-1">¿Cómo estuvo el paseo?</h1>
+      <p class="text-muted mb-0">
+        Con {{ paseador.nombre }}{% if duracion_min is not None %} · {{ duracion_min }} min{% endif %}
+      </p>
+    </div>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="card mb-3">
+        <div class="card-body text-center">
+          <p class="text-muted mb-3">Toca para calificar</p>
+          <div class="d-flex justify-content-center gap-2 mb-3" id="estrellas">
+            {% for n in "12345" %}
+            <button type="button" class="estrella-boton" data-valor="{{ n }}" aria-label="{{ n }} estrellas">
+              <i class="bi bi-star-fill"></i>
+            </button>
             {% endfor %}
           </div>
+          <p class="fw-bold mb-0" id="estrellas-texto">&nbsp;</p>
+          <input type="hidden" name="puntuacion" id="id_puntuacion" value="">
+          {% for error in form.puntuacion.errors %}
+          <div class="text-danger small mt-2">{{ error }}</div>
           {% endfor %}
-          <button type="submit" class="btn btn-primary w-100">Enviar calificación</button>
-        </form>
+        </div>
       </div>
-    </div>
+
+      <div class="card mb-3">
+        <div class="card-body">
+          <label class="form-label" for="{{ form.comentario.id_for_label }}">{{ form.comentario.label }}</label>
+          {{ form.comentario }}
+          {% for error in form.comentario.errors %}
+          <div class="text-danger small mt-1">{{ error }}</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if form.non_field_errors %}
+      <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <button type="submit" class="btn btn-primary w-100 mb-2" id="btnEnviarCalificacion" disabled>
+        Enviar calificación
+      </button>
+    </form>
+    <a href="{% url 'usuarios:bienvenida' %}" class="btn btn-link w-100">Calificar después</a>
+
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var textos = {
+    1: 'Muy malo',
+    2: 'Malo',
+    3: 'Regular',
+    4: 'Bueno',
+    5: '¡Excelente!',
+  };
+  var inputPuntuacion = document.getElementById('id_puntuacion');
+  var textoEl = document.getElementById('estrellas-texto');
+  var btnEnviar = document.getElementById('btnEnviarCalificacion');
+  var botones = document.querySelectorAll('.estrella-boton');
+
+  botones.forEach(function (boton) {
+    boton.addEventListener('click', function () {
+      var valor = parseInt(boton.dataset.valor, 10);
+      inputPuntuacion.value = valor;
+      textoEl.textContent = textos[valor];
+      btnEnviar.disabled = false;
+      botones.forEach(function (b) {
+        b.classList.toggle('activa', parseInt(b.dataset.valor, 10) <= valor);
+      });
+    });
+  });
+})();
+</script>
 {% endblock %}

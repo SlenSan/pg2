@@ -12,5 +12,9 @@ class CalificacionForm(forms.Form):
     comentario = forms.CharField(
         required=False,
         label='Comentario (opcional)',
-        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': '¿Qué destacarías del paseo?',
+        }),
     )
