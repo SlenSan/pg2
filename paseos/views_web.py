@@ -44,6 +44,17 @@ def detalle_paseador(request, id_paseo):
     paseador = usuarios_repository.obtener_por_id(paseo['id_paseador'])
     mis_mascotas = mascotas_repository.listar_por_dueno(request.session['id_usuario'])
 
+    calificaciones_con_comentario = [
+        c for c in calificaciones_repository.listar_por_paseador(paseo['id_paseador']) if c.get('comentario')
+    ][:5]
+    duenos_por_id = usuarios_repository.obtener_varios_por_id(
+        [c['id_dueno'] for c in calificaciones_con_comentario]
+    )
+    resenas = [
+        {'calificacion': c, 'dueno': duenos_por_id.get(c['id_dueno'])}
+        for c in calificaciones_con_comentario
+    ]
+
     if request.method == 'POST':
         form = InscribirMascotaForm(request.POST, mascotas=mis_mascotas)
         if form.is_valid():
@@ -73,6 +84,7 @@ def detalle_paseador(request, id_paseo):
         'paseo': paseo,
         'paseador': paseador,
         'form': form,
+        'resenas': resenas,
     })
 
 

@@ -16,6 +16,12 @@ def obtener_por_paseo(id_paseo):
     return get_db().calificaciones.find_one({'id_paseo': oid})
 
 
+def listar_por_paseador(id_paseador):
+    """Todas las calificaciones que ha recibido un paseador, mas recientes primero."""
+    oid = id_paseador if isinstance(id_paseador, ObjectId) else ObjectId(id_paseador)
+    return list(get_db().calificaciones.find({'id_paseador': oid}).sort('fecha', -1))
+
+
 def listar_por_paseos(ids_paseo):
     ids_validos = [i for i in ids_paseo if isinstance(i, ObjectId)]
     if not ids_validos:

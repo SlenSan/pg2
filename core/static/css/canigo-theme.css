@@ -568,6 +568,20 @@ a:hover {
   flex-shrink: 0;
 }
 
+/* Igual que mascota-avatar-vacio pero circular, para fotos de perfil de
+   personas (paseador). El tamaño se fija inline en cada uso porque varia
+   segun el contexto (tarjeta de listado vs. perfil completo). */
+.persona-avatar-vacio {
+  border-radius: 50%;
+  background-color: var(--color-secondary);
+  color: var(--color-secondary-foreground);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 .badge-en-paseo {
   background-color: var(--color-accent) !important;
   color: var(--color-accent-foreground);

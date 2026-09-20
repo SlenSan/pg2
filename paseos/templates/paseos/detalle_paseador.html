@@ -2,17 +2,38 @@
 
 {% block title %}{{ paseador.nombre }} — Canigo{% endblock %}
 
+{% block extra_head %}
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+>
+{% endblock %}
+
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-12 col-md-6">
-    <div class="card shadow-sm mb-4">
+    <div class="card mb-4">
       <div class="card-body">
-        <h1 class="h4">
-          {{ paseador.nombre }}
-          {% if paseador.verificado %}<span class="badge bg-success">Verificado</span>{% endif %}
-        </h1>
+        <div class="d-flex align-items-center gap-3 mb-3">
+          {% if paseador.foto_perfil %}
+          <img
+            src="{{ paseador.foto_perfil }}"
+            alt="{{ paseador.nombre }}"
+            class="rounded-circle"
+            style="width: 88px; height: 88px; object-fit: cover;"
+          >
+          {% else %}
+          <span class="persona-avatar-vacio" style="width: 88px; height: 88px; font-size: 2rem;">
+            {{ paseador.nombre|default:"?"|slice:":1" }}
+          </span>
+          {% endif %}
+          <div>
+            <h1 class="h4 mb-1">{{ paseador.nombre }}</h1>
+            {% if paseador.verificado %}<span class="badge bg-success">Verificado</span>{% endif %}
+          </div>
+        </div>
         <p class="mb-1">
-          <strong>Calificación:</strong>
+          <i class="bi bi-star-fill" style="color: var(--color-quick-yellow-fg);"></i>
           {% if paseador.calificacion_promedio %}{{ paseador.calificacion_promedio }} / 5{% else %}Sin calificaciones aún{% endif %}
         </p>
         {% if paseador.descripcion %}<p>{{ paseador.descripcion }}</p>{% endif %}
@@ -20,7 +41,27 @@
       </div>
     </div>
 
-    <div class="card shadow-sm">
+    {% if resenas %}
+    <div class="card mb-4">
+      <div class="card-body">
+        <h2 class="h5 mb-3">Reseñas recientes</h2>
+        {% for resena in resenas %}
+        <div class="mb-3 {% if not forloop.last %}pb-3 border-bottom{% endif %}">
+          <div class="d-flex justify-content-between align-items-center">
+            <strong>{{ resena.dueno.nombre|default:"Dueño" }}</strong>
+            <span>
+              <i class="bi bi-star-fill" style="color: var(--color-quick-yellow-fg);"></i>
+              {{ resena.calificacion.puntuacion }} / 5
+            </span>
+          </div>
+          <p class="text-muted mb-0">{{ resena.calificacion.comentario }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
       <div class="card-body">
         <h2 class="h5 mb-3">Inscribir mi mascota</h2>
         {% if form.fields.id_mascota.choices %}
