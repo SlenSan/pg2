@@ -227,9 +227,7 @@ def bienvenida_paseador(request):
 
     # --- estadisticas del paseador (solo datos que ya existen) ---
     usuario = repository.obtener_por_id(id_paseador)
-    paseos_completados = sum(
-        1 for p in paseos_repository.listar_por_paseador(id_paseador) if p['estado'] == 'historico'
-    )
+    paseos_completados = paseos_repository.contar_completados_por_paseador(id_paseador)
 
     return render(request, 'usuarios/bienvenida_paseador.html', {
         'nombre': request.session.get('nombre'),
@@ -276,7 +274,13 @@ def perfil_paseador(request):
             tenia_descripcion=tenia_descripcion,
         )
 
-    return render(request, 'usuarios/perfil_paseador.html', {'usuario': usuario, 'form': form})
+    paseos_completados = paseos_repository.contar_completados_por_paseador(ObjectId(request.session['id_usuario']))
+
+    return render(request, 'usuarios/perfil_paseador.html', {
+        'usuario': usuario,
+        'form': form,
+        'paseos_completados': paseos_completados,
+    })
 
 
 def _iniciar_sesion(request, usuario):

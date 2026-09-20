@@ -2,74 +2,134 @@
 
 {% block title %}Mi perfil — Canigo{% endblock %}
 
-{% block content %}
-<h1 class="h4 mb-4">Mi perfil</h1>
+{% block extra_head %}
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+>
+{% endblock %}
 
-<div class="card mb-3">
-  <div class="card-body d-flex align-items-center gap-3">
+{% block content %}
+<form method="post" enctype="multipart/form-data" novalidate>
+  {% csrf_token %}
+
+  <div class="perfil-hero text-center mb-3">
     {% if usuario.foto_perfil %}
     <img
       src="{{ usuario.foto_perfil }}"
       alt="Foto de perfil"
       class="rounded-circle"
-      style="width: 72px; height: 72px; object-fit: cover;"
+      style="width: 96px; height: 96px; object-fit: cover;"
     >
+    {% else %}
+    <span class="persona-avatar-vacio" style="width: 96px; height: 96px; font-size: 2.5rem;">
+      {{ usuario.nombre|default:"?"|slice:":1" }}
+    </span>
     {% endif %}
-    <div>
-      <p class="mb-2"><strong>Nombre:</strong> {{ usuario.nombre }}</p>
-      <p class="mb-2"><strong>Correo:</strong> {{ usuario.correo }}</p>
-      <p class="mb-2">
-        <strong>Verificado:</strong>
-        {% if usuario.verificado %}
-        <span class="badge bg-success">Sí</span>
-        {% else %}
-        <span class="badge bg-secondary">No</span>
-        {% endif %}
-      </p>
-      <p class="mb-0">
-        <strong>Calificación promedio:</strong>
-        {% if usuario.calificacion_promedio %}{{ usuario.calificacion_promedio }} / 5{% else %}Sin calificaciones aún{% endif %}
-      </p>
-    </div>
-  </div>
-</div>
-
-<div class="card">
-  <div class="card-body">
-    <h2 class="h5 mb-3">Editar perfil</h2>
-    <form method="post" enctype="multipart/form-data" novalidate>
-      {% csrf_token %}
-
-      <div class="mb-3">
-        <label class="form-label" for="{{ form.telefono.id_for_label }}">{{ form.telefono.label }}</label>
-        {{ form.telefono }}
-        {% for error in form.telefono.errors %}
+    <div class="mt-2">
+      <button type="button" class="perfil-hero-link" id="btnCambiarFoto">Cambiar foto</button>
+      <div id="fotoEditor" class="d-none mt-2 text-start">
+        {{ form.foto_perfil }}
+        {% for error in form.foto_perfil.errors %}
         <div class="text-danger small mt-1">{{ error }}</div>
         {% endfor %}
       </div>
+    </div>
 
-      <div class="mb-3">
+    <h1 class="h4 mt-3 mb-1 text-white">{{ usuario.nombre }}</h1>
+    {% if usuario.verificado %}<span class="badge bg-success mb-2">Verificado</span>{% endif %}
+    <div class="text-white">
+      <i class="bi bi-star-fill"></i>
+      {% if usuario.calificacion_promedio %}{{ usuario.calificacion_promedio }} / 5{% else %}Sin calificaciones aún{% endif %}
+    </div>
+  </div>
+
+  {% if usuario.verificado %}
+  <div class="card mb-3">
+    <div class="card-body d-flex align-items-center gap-3">
+      <span class="accion-rapida-icono accion-rapida-icono-verde" style="margin-bottom: 0;">
+        <i class="bi bi-patch-check-fill"></i>
+      </span>
+      <div>
+        <div class="fw-bold">Cuenta verificada</div>
+        <div class="text-muted small">Los dueños ven tu perfil con la insignia de "Verificado".</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="row row-cols-2 g-3 mb-3">
+    <div class="col">
+      <div class="card h-100 text-center">
+        <div class="card-body">
+          <div class="stat-valor">{{ paseos_completados }}</div>
+          <div class="stat-etiqueta">Paseos completados</div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card h-100 text-center">
+        <div class="card-body">
+          <div class="stat-valor">{% if usuario.calificacion_promedio %}{{ usuario.calificacion_promedio }}{% else %}—{% endif %}</div>
+          <div class="stat-etiqueta">Calificación promedio</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <h2 class="h5 mb-0">Sobre mí</h2>
+        <button type="button" class="btn btn-link p-0" id="btnEditarDescripcion">Editar</button>
+      </div>
+      <p id="descripcionTexto" class="text-muted mb-0">
+        {{ usuario.descripcion|default:"Aún no has agregado una descripción." }}
+      </p>
+      <div id="descripcionEditor" class="d-none">
         <label class="form-label" for="{{ form.descripcion.id_for_label }}">{{ form.descripcion.label }}</label>
         {{ form.descripcion }}
         {% for error in form.descripcion.errors %}
         <div class="text-danger small mt-1">{{ error }}</div>
         {% endfor %}
       </div>
-
-      <div class="mb-3">
-        <label class="form-label" for="{{ form.foto_perfil.id_for_label }}">{{ form.foto_perfil.label }}</label>
-        {{ form.foto_perfil }}
-        {% for error in form.foto_perfil.errors %}
-        <div class="text-danger small mt-1">{{ error }}</div>
-        {% endfor %}
-      </div>
-
-      {% if form.non_field_errors %}
-      <div class="alert alert-danger">{{ form.non_field_errors }}</div>
-      {% endif %}
-
-      <button type="submit" class="btn btn-primary w-100">Guardar cambios</button>
-    </form>
+    </div>
   </div>
-</div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <h2 class="h5 mb-2">Teléfono</h2>
+      <label class="form-label" for="{{ form.telefono.id_for_label }}">{{ form.telefono.label }}</label>
+      {{ form.telefono }}
+      {% for error in form.telefono.errors %}
+      <div class="text-danger small mt-1">{{ error }}</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <button type="submit" class="btn btn-primary w-100">Guardar cambios</button>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function habilitarEdicion(botonId, textoId, editorId) {
+    var boton = document.getElementById(botonId);
+    var texto = document.getElementById(textoId);
+    var editor = document.getElementById(editorId);
+    if (!boton || !editor) return;
+    boton.addEventListener('click', function () {
+      editor.classList.remove('d-none');
+      if (texto) texto.classList.add('d-none');
+      boton.classList.add('d-none');
+    });
+  }
+
+  habilitarEdicion('btnEditarDescripcion', 'descripcionTexto', 'descripcionEditor');
+  habilitarEdicion('btnCambiarFoto', null, 'fotoEditor');
+</script>
 {% endblock %}

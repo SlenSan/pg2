@@ -26,6 +26,7 @@
   --color-muted: #EFE7DC;
   --color-muted-foreground: #8C7060;
   --color-accent: #5A9E6F;
+  --color-accent-hover: #427A56;
   --color-accent-foreground: #FFFFFF;
   --color-border: #E3D4C5;
   --color-ring: #D9703A;
@@ -742,4 +743,35 @@ button.disponibilidad-tarjeta:hover {
 
 .disponibilidad-switch.encendido .disponibilidad-switch-circulo {
   left: 25px;
+}
+
+/* Encabezado "hero" del perfil del paseador */
+
+.perfil-hero {
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-hover) 100%);
+  border-radius: 24px;
+  padding: 2rem 1.5rem;
+  color: var(--color-accent-foreground);
+}
+
+.perfil-hero-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: rgba(255, 255, 255, .9);
+  text-decoration: underline;
+  font-size: .85rem;
+}
+
+.perfil-hero-link:hover {
+  color: #FFFFFF;
+}
+
+/* El badge "Verificado" normalmente usa --color-accent (verde) de fondo,
+   que se pierde contra el degradado verde del hero - aqui se cambia por
+   un overlay blanco traslucido, igual al que ya usa .banner-paseo-icono
+   sobre fondos de color solido. */
+.perfil-hero .badge.bg-success {
+  background-color: rgba(255, 255, 255, .25) !important;
+  color: #FFFFFF;
 }

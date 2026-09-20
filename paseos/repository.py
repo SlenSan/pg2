@@ -182,6 +182,11 @@ def listar_por_paseador(id_paseador):
     return list(get_db().paseos.find({'id_paseador': id_paseador}).sort('fecha', -1))
 
 
+def contar_completados_por_paseador(id_paseador):
+    """Cuenta de paseos con estado='historico' de este paseador (estadistica de perfil/dashboard)."""
+    return get_db().paseos.count_documents({'id_paseador': id_paseador, 'estado': 'historico'})
+
+
 def a_json(paseo):
     data = dict(paseo)
     data['_id'] = str(data['_id'])
