@@ -652,6 +652,15 @@ a:hover {
   color: var(--color-quick-yellow-fg);
 }
 
+/* Cuarto color de icono, para el tipo "emergencia" de notificaciones -
+   los otros tres (naranja/verde/ambar/amarillo) ya estaban tomados por
+   los otros tipos. Mismo criterio de rgba(.15) sobre --color-danger que
+   ya usan los demas. */
+.accion-rapida-icono-rojo {
+  background-color: rgba(196, 80, 46, .15);
+  color: var(--color-danger);
+}
+
 .accion-rapida-titulo {
   font-weight: 700;
   margin-bottom: .15rem;
@@ -795,4 +804,37 @@ button.disponibilidad-tarjeta:hover {
 .estrella-boton.activa {
   background-color: var(--color-quick-yellow-bg);
   color: var(--color-quick-yellow-fg);
+}
+
+/* Tarjetas de notificaciones/lista.html */
+
+.notificacion-tarjeta {
+  display: block;
+  background-color: var(--color-muted);
+  border: 1px solid transparent;
+  border-radius: 16px;
+  padding: 1rem 1.25rem;
+  text-decoration: none;
+  color: var(--color-foreground);
+  transition: box-shadow .15s ease;
+}
+
+.notificacion-tarjeta:hover {
+  color: var(--color-foreground);
+  box-shadow: 0 4px 12px rgba(44, 26, 14, .08);
+}
+
+.notificacion-tarjeta.no-leida {
+  background-color: var(--color-card);
+  border-color: var(--color-primary);
+}
+
+.notificacion-punto {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--color-primary);
+  margin-right: .4rem;
+  flex-shrink: 0;
 }

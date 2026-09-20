@@ -1,21 +1,49 @@
 {% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}Notificaciones — Canigo{% endblock %}
 
-{% block content %}
-<h1 class="h4 mb-4">Notificaciones</h1>
+{% block extra_head %}
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+>
+{% endblock %}
 
-{% if notificaciones %}
-<div class="list-group">
-  {% for n in notificaciones %}
-  <div class="list-group-item">
-    <div class="d-flex justify-content-between align-items-start">
-      <span>{{ n.mensaje }}</span>
-      <small class="text-muted text-nowrap ms-3">{{ n.fecha }}</small>
-    </div>
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h4 mb-1">Notificaciones</h1>
+    <p class="text-muted mb-0">
+      {% if no_leidas %}{{ no_leidas }} sin leer{% else %}Estás al día{% endif %}
+    </p>
   </div>
-  {% endfor %}
+  {% if no_leidas %}
+  <a href="{% url 'notificaciones:lista' %}" class="auth-link small">Marcar todas leídas</a>
+  {% endif %}
 </div>
+
+{% if items %}
+{% for item in items %}
+<a
+  href="{{ item.url_destino }}"
+  class="notificacion-tarjeta d-flex gap-3 mb-2 {% if not item.leida %}no-leida{% endif %}"
+>
+  <span class="accion-rapida-icono accion-rapida-icono-{{ item.color }} mb-0 flex-shrink-0">
+    <i class="bi {{ item.icono }}"></i>
+  </span>
+  <div class="flex-grow-1">
+    <div class="d-flex justify-content-between align-items-start gap-2">
+      <span class="fw-bold d-flex align-items-center">
+        {% if not item.leida %}<span class="notificacion-punto"></span>{% endif %}
+        {{ item.titulo }}
+      </span>
+      <small class="text-muted text-nowrap">{{ item.notificacion.fecha|naturaltime }}</small>
+    </div>
+    <div class="text-muted small mt-1">{{ item.notificacion.mensaje }}</div>
+  </div>
+</a>
+{% endfor %}
 {% else %}
 <p class="text-muted">No tienes notificaciones todavía.</p>
 {% endif %}
