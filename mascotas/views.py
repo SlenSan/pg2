@@ -3,13 +3,26 @@ from django.shortcuts import redirect, render
 from core.media import ErrorSubidaImagen, subir_imagen
 from mascotas import repository
 from mascotas.forms import MascotaForm
+from paseos import repository as paseos_repository
 from usuarios.decorators import requiere_dueno
 
 
 @requiere_dueno
 def lista_mascotas(request):
-    mascotas = repository.listar_por_dueno(request.session['id_usuario'])
-    return render(request, 'mascotas/lista.html', {'mascotas': mascotas})
+    id_dueno = request.session['id_usuario']
+    mascotas = repository.listar_por_dueno(id_dueno)
+
+    # mismo calculo que usuarios.views_web.bienvenida, para reutilizar el
+    # badge "en paseo"/"en casa" del dashboard tambien aqui.
+    paseos_dueno = paseos_repository.listar_por_dueno(id_dueno)
+    ids_mascotas_en_paseo = {
+        p['id_mascota'] for p in paseos_dueno if p['estado'] == 'en_vivo' and p.get('id_mascota')
+    }
+    items = [
+        {'mascota': m, 'en_paseo': m['_id'] in ids_mascotas_en_paseo}
+        for m in mascotas
+    ]
+    return render(request, 'mascotas/lista.html', {'items': items})
 
 
 @requiere_dueno

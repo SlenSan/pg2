@@ -5,7 +5,7 @@
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-12 col-md-6 col-lg-5">
-    <div class="card shadow-sm">
+    <div class="card">
       <div class="card-body p-4">
         <h1 class="h4 mb-4">Registrar mascota</h1>
         <form method="post" enctype="multipart/form-data" novalidate>
@@ -14,6 +14,9 @@
             <div class="mb-3">
               <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
               {{ field }}
+              {% if field.name == 'foto' %}
+              <img id="vista-previa-foto" src="" alt="Vista previa" class="mt-2 rounded d-none" style="max-height: 160px; object-fit: cover;">
+              {% endif %}
               {% for error in field.errors %}
                 <div class="text-danger small mt-1">{{ error }}</div>
               {% endfor %}
@@ -31,4 +34,22 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const inputFoto = document.getElementById('id_foto');
+  const vistaPrevia = document.getElementById('vista-previa-foto');
+  if (inputFoto && vistaPrevia) {
+    inputFoto.addEventListener('change', function () {
+      const archivo = inputFoto.files[0];
+      if (archivo) {
+        vistaPrevia.src = URL.createObjectURL(archivo);
+        vistaPrevia.classList.remove('d-none');
+      } else {
+        vistaPrevia.classList.add('d-none');
+      }
+    });
+  }
+</script>
 {% endblock %}

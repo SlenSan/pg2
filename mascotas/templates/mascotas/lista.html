@@ -5,24 +5,33 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h4 mb-0">Mis mascotas</h1>
-  <a href="{% url 'mascotas:registro' %}" class="btn btn-primary">+ Registrar mascota</a>
+  {% if items %}
+  <a href="{% url 'mascotas:registro' %}" class="btn btn-primary">+ Agregar mascota</a>
+  {% endif %}
 </div>
 
-{% if mascotas %}
-<div class="row row-cols-1 row-cols-md-2 g-3">
-  {% for mascota in mascotas %}
+{% if items %}
+<div class="row row-cols-1 row-cols-md-3 g-3">
+  {% for item in items %}
   <div class="col">
     <div class="card h-100">
-      {% if mascota.foto %}
-      <img src="{{ mascota.foto }}" class="card-img-top" alt="Foto de {{ mascota.nombre }}" style="max-height: 220px; object-fit: cover;">
-      {% endif %}
       <div class="card-body">
-        <h2 class="h5 card-title">{{ mascota.nombre }}</h2>
-        <p class="card-text mb-1"><strong>Raza:</strong> {{ mascota.raza }}</p>
-        <p class="card-text mb-1"><strong>Edad:</strong> {{ mascota.edad }} años</p>
-        <p class="card-text mb-1"><strong>Peso:</strong> {{ mascota.peso }} kg</p>
-        {% if mascota.observaciones %}
-        <p class="card-text text-muted"><small>{{ mascota.observaciones }}</small></p>
+        <div class="d-flex align-items-center gap-3 mb-2">
+          {% if item.mascota.foto %}
+          <img src="{{ item.mascota.foto }}" alt="{{ item.mascota.nombre }}" class="mascota-avatar">
+          {% else %}
+          <span class="mascota-avatar-vacio">{{ item.mascota.nombre|default:"?"|slice:":1" }}</span>
+          {% endif %}
+          <div class="flex-grow-1">
+            <div class="fw-bold">{{ item.mascota.nombre }}</div>
+            <div class="text-muted small">{{ item.mascota.raza }} · {{ item.mascota.edad }} años</div>
+          </div>
+          <span class="badge {% if item.en_paseo %}badge-en-paseo{% else %}badge-en-casa{% endif %}">
+            {% if item.en_paseo %}en paseo{% else %}en casa{% endif %}
+          </span>
+        </div>
+        {% if item.mascota.observaciones %}
+        <p class="card-text text-muted small mb-0">{{ item.mascota.observaciones }}</p>
         {% endif %}
       </div>
     </div>
@@ -30,6 +39,9 @@
   {% endfor %}
 </div>
 {% else %}
-<p class="text-muted">Todavía no has registrado ninguna mascota.</p>
+<div class="text-center py-5">
+  <p class="text-muted mb-3">Todavía no has registrado ninguna mascota.</p>
+  <a href="{% url 'mascotas:registro' %}" class="btn btn-primary">Registrar mi primera mascota</a>
+</div>
 {% endif %}
 {% endblock %}
