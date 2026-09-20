@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Historial de paseos — Canigo{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-4">Historial de paseos</h1>
+
+{% if items %}
+<div class="row row-cols-1 row-cols-md-3 g-3">
+  {% for item in items %}
+  <div class="col">
+    <div class="card h-100">
+      <div class="card-body">
+        <a href="{% url 'coordenadas:mapa_paseo' item.id_paseo %}" class="text-decoration-none text-reset d-block mb-2">
+          <div class="d-flex align-items-center gap-3">
+            {% if item.mascota.foto %}
+            <img src="{{ item.mascota.foto }}" alt="{{ item.mascota.nombre }}" class="mascota-avatar">
+            {% else %}
+            <span class="mascota-avatar-vacio">{{ item.mascota.nombre|default:"?"|slice:":1" }}</span>
+            {% endif %}
+            <div>
+              <div class="fw-bold">{{ item.mascota.nombre|default:"—" }}</div>
+              <div class="text-muted small">con {{ item.paseador.nombre|default:"—" }}</div>
+            </div>
+          </div>
+          <div class="text-muted small mt-2">
+            {{ item.paseo.hora_inicio|date:"j \d\e F \d\e Y" }}
+            {% if item.duracion_min is not None %} · {{ item.duracion_min }} min{% endif %}
+          </div>
+        </a>
+        <div class="d-flex flex-wrap gap-2">
+          {% if item.puntuacion %}
+          <span class="badge bg-success">{{ item.puntuacion }} / 5</span>
+          {% else %}
+          <a href="{% url 'calificaciones:calificar_paseo' item.id_paseo %}" class="badge bg-secondary text-decoration-none">
+            Pendiente de calificar
+          </a>
+          {% endif %}
+          {% if item.paseo.emergencia %}
+          <span class="badge bg-danger">Incidente reportado</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+  <p class="text-muted mb-3">Todavía no has completado ningún paseo.</p>
+  <a href="{% url 'paseos:lista_disponibles' %}" class="btn btn-primary">Solicitar tu primer paseo</a>
+</div>
+{% endif %}
+{% endblock %}

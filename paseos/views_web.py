@@ -101,6 +101,44 @@ def mis_paseos(request):
     return render(request, 'paseos/mis_paseos.html', {'items': items})
 
 
+@requiere_dueno
+def historial(request):
+    """
+    Historial de paseos COMPLETADOS (solo estado='historico'), con el
+    patron de tarjetas del dashboard. Distinto de mis_paseos (que
+    muestra cualquier estado y sirve para rastrear un paseo agendado o
+    en curso - se deja intacta esa vista, esta es nueva).
+    """
+    paseos = [p for p in repository.listar_por_dueno(request.session['id_usuario']) if p['estado'] == 'historico']
+    paseadores_por_id = usuarios_repository.obtener_varios_por_id(
+        [p['id_paseador'] for p in paseos if p.get('id_paseador')]
+    )
+    mascotas_por_id = mascotas_repository.obtener_varias_por_id(
+        [p['id_mascota'] for p in paseos if p.get('id_mascota')]
+    )
+    calificaciones_por_paseo = {
+        c['id_paseo']: c
+        for c in calificaciones_repository.listar_por_paseos([p['_id'] for p in paseos])
+    }
+
+    items = []
+    for p in paseos:
+        duracion_min = None
+        if p.get('hora_inicio') and p.get('hora_fin'):
+            duracion_min = int((p['hora_fin'] - p['hora_inicio']).total_seconds() // 60)
+        calificacion = calificaciones_por_paseo.get(p['_id'])
+        items.append({
+            'id_paseo': str(p['_id']),
+            'paseo': p,
+            'paseador': paseadores_por_id.get(p.get('id_paseador')),
+            'mascota': mascotas_por_id.get(p.get('id_mascota')),
+            'duracion_min': duracion_min,
+            'puntuacion': calificacion['puntuacion'] if calificacion else None,
+        })
+
+    return render(request, 'paseos/historial.html', {'items': items})
+
+
 @require_POST
 @requiere_paseador
 def publicar_disponibilidad(request):
