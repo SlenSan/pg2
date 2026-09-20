@@ -50,7 +50,24 @@
 
 {% else %}
 
-{% if paseo_activo %}
+{% if paseo_activo and not paseo_activo.mascota_nombre %}
+<!-- Disponible y todavia sin mascota inscrita: se puede apagar desde aqui. -->
+<form method="post" action="{% url 'paseos:cancelar_disponibilidad' paseo_activo.id_paseo %}" class="mb-4">
+  {% csrf_token %}
+  <button type="submit" class="disponibilidad-tarjeta disponible">
+    <span>
+      <span class="d-block fw-bold">Estás disponible</span>
+      <span class="disponibilidad-desc">Los dueños pueden enviarte solicitudes</span>
+    </span>
+    <span class="disponibilidad-switch encendido" aria-hidden="true">
+      <span class="disponibilidad-switch-circulo"></span>
+    </span>
+  </button>
+</form>
+{% elif paseo_activo %}
+<!-- Ya tiene una mascota inscrita (solicitud pendiente): no se ofrece la
+     opcion de apagar aqui, para no dejar despublicar algo que un dueño ya
+     tomo (ese caso lo maneja iniciar_paseo/el aviso de abajo). -->
 <div class="disponibilidad-tarjeta disponible mb-4">
   <span>
     <span class="d-block fw-bold">Estás disponible</span>
@@ -109,7 +126,12 @@
     <button type="submit" class="btn btn-light w-100 fw-bold">Iniciar paseo</button>
   </form>
 </div>
-{% elif not paseo_activo %}
+{% elif paseo_activo %}
+<form method="post" action="{% url 'paseos:cancelar_disponibilidad' paseo_activo.id_paseo %}">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-outline-secondary w-100">Despublicar disponibilidad</button>
+</form>
+{% else %}
 <form method="post" action="{% url 'paseos:publicar_disponibilidad' %}">
   {% csrf_token %}
   <button type="submit" class="btn btn-primary w-100">Publicar disponibilidad</button>

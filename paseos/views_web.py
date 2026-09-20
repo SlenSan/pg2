@@ -166,6 +166,26 @@ def publicar_disponibilidad(request):
 
 @require_POST
 @requiere_paseador
+def cancelar_disponibilidad(request, id_paseo):
+    """
+    Boton "Despublicar disponibilidad" / apagar el switch del dashboard.
+    Solo funciona mientras ningun dueño haya inscrito una mascota todavia
+    - la interfaz ya no ofrece esta opcion una vez hay una solicitud
+    pendiente, pero igual se valida aca por si un dueño alcanzo a
+    inscribir justo antes de que este POST llegara (condicion de carrera).
+    """
+    id_paseador = ObjectId(request.session['id_usuario'])
+    paseo = repository.cancelar_disponibilidad(id_paseo=id_paseo, id_paseador=id_paseador)
+    if not paseo:
+        messages.error(
+            request,
+            'No se pudo despublicar: un dueño ya inscribió una mascota en este paseo.',
+        )
+    return redirect('usuarios:bienvenida_paseador')
+
+
+@require_POST
+@requiere_paseador
 def iniciar_paseo(request, id_paseo):
     """Pasa un paseo propio de 'disponible' a 'en_vivo' y notifica al dueño."""
     id_paseador = ObjectId(request.session['id_usuario'])

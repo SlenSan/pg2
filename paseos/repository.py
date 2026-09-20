@@ -35,6 +35,29 @@ def crear_disponibilidad(id_paseador):
     return paseo
 
 
+def cancelar_disponibilidad(*, id_paseo, id_paseador):
+    """
+    Simetrica a crear_disponibilidad(): borra el documento 'disponible'
+    que el propio paseador publico, siempre que ningun dueño lo haya
+    inscrito todavia (id_mascota sigue en None). Atomico via
+    find_one_and_delete: si un dueño lo inscribio justo antes de que este
+    filtro corriera, el filtro no matchea y no se borra nada. Devuelve el
+    documento borrado, o None si no se cumplen las condiciones (no existe,
+    no es suyo, ya no esta 'disponible', o ya tiene mascota asignada).
+    """
+    try:
+        oid_paseo = ObjectId(id_paseo)
+    except (InvalidId, TypeError):
+        return None
+
+    return get_db().paseos.find_one_and_delete({
+        '_id': oid_paseo,
+        'id_paseador': id_paseador,
+        'estado': 'disponible',
+        'id_mascota': None,
+    })
+
+
 def obtener_activo_de_paseador(id_paseador):
     """Paseo en 'disponible' o 'en_vivo' que ya tenga ese paseador, si existe."""
     return get_db().paseos.find_one({
