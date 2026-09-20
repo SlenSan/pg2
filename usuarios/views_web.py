@@ -225,10 +225,18 @@ def bienvenida_paseador(request):
     if paseo_activo and paseo_activo['estado'] == 'en_vivo':
         incidente_form = ReportarIncidenteForm()
 
+    # --- estadisticas del paseador (solo datos que ya existen) ---
+    usuario = repository.obtener_por_id(id_paseador)
+    paseos_completados = sum(
+        1 for p in paseos_repository.listar_por_paseador(id_paseador) if p['estado'] == 'historico'
+    )
+
     return render(request, 'usuarios/bienvenida_paseador.html', {
         'nombre': request.session.get('nombre'),
         'paseo_activo': paseo_activo,
         'incidente_form': incidente_form,
+        'paseos_completados': paseos_completados,
+        'calificacion_promedio': usuario.get('calificacion_promedio'),
     })
 
 

@@ -674,3 +674,72 @@ a:hover {
   font-size: .85rem;
   color: var(--color-muted-foreground);
 }
+
+/* Toggle de disponibilidad (dashboard del paseador) */
+
+.disponibilidad-tarjeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  font-family: inherit;
+  text-align: left;
+}
+
+button.disponibilidad-tarjeta {
+  cursor: pointer;
+  transition: filter .15s ease;
+}
+
+button.disponibilidad-tarjeta:hover {
+  filter: brightness(.97);
+}
+
+.disponibilidad-tarjeta.disponible {
+  background-color: var(--color-accent);
+  color: var(--color-accent-foreground);
+}
+
+.disponibilidad-tarjeta.no-disponible {
+  background-color: var(--color-muted);
+  color: var(--color-muted-foreground);
+}
+
+.disponibilidad-desc {
+  display: block;
+  font-size: .85rem;
+  opacity: .85;
+}
+
+.disponibilidad-switch {
+  position: relative;
+  width: 52px;
+  height: 30px;
+  border-radius: 999px;
+  background-color: rgba(44, 26, 14, .15);
+  flex-shrink: 0;
+}
+
+.disponibilidad-tarjeta.disponible .disponibilidad-switch {
+  background-color: rgba(255, 255, 255, .35);
+}
+
+.disponibilidad-switch-circulo {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+  transition: left .15s ease;
+}
+
+.disponibilidad-switch.encendido .disponibilidad-switch-circulo {
+  left: 25px;
+}

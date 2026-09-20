@@ -2,70 +2,121 @@
 
 {% block title %}Inicio — Canigo{% endblock %}
 
+{% block extra_head %}
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+>
+{% endblock %}
+
 {% block content %}
 <h1 class="h3 mb-4">Hola, {{ nombre }}</h1>
 
-<div class="card">
+{% if paseo_activo.estado == 'en_vivo' %}
+<div class="card mb-4">
   <div class="card-body">
-    {% if paseo_activo %}
-      {% if paseo_activo.estado == 'en_vivo' %}
-        <span class="badge bg-success mb-2">Paseo en curso</span>
-        <p class="mb-3">
-          Estás paseando a <strong>{{ paseo_activo.mascota_nombre|default:"tu mascota asignada" }}</strong>
-          {% if paseo_activo.dueno_nombre %}(de {{ paseo_activo.dueno_nombre }}){% endif %}.
-        </p>
-        <form method="post" action="{% url 'paseos:finalizar_paseo' paseo_activo.id_paseo %}">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-primary w-100">Finalizar paseo</button>
-        </form>
-        <p class="text-muted small mt-2 mb-3" id="estado-gps">Compartiendo tu ubicación...</p>
+    <span class="badge bg-success mb-2">Paseo en curso</span>
+    <p class="mb-3">
+      Estás paseando a <strong>{{ paseo_activo.mascota_nombre|default:"tu mascota asignada" }}</strong>
+      {% if paseo_activo.dueno_nombre %}(de {{ paseo_activo.dueno_nombre }}){% endif %}.
+    </p>
+    <form method="post" action="{% url 'paseos:finalizar_paseo' paseo_activo.id_paseo %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary w-100">Finalizar paseo</button>
+    </form>
+    <p class="text-muted small mt-2 mb-3" id="estado-gps">Compartiendo tu ubicación...</p>
 
-        {% if paseo_activo.fotos_pendientes %}
-        <div class="d-flex flex-wrap gap-2 mb-3">
-          {% for momento in paseo_activo.fotos_pendientes %}
-          <button
-            type="button"
-            class="btn btn-outline-primary btn-sm flex-fill"
-            data-bs-toggle="modal"
-            data-bs-target="#modalFoto"
-            data-momento="{{ momento }}"
-          >
-            Foto de {{ momento }}
-          </button>
-          {% endfor %}
-        </div>
-        {% endif %}
-
-        <button type="button" class="btn btn-emergencia w-100" data-bs-toggle="modal" data-bs-target="#modalEmergencia">
-          Reportar emergencia
-        </button>
-      {% elif paseo_activo.mascota_nombre %}
-        <span class="badge bg-secondary mb-2">Disponible</span>
-        <p class="mb-3">
-          <strong>{{ paseo_activo.mascota_nombre }}</strong>
-          {% if paseo_activo.dueno_nombre %}(de {{ paseo_activo.dueno_nombre }}){% endif %}
-          te está esperando.
-        </p>
-        <form method="post" action="{% url 'paseos:iniciar_paseo' paseo_activo.id_paseo %}">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-primary w-100">Iniciar paseo</button>
-        </form>
-      {% else %}
-        <span class="badge bg-secondary mb-2">Disponible</span>
-        <p class="mb-0">
-          Publicaste tu disponibilidad. En cuanto un dueño inscriba a su
-          mascota vas a poder iniciar el paseo.
-        </p>
-      {% endif %}
-    {% else %}
-      <p class="text-muted mb-3">Todavía no has publicado tu disponibilidad.</p>
-      <form method="post" action="{% url 'paseos:publicar_disponibilidad' %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-primary w-100">Publicar disponibilidad</button>
-      </form>
+    {% if paseo_activo.fotos_pendientes %}
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      {% for momento in paseo_activo.fotos_pendientes %}
+      <button
+        type="button"
+        class="btn btn-outline-primary btn-sm flex-fill"
+        data-bs-toggle="modal"
+        data-bs-target="#modalFoto"
+        data-momento="{{ momento }}"
+      >
+        Foto de {{ momento }}
+      </button>
+      {% endfor %}
+    </div>
     {% endif %}
+
+    <button type="button" class="btn btn-emergencia w-100" data-bs-toggle="modal" data-bs-target="#modalEmergencia">
+      Reportar emergencia
+    </button>
   </div>
 </div>
+
+{% else %}
+
+{% if paseo_activo %}
+<div class="disponibilidad-tarjeta disponible mb-4">
+  <span>
+    <span class="d-block fw-bold">Estás disponible</span>
+    <span class="disponibilidad-desc">Los dueños pueden enviarte solicitudes</span>
+  </span>
+  <span class="disponibilidad-switch encendido" aria-hidden="true">
+    <span class="disponibilidad-switch-circulo"></span>
+  </span>
+</div>
+{% else %}
+<form method="post" action="{% url 'paseos:publicar_disponibilidad' %}" class="mb-4">
+  {% csrf_token %}
+  <button type="submit" class="disponibilidad-tarjeta no-disponible">
+    <span>
+      <span class="d-block fw-bold">No disponible</span>
+      <span class="disponibilidad-desc">No recibirás solicitudes nuevas</span>
+    </span>
+    <span class="disponibilidad-switch" aria-hidden="true">
+      <span class="disponibilidad-switch-circulo"></span>
+    </span>
+  </button>
+</form>
+{% endif %}
+
+<div class="row row-cols-2 g-3 mb-4">
+  <div class="col">
+    <div class="card h-100 text-center">
+      <div class="card-body">
+        <div class="stat-valor">{{ paseos_completados }}</div>
+        <div class="stat-etiqueta">Paseos completados</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card h-100 text-center">
+      <div class="card-body">
+        <div class="stat-valor">{% if calificacion_promedio %}{{ calificacion_promedio }}{% else %}—{% endif %}</div>
+        <div class="stat-etiqueta">Calificación promedio</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if paseo_activo.mascota_nombre %}
+<div class="banner-paseo-activo mb-4">
+  <div class="d-flex align-items-center gap-3 mb-3">
+    <span class="banner-paseo-icono"><i class="bi bi-bell-fill"></i></span>
+    <div class="flex-grow-1">
+      <div class="banner-paseo-etiqueta">Nueva solicitud</div>
+      <div class="fw-bold">{{ paseo_activo.mascota_nombre }}</div>
+      {% if paseo_activo.dueno_nombre %}<div class="banner-paseo-detalle">De {{ paseo_activo.dueno_nombre }}</div>{% endif %}
+    </div>
+  </div>
+  <form method="post" action="{% url 'paseos:iniciar_paseo' paseo_activo.id_paseo %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-light w-100 fw-bold">Iniciar paseo</button>
+  </form>
+</div>
+{% elif not paseo_activo %}
+<form method="post" action="{% url 'paseos:publicar_disponibilidad' %}">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-primary w-100">Publicar disponibilidad</button>
+</form>
+{% endif %}
+
+{% endif %}
 
 {% if incidente_form %}
 <div class="modal fade" id="modalEmergencia" tabindex="-1" aria-hidden="true">
