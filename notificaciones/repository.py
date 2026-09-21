@@ -30,3 +30,22 @@ def listar_por_usuario(id_usuario):
     except (InvalidId, TypeError):
         return []
     return list(get_db().notificaciones.find({'id_usuario': oid}).sort('fecha', -1))
+
+
+def hay_no_leidas(id_usuario, ultima_vista):
+    """
+    True si el usuario tiene alguna notificacion mas nueva que
+    `ultima_vista` (None = nunca visito la pantalla de notificaciones,
+    asi que cualquier notificacion existente cuenta). Mismo mecanismo de
+    "vista hasta" en sesion que ya usa notificaciones/views.py, extraido
+    aca para que los dashboards (carga completa y polling) puedan
+    reutilizarlo sin duplicar la comparacion.
+    """
+    try:
+        oid = ObjectId(id_usuario)
+    except (InvalidId, TypeError):
+        return False
+    query = {'id_usuario': oid}
+    if ultima_vista is not None:
+        query['fecha'] = {'$gt': ultima_vista}
+    return get_db().notificaciones.find_one(query) is not None

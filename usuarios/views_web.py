@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from django.contrib import messages
 from django.contrib.auth.hashers import check_password, make_password
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 
 from calificaciones import repository as calificaciones_repository
@@ -114,32 +115,52 @@ def logout(request):
     return redirect('usuarios:login')
 
 
+def _paseo_activo_dueno(id_dueno, paseos_dueno=None):
+    """
+    Paseo en_vivo actual del dueño, con los datos que necesita el banner
+    naranja del dashboard. None si no tiene ninguno en curso ahora mismo.
+    Compartida por bienvenida() (carga completa de la pagina) y
+    estado_bienvenida() (polling) para que ambas calculen exactamente lo
+    mismo. Si el llamador ya tiene `paseos_dueno` cargado (bienvenida lo
+    necesita ademas para otras secciones), se reutiliza en vez de volver
+    a consultar Mongo.
+    """
+    if paseos_dueno is None:
+        paseos_dueno = paseos_repository.listar_por_dueno(id_dueno)
+
+    paseo_en_vivo = next((p for p in paseos_dueno if p['estado'] == 'en_vivo'), None)
+    if not paseo_en_vivo:
+        return None
+
+    mascota = None
+    if paseo_en_vivo.get('id_mascota'):
+        mascota = mascotas_repository.obtener_varias_por_id([paseo_en_vivo['id_mascota']]).get(
+            paseo_en_vivo['id_mascota']
+        )
+    paseador = None
+    if paseo_en_vivo.get('id_paseador'):
+        paseador = repository.obtener_por_id(paseo_en_vivo['id_paseador'])
+
+    ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+    hora_inicio = paseo_en_vivo.get('hora_inicio')
+    minutos = int((ahora - hora_inicio).total_seconds() // 60) if hora_inicio else 0
+    return {
+        'id_paseo': str(paseo_en_vivo['_id']),
+        'mascota_nombre': mascota['nombre'] if mascota else 'tu mascota',
+        'paseador_nombre': paseador['nombre'] if paseador else '',
+        'minutos': max(minutos, 0),
+    }
+
+
 @requiere_dueno
 def bienvenida(request):
     id_dueno = request.session['id_usuario']
     ahora = datetime.now(timezone.utc).replace(tzinfo=None)
 
     paseos_dueno = paseos_repository.listar_por_dueno(id_dueno)
-    paseadores_por_id = repository.obtener_varios_por_id(
-        [p['id_paseador'] for p in paseos_dueno if p.get('id_paseador')]
-    )
     mascotas_dueno = mascotas_repository.listar_por_dueno(id_dueno)
-    mascotas_por_id = {m['_id']: m for m in mascotas_dueno}
 
-    # --- banner de paseo activo ---
-    paseo_en_vivo = next((p for p in paseos_dueno if p['estado'] == 'en_vivo'), None)
-    paseo_activo = None
-    if paseo_en_vivo:
-        mascota = mascotas_por_id.get(paseo_en_vivo.get('id_mascota'))
-        paseador = paseadores_por_id.get(paseo_en_vivo.get('id_paseador'))
-        hora_inicio = paseo_en_vivo.get('hora_inicio')
-        minutos = int((ahora - hora_inicio).total_seconds() // 60) if hora_inicio else 0
-        paseo_activo = {
-            'id_paseo': str(paseo_en_vivo['_id']),
-            'mascota_nombre': mascota['nombre'] if mascota else 'tu mascota',
-            'paseador_nombre': paseador['nombre'] if paseador else '',
-            'minutos': max(minutos, 0),
-        }
+    paseo_activo = _paseo_activo_dueno(id_dueno, paseos_dueno=paseos_dueno)
 
     # --- "Mis mascotas" (maximo 3 tarjetas) ---
     ids_mascotas_en_paseo = {
@@ -175,15 +196,10 @@ def bienvenida(request):
     calificacion_promedio_dada = calificaciones_repository.calcular_promedio_dado_por_dueno(id_dueno)
     paseadores_distintos = len({p['id_paseador'] for p in paseos_dueno if p.get('id_paseador')})
 
-    # --- notificaciones sin leer: aproximado por sesion (ver notificaciones/views.py) ---
-    notificaciones_dueno = notificaciones_repository.listar_por_usuario(id_dueno)
-    hay_notificaciones_sin_leer = False
-    if notificaciones_dueno:
-        ultima_vista_str = request.session.get('notificaciones_vistas_hasta')
-        if not ultima_vista_str:
-            hay_notificaciones_sin_leer = True
-        else:
-            hay_notificaciones_sin_leer = notificaciones_dueno[0]['fecha'] > datetime.fromisoformat(ultima_vista_str)
+    # --- notificaciones sin leer: aproximado por sesion (ver notificaciones/repository.py) ---
+    ultima_vista_str = request.session.get('notificaciones_vistas_hasta')
+    ultima_vista = datetime.fromisoformat(ultima_vista_str) if ultima_vista_str else None
+    hay_notificaciones_sin_leer = notificaciones_repository.hay_no_leidas(id_dueno, ultima_vista)
 
     return render(request, 'usuarios/bienvenida.html', {
         'nombre': request.session.get('nombre'),
@@ -193,6 +209,28 @@ def bienvenida(request):
         'paseos_este_mes': paseos_este_mes,
         'calificacion_promedio_dada': calificacion_promedio_dada,
         'paseadores_distintos': paseadores_distintos,
+        'hay_notificaciones_sin_leer': hay_notificaciones_sin_leer,
+    })
+
+
+@requiere_dueno
+def estado_bienvenida(request):
+    """
+    Polling del dashboard del dueño (cada 12s desde bienvenida.html): solo
+    lo necesario para que el banner de "paseo activo" aparezca/desaparezca
+    solo cuando el paseador inicia/finaliza el paseo, y para el punto de
+    notificaciones sin leer - no la pagina completa. Misma logica que
+    bienvenida(), factorizada en _paseo_activo_dueno()/hay_no_leidas().
+    """
+    id_dueno = request.session['id_usuario']
+    paseo_activo = _paseo_activo_dueno(id_dueno)
+
+    ultima_vista_str = request.session.get('notificaciones_vistas_hasta')
+    ultima_vista = datetime.fromisoformat(ultima_vista_str) if ultima_vista_str else None
+    hay_notificaciones_sin_leer = notificaciones_repository.hay_no_leidas(id_dueno, ultima_vista)
+
+    return JsonResponse({
+        'paseo_activo': paseo_activo,
         'hay_notificaciones_sin_leer': hay_notificaciones_sin_leer,
     })
 

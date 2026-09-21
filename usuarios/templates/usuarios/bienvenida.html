@@ -17,32 +17,30 @@
   </div>
   <a href="{% url 'notificaciones:lista' %}" class="dashboard-campana" aria-label="Notificaciones">
     <i class="bi bi-bell"></i>
-    {% if hay_notificaciones_sin_leer %}
-    <span class="dashboard-campana-punto"></span>
-    {% endif %}
+    <span class="dashboard-campana-punto {% if not hay_notificaciones_sin_leer %}d-none{% endif %}" id="campana-punto"></span>
   </a>
 </div>
 
-{% if paseo_activo %}
 <a
-  href="{% url 'coordenadas:mapa_paseo' paseo_activo.id_paseo %}"
-  class="banner-paseo-activo d-flex align-items-center gap-3 mb-4"
+  href="{% if paseo_activo %}{% url 'coordenadas:mapa_paseo' paseo_activo.id_paseo %}{% else %}#{% endif %}"
+  class="banner-paseo-activo d-flex align-items-center gap-3 mb-4 {% if not paseo_activo %}d-none{% endif %}"
+  id="banner-paseo-activo"
 >
   <span class="banner-paseo-icono">
     <i class="bi bi-geo-alt-fill"></i>
   </span>
   <div class="flex-grow-1">
     <div class="banner-paseo-etiqueta">Paseo activo ahora</div>
-    <div class="fw-bold">{{ paseo_activo.mascota_nombre }} está de paseo</div>
+    <div class="fw-bold"><span id="banner-mascota-nombre">{{ paseo_activo.mascota_nombre }}</span> está de paseo</div>
     <div class="banner-paseo-detalle">
-      Con {{ paseo_activo.paseador_nombre }} · {{ paseo_activo.minutos }} min transcurridos
+      Con <span id="banner-paseador-nombre">{{ paseo_activo.paseador_nombre }}</span> ·
+      <span id="banner-minutos">{{ paseo_activo.minutos }}</span> min transcurridos
     </div>
   </div>
   <div class="d-flex align-items-center gap-1">
     Ver <i class="bi bi-chevron-right"></i>
   </div>
 </a>
-{% endif %}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2 class="h5 mb-0">Mis mascotas</h2>
@@ -139,4 +137,38 @@
     <div class="stat-etiqueta">Paseadores favoritos</div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var urlEstado = "{% url 'usuarios:estado_bienvenida' %}";
+  // El id real se arma en JS reemplazando este placeholder - mismo truco
+  // que ya usa bienvenida_paseador.html con las fotos del paseo, porque
+  // Django arma la URL en tiempo de render con todos sus argumentos.
+  var urlMapaBase = "{% url 'coordenadas:mapa_paseo' 'PASEO_PLACEHOLDER' %}";
+
+  var banner = document.getElementById('banner-paseo-activo');
+  var campanaPunto = document.getElementById('campana-punto');
+
+  function actualizar() {
+    fetch(urlEstado)
+      .then(function (resp) { return resp.json(); })
+      .then(function (data) {
+        if (data.paseo_activo) {
+          banner.href = urlMapaBase.replace('PASEO_PLACEHOLDER', data.paseo_activo.id_paseo);
+          document.getElementById('banner-mascota-nombre').textContent = data.paseo_activo.mascota_nombre;
+          document.getElementById('banner-paseador-nombre').textContent = data.paseo_activo.paseador_nombre;
+          document.getElementById('banner-minutos').textContent = data.paseo_activo.minutos;
+          banner.classList.remove('d-none');
+        } else {
+          banner.classList.add('d-none');
+        }
+        campanaPunto.classList.toggle('d-none', !data.hay_notificaciones_sin_leer);
+      });
+  }
+
+  setInterval(actualizar, 12000);
+})();
+</script>
 {% endblock %}
