@@ -112,9 +112,20 @@
 
   // ---- mapa ----
   var mapa = L.map('mapa').setView([7.1193, -73.1227], 13); // Bucaramanga por defecto
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  // Los datos del mapa siguen siendo de OpenStreetMap (ver CLAUDE.md: "Leaflet.js
+  // + OpenStreetMap"); lo unico que cambia es quien SIRVE las imagenes de los
+  // tiles. tile.openstreetmap.org es el servidor gratuito mantenido por
+  // voluntarios de OSM, con una politica de uso muy estricta pensada para
+  // trafico bajo y esporadico (ver operations.osmfoundation.org/policies/tiles) -
+  // el uso repetido durante pruebas hizo que bloqueara la IP. CARTO ofrece
+  // basemaps gratuitos que redistribuyen los mismos datos de OSM con una
+  // politica mas permisiva para este tipo de uso.
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    subdomains: 'abcd',
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors ' +
+      '&copy; <a href="https://carto.com/attributions">CARTO</a>'
   }).addTo(mapa);
 
   var linea = L.polyline([], { color: '#D9703A' }).addTo(mapa);
