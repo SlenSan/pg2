@@ -58,6 +58,30 @@
   </main>
   {% endblock %}
 
+  {% comment %}
+  Fuera de {% block body %} a propósito: base_auth.html (login/registro/
+  seleccionar_rol) sobreescribe ese bloque entero con su propio layout de
+  pantalla partida, así que un footer puesto ADENTRO de "body" no se
+  vería ahí. Puesto acá, en cambio, se hereda igual sin que
+  base_auth.html tenga que declararlo de nuevo - por eso alcanza con
+  tocar un solo archivo para que aparezca en todas las pantallas.
+  {% endcomment %}
+  <footer class="pie-pagina">
+    <div class="container d-flex align-items-center justify-content-center gap-3 flex-wrap">
+      {% comment %}
+      Placeholder del logo UDI: reemplazar el <span> de abajo por
+        <img src="{% static 'img/logo-udi.png' %}" alt="Logo UDI" class="pie-pagina-logo">
+      apenas exista el archivo (guardarlo en core/static/img/logo-udi.png).
+      {% endcomment %}
+      <span class="pie-pagina-logo-vacio" aria-hidden="true">UDI</span>
+      <div class="text-start">
+        <div>Slendy Sireth Rojas Sandoval</div>
+        <div>Trabajo presentado como requisito para optar al título de Ingeniera de Sistemas</div>
+        <div>Universidad de Investigación y Desarrollo (UDI) &middot; {% now "Y" %}</div>
+      </div>
+    </div>
+  </footer>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   {% block extra_js %}{% endblock %}
 </body>

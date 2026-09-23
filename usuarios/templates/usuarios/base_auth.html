@@ -10,12 +10,18 @@ login/registro que resaltar todavía).
 
 Sin navbar: estas dos pantallas son la puerta de entrada (usuario aún no
 autenticado).
+
+"flex-grow-1" en vez de "min-vh-100": body ya es una columna flex de al
+menos 100vh (ver canigo-theme.css, para el footer sticky), así que esta
+fila solo necesita estirarse para ocupar el espacio que quede - si se
+mantuviera min-vh-100 acá, exigiría 100vh PARA SÍ MISMA además del
+footer, empujándolo fuera de la pantalla en login/registro.
 {% endcomment %}
 
 {% block navbar %}{% endblock %}
 
 {% block body %}
-<div class="row g-0 min-vh-100">
+<div class="row g-0 flex-grow-1">
   <div class="col-md-6 d-none d-md-flex flex-column justify-content-center p-5 auth-panel-izquierdo">
     <div class="text-center px-3">
       <img

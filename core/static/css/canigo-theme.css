@@ -56,6 +56,14 @@
 body {
   font-family: 'Outfit', sans-serif;
   font-weight: 400;
+  /* Pie de pagina "sticky": el body es una columna flex de al menos toda
+     la altura de la ventana, y .pie-pagina se empuja al fondo con
+     margin-top:auto. Asi queda pegado abajo en pantallas con poco
+     contenido (como login) sin taparlo, y aparece despues del contenido
+     normalmente en pantallas mas largas. */
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
 body.bg-light {
@@ -836,5 +844,46 @@ button.disponibilidad-tarjeta:hover {
   border-radius: 50%;
   background-color: var(--color-primary);
   margin-right: .4rem;
+  flex-shrink: 0;
+}
+
+/* Pie de pagina (footer), en base.html - ver nota de "Base" arriba sobre
+   como queda pegado abajo. Fondo neutro (blanco/crema) a proposito: la
+   franja va debajo de TODO el contenido, incluido el panel oscuro de
+   login, asi que no necesita variar segun la pantalla. */
+
+.pie-pagina {
+  margin-top: auto;
+  flex-shrink: 0;
+  background-color: var(--color-card);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-muted-foreground);
+  font-size: .8rem;
+  line-height: 1.4;
+  padding: 1rem 0;
+  text-align: center;
+}
+
+.pie-pagina-logo {
+  height: 40px;
+  width: auto;
+  flex-shrink: 0;
+}
+
+/* Reemplazar por el <img> real (ver comentario en base.html) apenas
+   exista el archivo del logo - mismo criterio visual que los demas
+   placeholders de la plataforma (mascota-avatar-vacio, etc.) mientras
+   tanto, en vez de un icono de imagen rota en todas las pantallas. */
+.pie-pagina-logo-vacio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background-color: var(--color-secondary);
+  color: var(--color-secondary-foreground);
+  font-weight: 700;
+  font-size: .7rem;
   flex-shrink: 0;
 }
