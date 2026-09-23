@@ -123,16 +123,16 @@
   </div>
 </div>
 
-<div class="row text-center g-3">
-  <div class="col-4">
+<div class="row row-cols-2 row-cols-md-3 text-center g-3">
+  <div class="col">
     <div class="stat-valor">{{ paseos_este_mes }}</div>
     <div class="stat-etiqueta">Paseos este mes</div>
   </div>
-  <div class="col-4">
+  <div class="col">
     <div class="stat-valor">{% if calificacion_promedio_dada %}{{ calificacion_promedio_dada }}{% else %}—{% endif %}</div>
     <div class="stat-etiqueta">Calificación promedio</div>
   </div>
-  <div class="col-4">
+  <div class="col">
     <div class="stat-valor">{{ paseadores_distintos }}</div>
     <div class="stat-etiqueta">Paseadores favoritos</div>
   </div>

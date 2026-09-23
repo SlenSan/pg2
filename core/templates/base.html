@@ -24,24 +24,49 @@
     <div class="container">
       {% if request.session.rol == 'paseador' %}
       <a class="navbar-brand" href="{% url 'usuarios:bienvenida_paseador' %}">🐾 Canigo</a>
-      <div class="navbar-nav flex-row gap-3">
-        <a class="nav-link text-white" href="{% url 'usuarios:perfil_paseador' %}">Mi perfil</a>
-        <a class="nav-link text-white" href="{% url 'paseos:historial_paseador' %}">Historial de paseos</a>
-        <a class="nav-link text-white" href="{% url 'notificaciones:lista' %}">Notificaciones</a>
-        <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
-      </div>
       {% else %}
       <a class="navbar-brand" href="{% url 'home' %}">🐾 Canigo</a>
-      {% if request.session.id_usuario %}
-      <div class="navbar-nav flex-row gap-3">
-        <a class="nav-link text-white" href="{% url 'mascotas:lista' %}">Mis mascotas</a>
-        <a class="nav-link text-white" href="{% url 'paseos:lista_disponibles' %}">Paseadores disponibles</a>
-        <a class="nav-link text-white" href="{% url 'paseos:mis_paseos' %}">Mis paseos</a>
-        <a class="nav-link text-white" href="{% url 'notificaciones:lista' %}">Notificaciones</a>
-        <a class="nav-link text-white" href="{% url 'incidentes:lista' %}">Incidentes</a>
-        <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
-      </div>
       {% endif %}
+
+      {% if request.session.id_usuario %}
+      {% comment %}
+      Mecanismo real de colapso de Bootstrap (antes faltaba: solo estaba
+      la clase navbar-expand-lg, sin el boton/collapse que la activa, y
+      "flex-row" forzaba los links a una fila incluso en celular). Sin
+      "flex-row" en .navbar-nav, Bootstrap los apila verticalmente
+      adentro del menu colapsado en mobile y los pone en fila solo desde
+      el breakpoint lg (su comportamiento por defecto).
+      {% endcomment %}
+      <button
+        class="navbar-toggler"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#navbarNav"
+        aria-controls="navbarNav"
+        aria-expanded="false"
+        aria-label="Abrir menú"
+      >
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        {% if request.session.rol == 'paseador' %}
+        <div class="navbar-nav gap-3">
+          <a class="nav-link text-white" href="{% url 'usuarios:perfil_paseador' %}">Mi perfil</a>
+          <a class="nav-link text-white" href="{% url 'paseos:historial_paseador' %}">Historial de paseos</a>
+          <a class="nav-link text-white" href="{% url 'notificaciones:lista' %}">Notificaciones</a>
+          <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
+        </div>
+        {% else %}
+        <div class="navbar-nav gap-3">
+          <a class="nav-link text-white" href="{% url 'mascotas:lista' %}">Mis mascotas</a>
+          <a class="nav-link text-white" href="{% url 'paseos:lista_disponibles' %}">Paseadores disponibles</a>
+          <a class="nav-link text-white" href="{% url 'paseos:mis_paseos' %}">Mis paseos</a>
+          <a class="nav-link text-white" href="{% url 'notificaciones:lista' %}">Notificaciones</a>
+          <a class="nav-link text-white" href="{% url 'incidentes:lista' %}">Incidentes</a>
+          <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
+        </div>
+        {% endif %}
+      </div>
       {% endif %}
     </div>
   </nav>

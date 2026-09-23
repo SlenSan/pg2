@@ -774,7 +774,11 @@ button.disponibilidad-tarjeta:hover {
 .perfil-hero-link {
   background: none;
   border: 0;
-  padding: 0;
+  /* padding:0 dejaba un area de toque del tamaño exacto del texto (muy
+     chica); esto no lo agranda visualmente (el texto sigue igual) pero
+     da mas margen alrededor para tocarlo comodo. */
+  padding: .5rem .25rem;
+  margin: -.5rem -.25rem;
   color: rgba(255, 255, 255, .9);
   text-decoration: underline;
   font-size: .85rem;
