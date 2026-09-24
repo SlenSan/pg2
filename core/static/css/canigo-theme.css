@@ -805,21 +805,3 @@ a:hover {
   width: auto;
   flex-shrink: 0;
 }
-
-/* Reemplazar por el <img> real (ver comentario en base.html) apenas
-   exista el archivo del logo - mismo criterio visual que los demas
-   placeholders de la plataforma (mascota-avatar-vacio, etc.) mientras
-   tanto, en vez de un icono de imagen rota en todas las pantallas. */
-.pie-pagina-logo-vacio {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background-color: var(--color-secondary);
-  color: var(--color-secondary-foreground);
-  font-weight: 700;
-  font-size: .7rem;
-  flex-shrink: 0;
-}
