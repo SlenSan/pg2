@@ -22,6 +22,7 @@ from incidentes.forms import ReportarIncidenteForm
 from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository as paseos_repository
+from paseos.forms import PublicarHorarioForm
 from usuarios import repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
 from usuarios.forms import EditarPerfilPaseadorForm, LoginForm, RegistroDuenoForm, RegistroPaseadorForm
@@ -238,7 +239,7 @@ def estado_bienvenida(request):
 @requiere_paseador
 def bienvenida_paseador(request):
     id_paseador = ObjectId(request.session['id_usuario'])
-    paseo = paseos_repository.obtener_activo_de_paseador(id_paseador)
+    paseo = paseos_repository.obtener_en_vivo_de_paseador(id_paseador)
 
     paseo_activo = None
     if paseo:
@@ -260,8 +261,32 @@ def bienvenida_paseador(request):
         }
 
     incidente_form = None
-    if paseo_activo and paseo_activo['estado'] == 'en_vivo':
+    if paseo_activo:
         incidente_form = ReportarIncidenteForm()
+
+    # --- horarios publicados (varios simultaneos posibles) - solo si no
+    # esta caminando ahora mismo, mismo criterio que ya tenia esta
+    # pantalla de mostrar una cosa u otra, no las dos a la vez ---
+    horarios_disponibles = []
+    form_horario = PublicarHorarioForm()
+    if not paseo_activo:
+        horarios_crudos = paseos_repository.listar_disponibles_de_paseador(id_paseador)
+        duenos_por_id = repository.obtener_varios_por_id(
+            [h['id_dueno'] for h in horarios_crudos if h.get('id_dueno')]
+        )
+        mascotas_por_id = mascotas_repository.obtener_varias_por_id(
+            [h['id_mascota'] for h in horarios_crudos if h.get('id_mascota')]
+        )
+        for h in horarios_crudos:
+            mascota = mascotas_por_id.get(h.get('id_mascota'))
+            dueno = duenos_por_id.get(h.get('id_dueno'))
+            horarios_disponibles.append({
+                'id_paseo': str(h['_id']),
+                'horario_desde': h['horario_desde'].replace(tzinfo=timezone.utc) if h.get('horario_desde') else None,
+                'horario_hasta': h['horario_hasta'].replace(tzinfo=timezone.utc) if h.get('horario_hasta') else None,
+                'mascota_nombre': mascota['nombre'] if mascota else None,
+                'dueno_nombre': dueno['nombre'] if dueno else None,
+            })
 
     # --- estadisticas del paseador (solo datos que ya existen) ---
     usuario = repository.obtener_por_id(id_paseador)
@@ -271,6 +296,8 @@ def bienvenida_paseador(request):
         'nombre': request.session.get('nombre'),
         'paseo_activo': paseo_activo,
         'incidente_form': incidente_form,
+        'horarios_disponibles': horarios_disponibles,
+        'form_horario': form_horario,
         'paseos_completados': paseos_completados,
         'calificacion_promedio': usuario.get('calificacion_promedio'),
     })

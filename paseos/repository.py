@@ -17,13 +17,23 @@ from core.mongo import get_db
 MOMENTOS_FOTO_VALIDOS = ('inicio', 'mitad', 'fin')
 
 
-def crear_disponibilidad(id_paseador):
+def crear_disponibilidad(*, id_paseador, horario_desde, horario_hasta):
+    """
+    horario_desde/horario_hasta: horario PROPUESTO por el paseador para
+    este horario publicado (naive UTC, igual que el resto de las fechas
+    de esta coleccion) - distintos de hora_inicio/hora_fin, que son el
+    momento REAL en que el paseo paso a en_vivo/historico. Un paseador
+    puede tener varios documentos 'disponible' al mismo tiempo (varios
+    horarios publicados); ya no hay limite de uno solo.
+    """
     paseo = {
         'id_paseador': id_paseador,
         'id_mascota': None,
         'id_dueno': None,
         'estado': 'disponible',
         'fecha': datetime.now(timezone.utc),
+        'horario_desde': horario_desde,
+        'horario_hasta': horario_hasta,
         'hora_inicio': None,
         'hora_fin': None,
         'total_puntos': 0,
@@ -58,12 +68,27 @@ def cancelar_disponibilidad(*, id_paseo, id_paseador):
     })
 
 
-def obtener_activo_de_paseador(id_paseador):
-    """Paseo en 'disponible' o 'en_vivo' que ya tenga ese paseador, si existe."""
-    return get_db().paseos.find_one({
+def obtener_en_vivo_de_paseador(id_paseador):
+    """
+    El paseo 'en_vivo' de este paseador, si tiene uno (a lo sumo uno: un
+    paseador es una sola persona, no puede caminar dos perros de dueños
+    distintos en paralelo - ver iniciar_paseo()).
+    """
+    return get_db().paseos.find_one({'id_paseador': id_paseador, 'estado': 'en_vivo'})
+
+
+def listar_disponibles_de_paseador(id_paseador):
+    """
+    TODOS los horarios 'disponible' publicados por este paseador ahora
+    mismo (puede tener varios simultaneos), tengan o no mascota inscrita
+    - el dashboard del paseador necesita ver ambos casos (horario libre
+    vs. solicitud pendiente). Quien solo quiera los libres (el lado del
+    dueño) filtra id_mascota=None sobre el resultado.
+    """
+    return list(get_db().paseos.find({
         'id_paseador': id_paseador,
-        'estado': {'$in': ['disponible', 'en_vivo']},
-    })
+        'estado': 'disponible',
+    }).sort('horario_desde', 1))
 
 
 def listar_disponibles_sin_asignar():
@@ -105,12 +130,25 @@ def inscribir_mascota(*, id_paseo, id_dueno, id_mascota):
 def iniciar_paseo(*, id_paseo, id_paseador):
     """
     Pasa un paseo de 'disponible' a 'en_vivo' y registra hora_inicio.
-    Solo si le pertenece a ese paseador y ya tiene una mascota inscrita
-    (no tiene sentido iniciar un paseo que nadie tomo todavia).
+    Solo si le pertenece a ese paseador, ya tiene una mascota inscrita
+    (no tiene sentido iniciar un paseo que nadie tomo todavia), y el
+    paseador no tiene YA otro paseo 'en_vivo' - una persona no puede
+    caminar dos perros de dueños distintos en paralelo. Antes esto era
+    imposible sin querer (solo se permitia un 'disponible' a la vez); con
+    varios horarios simultaneos hace falta este chequeo explicito.
     Devuelve el documento actualizado, o None si no se cumplen las
-    condiciones (no existe, no es suyo, ya no esta 'disponible', o no
-    tiene id_mascota asignado).
+    condiciones (no existe, no es suyo, ya no esta 'disponible', no tiene
+    id_mascota asignado, o ya hay otro paseo en_vivo).
+
+    Nota: el chequeo de "otro paseo en_vivo" es un find_one previo, no
+    parte del filtro atomico de mas abajo (que solo puede mirar ESTE
+    documento) - queda una ventana muy chica de condicion de carrera
+    (dos clics de iniciar simultaneos en dos horarios distintos), acorde
+    al volumen de esta plataforma.
     """
+    if obtener_en_vivo_de_paseador(id_paseador):
+        return None
+
     try:
         oid_paseo = ObjectId(id_paseo)
     except (InvalidId, TypeError):
@@ -215,7 +253,7 @@ def a_json(paseo):
     data['_id'] = str(data['_id'])
     for campo_ref in ('id_paseador', 'id_mascota', 'id_dueno'):
         data[campo_ref] = str(data[campo_ref]) if data.get(campo_ref) else None
-    for campo_fecha in ('fecha', 'hora_inicio', 'hora_fin'):
+    for campo_fecha in ('fecha', 'horario_desde', 'horario_hasta', 'hora_inicio', 'hora_fin'):
         if isinstance(data.get(campo_fecha), datetime):
             data[campo_fecha] = data[campo_fecha].isoformat()
     return data

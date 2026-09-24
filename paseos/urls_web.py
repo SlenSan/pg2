@@ -8,7 +8,12 @@ urlpatterns = [
     path('', views_web.lista_disponibles, name='lista_disponibles'),
     path('mios/', views_web.mis_paseos, name='mis_paseos'),
     path('historial/', views_web.historial, name='historial'),
-    path('paseadores/<str:id_paseo>/', views_web.detalle_paseador, name='detalle_paseador'),
+    path('paseadores/<str:id_paseador>/', views_web.detalle_paseador, name='detalle_paseador'),
+    path(
+        'paseadores/<str:id_paseador>/horarios/<str:id_paseo>/inscribir/',
+        views_web.inscribir_en_horario,
+        name='inscribir_en_horario',
+    ),
     path('paseador/publicar-disponibilidad/', views_web.publicar_disponibilidad, name='publicar_disponibilidad'),
     path('paseador/paseos/<str:id_paseo>/cancelar-disponibilidad/', views_web.cancelar_disponibilidad, name='cancelar_disponibilidad'),
     path('paseador/historial/', views_web.historial_paseador, name='historial_paseador'),

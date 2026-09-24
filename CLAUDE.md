@@ -103,6 +103,8 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
   id_dueno: ObjectId,      // referencia a usuarios
   estado: String,          // "disponible" | "en_vivo" | "historico"
   fecha: Date,
+  horario_desde: Date,     // horario PROPUESTO por el paseador (solo mientras estado="disponible")
+  horario_hasta: Date,     // idem - distintos de hora_inicio/hora_fin (el momento REAL)
   hora_inicio: Date,
   hora_fin: Date,
   total_puntos: Number,

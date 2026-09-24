@@ -43,7 +43,10 @@
         {% if item.paseador.descripcion %}
         <p class="card-text text-muted">{{ item.paseador.descripcion }}</p>
         {% endif %}
-        <a href="{% url 'paseos:detalle_paseador' item.id_paseo %}" class="btn btn-primary w-100">Ver perfil e inscribir</a>
+        <p class="card-text text-muted small mb-2">
+          {{ item.cantidad_horarios }} horario{{ item.cantidad_horarios|pluralize }} disponible{{ item.cantidad_horarios|pluralize }}
+        </p>
+        <a href="{% url 'paseos:detalle_paseador' item.id_paseador %}" class="btn btn-primary w-100">Ver perfil e inscribir</a>
       </div>
     </div>
   </div>

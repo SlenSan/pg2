@@ -63,29 +63,34 @@
 
     <div class="card">
       <div class="card-body">
-        <h2 class="h5 mb-3">Inscribir mi mascota</h2>
-        {% if form.fields.id_mascota.choices %}
-        <form method="post" novalidate>
-          {% csrf_token %}
-          {% for field in form %}
-            <div class="mb-3">
-              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-              {{ field }}
-              {% for error in field.errors %}
-                <div class="text-danger small mt-1">{{ error }}</div>
-              {% endfor %}
-            </div>
-          {% endfor %}
-          {% if form.non_field_errors %}
-            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
-          {% endif %}
-          <button type="submit" class="btn btn-primary w-100">Inscribir</button>
-        </form>
-        {% else %}
+        <h2 class="h5 mb-3">Horarios disponibles</h2>
+        {% if not tiene_mascotas %}
         <p class="text-muted mb-0">
           Necesitas registrar al menos una mascota antes de inscribirla.
           <a href="{% url 'mascotas:registro' %}">Registrar mascota</a>.
         </p>
+        {% else %}
+        {% for item in horarios %}
+        <div class="p-3 rounded-3 {% if not forloop.last %}mb-3{% endif %}" style="background-color: var(--color-muted);">
+          <p class="fw-bold mb-3">
+            <i class="bi bi-clock"></i>
+            {{ item.horario.horario_desde|time:"H:i" }} - {{ item.horario.horario_hasta|time:"H:i" }}
+          </p>
+          <form method="post" action="{% url 'paseos:inscribir_en_horario' id_paseador item.id_paseo %}" novalidate>
+            {% csrf_token %}
+            {% for field in item.form %}
+              <div class="mb-2">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}
+                  <div class="text-danger small mt-1">{{ error }}</div>
+                {% endfor %}
+              </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-primary w-100">Inscribir en este horario</button>
+          </form>
+        </div>
+        {% endfor %}
         {% endif %}
       </div>
     </div>
