@@ -62,7 +62,7 @@
         {% if request.session.rol == 'paseador' %}
         <div class="navbar-nav gap-3 ms-lg-auto">
           <a class="nav-link text-white" href="{% url 'usuarios:perfil_paseador' %}">Mi perfil</a>
-          <a class="nav-link text-white" href="{% url 'paseos:historial_paseador' %}">Historial de paseos</a>
+          <a class="nav-link text-white" href="{% url 'paseos:historial_paseador' %}">Mis paseos</a>
           <a class="nav-link text-white navbar-campana" href="{% url 'notificaciones:lista' %}">
             Notificaciones
             <span class="navbar-campana-punto campana-punto {% if not hay_notificaciones_sin_leer %}d-none{% endif %}"></span>

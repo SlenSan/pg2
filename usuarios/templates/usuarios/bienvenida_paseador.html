@@ -50,20 +50,28 @@
 
 {% else %}
 
+{% comment %}
+Estadisticas de actividad RECIENTE (no totales de siempre - esos ya
+viven en "Mi perfil" y en "Mis paseos", ver
+usuarios/perfil_paseador.html y paseos/historial_paseador.html). Sin
+"Ingresos este mes" (tercera tarjeta de la referencia de diseño): no hay
+ningun dato de tarifas en el esquema, no se inventa un numero en
+pantalla.
+{% endcomment %}
 <div class="row row-cols-2 g-3 mb-4">
   <div class="col">
     <div class="card h-100 text-center">
       <div class="card-body">
-        <div class="stat-valor">{{ paseos_completados }}</div>
-        <div class="stat-etiqueta">Paseos completados</div>
+        <div class="stat-valor">{{ solicitudes_hoy }}</div>
+        <div class="stat-etiqueta">Solicitudes hoy</div>
       </div>
     </div>
   </div>
   <div class="col">
     <div class="card h-100 text-center">
       <div class="card-body">
-        <div class="stat-valor">{% if calificacion_promedio %}{{ calificacion_promedio }}{% else %}—{% endif %}</div>
-        <div class="stat-etiqueta">Calificación promedio</div>
+        <div class="stat-valor">{{ paseos_esta_semana }}</div>
+        <div class="stat-etiqueta">Paseos esta semana</div>
       </div>
     </div>
   </div>

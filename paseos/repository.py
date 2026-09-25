@@ -324,6 +324,30 @@ def contar_completados_por_paseador(id_paseador):
     return get_db().paseos.count_documents({'id_paseador': id_paseador, 'estado': 'historico'})
 
 
+def listar_por_paseador_con_horario_en(id_paseador, desde_utc, hasta_utc):
+    """
+    Paseos de este paseador cuyo horario_desde cae en [desde_utc, hasta_utc)
+    - un horario SIEMPRE se publica "para hoy" (ver PublicarHorarioForm),
+    asi que esto sirve para "cuantas mascotas se inscribieron para hoy"
+    (estadistica "Solicitudes hoy" del dashboard del paseador) sin
+    necesitar un campo nuevo de "fecha de inscripcion" que el esquema no
+    tiene.
+    """
+    return list(get_db().paseos.find({
+        'id_paseador': id_paseador,
+        'horario_desde': {'$gte': desde_utc, '$lt': hasta_utc},
+    }))
+
+
+def contar_historico_desde(id_paseador, desde_utc):
+    """Cuenta de paseos 'historico' de este paseador con hora_fin >= desde_utc (p.ej. "esta semana")."""
+    return get_db().paseos.count_documents({
+        'id_paseador': id_paseador,
+        'estado': 'historico',
+        'hora_fin': {'$gte': desde_utc},
+    })
+
+
 def a_json(paseo):
     data = dict(paseo)
     data['_id'] = str(data['_id'])

@@ -8,7 +8,7 @@ su propio dashboard (bienvenida / bienvenida_paseador) protegido por su
 decorator correspondiente (ver usuarios/decorators.py).
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
 from django.contrib import messages
@@ -16,6 +16,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
+from django.utils import timezone as django_timezone
 
 from calificaciones import repository as calificaciones_repository
 from core.media import ErrorSubidaImagen, subir_imagen
@@ -34,6 +35,22 @@ _ROL_MONGO = {'dueno': 'dueño', 'paseador': 'paseador'}
 
 def _url_dashboard(rol):
     return 'usuarios:bienvenida_paseador' if rol == 'paseador' else 'usuarios:bienvenida'
+
+
+def _rango_dia_utc(fecha_bogota):
+    """
+    El rango [inicio, fin) de un dia CALENDARIO de Bogota, como datetimes
+    naive en UTC (mismo formato que el resto de la coleccion `paseos` -
+    ver core/mongo.py) - para filtrar por un dia especifico sin el bug ya
+    conocido de comparar fechas naive-UTC como si fueran hora local.
+    Mismo patron de conversion que _horario_a_utc() en paseos/views_web.py.
+    """
+    inicio_aware = django_timezone.make_aware(datetime.combine(fecha_bogota, datetime.min.time()))
+    fin_aware = inicio_aware + timedelta(days=1)
+    return (
+        inicio_aware.astimezone(timezone.utc).replace(tzinfo=None),
+        fin_aware.astimezone(timezone.utc).replace(tzinfo=None),
+    )
 
 
 def seleccionar_rol(request):
@@ -267,9 +284,8 @@ def _horarios_disponibles_paseador(id_paseador):
     horarios = []
     for h in horarios_crudos:
         mascotas_horario = mascotas_repository.resolver_lista(h.get('id_mascotas'), mascotas_por_id)
-        duenos_nombres = ', '.join(
-            duenos_por_id[did]['nombre'] for did in h.get('id_duenos', []) if did in duenos_por_id
-        )
+        duenos_horario = repository.resolver_lista(h.get('id_duenos'), duenos_por_id)
+        duenos_nombres = repository.nombres_unidos(duenos_horario)
         horarios.append({
             'id_paseo': str(h['_id']),
             'horario_desde': h['horario_desde'].replace(tzinfo=timezone.utc) if h.get('horario_desde') else None,
@@ -302,9 +318,8 @@ def bienvenida_paseador(request):
         mascotas_por_id = mascotas_repository.obtener_varias_por_id(paseo.get('id_mascotas', []))
         mascotas_paseo = mascotas_repository.resolver_lista(paseo.get('id_mascotas'), mascotas_por_id)
         duenos_por_id = repository.obtener_varios_por_id(paseo.get('id_duenos', []))
-        duenos_nombres = ', '.join(
-            duenos_por_id[did]['nombre'] for did in paseo.get('id_duenos', []) if did in duenos_por_id
-        )
+        duenos_paseo = repository.resolver_lista(paseo.get('id_duenos'), duenos_por_id)
+        duenos_nombres = repository.nombres_unidos(duenos_paseo)
         fotos_existentes = {f['momento'] for f in paseo.get('fotos', [])}
         paseo_activo = {
             'id_paseo': str(paseo['_id']),
@@ -328,9 +343,19 @@ def bienvenida_paseador(request):
     if not paseo_activo:
         horarios_disponibles = _horarios_disponibles_paseador(id_paseador)
 
-    # --- estadisticas del paseador (solo datos que ya existen) ---
-    usuario = repository.obtener_por_id(id_paseador)
-    paseos_completados = paseos_repository.contar_completados_por_paseador(id_paseador)
+    # --- estadisticas del dashboard: actividad RECIENTE, no totales de
+    # siempre (esos ya estan en "Mi perfil" y en "Mis paseos") ---
+    # "Solicitudes hoy": un horario SIEMPRE se publica para HOY (ver
+    # PublicarHorarioForm) - el esquema no guarda una fecha de
+    # inscripcion por separado, asi que se cuenta el total de mascotas
+    # inscritas en los horarios de HOY (sea cual sea su estado actual).
+    hoy_bogota = django_timezone.localtime(django_timezone.now()).date()
+    inicio_hoy_utc, fin_hoy_utc = _rango_dia_utc(hoy_bogota)
+    paseos_hoy = paseos_repository.listar_por_paseador_con_horario_en(id_paseador, inicio_hoy_utc, fin_hoy_utc)
+    solicitudes_hoy = sum(len(p.get('id_mascotas', [])) for p in paseos_hoy)
+
+    hace_7_dias = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
+    paseos_esta_semana = paseos_repository.contar_historico_desde(id_paseador, hace_7_dias)
 
     return render(request, 'usuarios/bienvenida_paseador.html', {
         'nombre': request.session.get('nombre'),
@@ -338,8 +363,8 @@ def bienvenida_paseador(request):
         'incidente_form': incidente_form,
         'horarios_disponibles': horarios_disponibles,
         'form_horario': form_horario,
-        'paseos_completados': paseos_completados,
-        'calificacion_promedio': usuario.get('calificacion_promedio'),
+        'solicitudes_hoy': solicitudes_hoy,
+        'paseos_esta_semana': paseos_esta_semana,
     })
 
 

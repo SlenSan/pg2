@@ -15,6 +15,7 @@ from django.utils import timezone as django_timezone
 from django.views.decorators.http import require_POST
 
 from calificaciones import repository as calificaciones_repository
+from coordenadas import repository as coordenadas_repository
 from core.media import ErrorSubidaImagen, subir_imagen
 from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
@@ -435,29 +436,78 @@ def subir_foto(request, id_paseo, momento):
 @requiere_paseador
 def historial_paseador(request):
     """
+    "Mis paseos" del paseador - reemplaza la pantalla vieja "Historial de
+    paseos" (misma vista/URL, rediseñada; no hay una pantalla duplicada
+    conviviendo). Solo paseos 'historico', mismo criterio que ya usa
+    historial() del lado del dueño (con foto/duracion/calificacion no
+    tiene sentido mostrar horarios 'disponible'/'en_vivo' aca - esos ya
+    se ven en el propio dashboard del paseador).
+
     El paseador SI puede ver todas las mascotas y todos los dueños de
     cada paseo propio (a diferencia del lado del dueño, no hay nada que
     filtrar por privacidad aca - el paseador ya los llevo a todos juntos
     en el mismo paseo).
     """
     id_paseador = ObjectId(request.session['id_usuario'])
-    paseos = repository.listar_por_paseador(id_paseador)
+    paseos = [p for p in repository.listar_por_paseador(id_paseador) if p['estado'] == 'historico']
+
     duenos_por_id = usuarios_repository.obtener_varios_por_id(
         [did for p in paseos for did in p.get('id_duenos', [])]
     )
     mascotas_por_id = mascotas_repository.obtener_varias_por_id(
         [mid for p in paseos for mid in p.get('id_mascotas', [])]
     )
-    items = [
-        {
+    # Con multi-dueño (ver CLAUDE.md, "Corrección de alcance 2026-09-25"),
+    # un mismo paseo puede tener VARIAS calificaciones independientes (una
+    # por dueño) - se agrupan por id_paseo para promediarlas por tarjeta,
+    # en vez de asumir "a lo sumo una" como antes del cambio.
+    calificaciones_por_paseo = {}
+    for c in calificaciones_repository.listar_por_paseos([p['_id'] for p in paseos]):
+        calificaciones_por_paseo.setdefault(c['id_paseo'], []).append(c)
+
+    ahora = datetime.now(dt_timezone.utc).replace(tzinfo=None)
+    items = []
+    for p in paseos:
+        duracion_min = None
+        if p.get('hora_inicio') and p.get('hora_fin'):
+            duracion_min = int((p['hora_fin'] - p['hora_inicio']).total_seconds() // 60)
+        mascotas_paseo = mascotas_repository.resolver_lista(p.get('id_mascotas'), mascotas_por_id)
+        duenos_paseo = usuarios_repository.resolver_lista(p.get('id_duenos'), duenos_por_id)
+        calificaciones_paseo = calificaciones_por_paseo.get(p['_id'], [])
+        puntuacion_promedio = (
+            round(sum(c['puntuacion'] for c in calificaciones_paseo) / len(calificaciones_paseo), 1)
+            if calificaciones_paseo else None
+        )
+        items.append({
+            'id_paseo': str(p['_id']),
             'paseo': p,
-            'duenos_nombres': ', '.join(
-                duenos_por_id[did]['nombre'] for did in p.get('id_duenos', []) if did in duenos_por_id
-            ),
-            'mascotas_nombres': mascotas_repository.nombres_unidos(
-                mascotas_repository.resolver_lista(p.get('id_mascotas'), mascotas_por_id)
-            ),
-        }
-        for p in paseos
-    ]
-    return render(request, 'paseos/historial_paseador.html', {'items': items})
+            # pymongo devuelve hora_inicio naive (UTC) - se marca
+            # explicitamente antes de pasarlo al filtro `|date` de Django
+            # (mismo bug ya resuelto varias veces en este proyecto, ver
+            # CLAUDE.md).
+            'hora_inicio_utc': p['hora_inicio'].replace(tzinfo=dt_timezone.utc) if p.get('hora_inicio') else None,
+            'mascota_avatar': mascotas_paseo[0] if mascotas_paseo else None,
+            'mascotas_nombres': mascotas_repository.nombres_unidos(mascotas_paseo),
+            'duenos_nombres': usuarios_repository.nombres_unidos(duenos_paseo),
+            'duracion_min': duracion_min,
+            'puntuacion_promedio': puntuacion_promedio,
+            # None si el paseo tiene menos de 2 puntos GPS - ver
+            # coordenadas.repository.distancia_recorrida_km().
+            'distancia_km': coordenadas_repository.distancia_recorrida_km(p['_id']),
+        })
+
+    # --- estadisticas del encabezado (totales "de siempre", a diferencia
+    # de las del dashboard - ver bienvenida_paseador()) ---
+    paseos_completados = repository.contar_completados_por_paseador(id_paseador)
+    paseos_este_mes = sum(
+        1 for p in paseos
+        if p.get('hora_fin') and p['hora_fin'].year == ahora.year and p['hora_fin'].month == ahora.month
+    )
+    usuario = usuarios_repository.obtener_por_id(id_paseador)
+
+    return render(request, 'paseos/historial_paseador.html', {
+        'items': items,
+        'paseos_completados': paseos_completados,
+        'paseos_este_mes': paseos_este_mes,
+        'calificacion_promedio': usuario.get('calificacion_promedio'),
+    })

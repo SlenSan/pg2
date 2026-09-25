@@ -73,6 +73,29 @@ def actualizar_perfil_paseador(*, id_usuario, telefono, descripcion, foto_perfil
     )
 
 
+def resolver_lista(ids_usuario, usuarios_por_id):
+    """
+    Lista ORDENADA de documentos de usuario a partir de una lista de ids
+    (p.ej. paseos.id_duenos) y un mapa {ObjectId: usuario} ya resuelto
+    (ver obtener_varios_por_id) - un usuario que ya no exista se omite en
+    vez de romper la pantalla. Mismo patron que
+    mascotas.repository.resolver_lista(), para los mismos casos donde un
+    paseo tiene varios dueños (ver CLAUDE.md, "Corrección de alcance
+    2026-09-25").
+    """
+    return [usuarios_por_id[uid] for uid in (ids_usuario or []) if uid in usuarios_por_id]
+
+
+def nombres_unidos(usuarios):
+    """
+    'Andrea, Carlos' (o '' si la lista esta vacia) a partir de una lista
+    de documentos de usuario. Mismo patron que
+    mascotas.repository.nombres_unidos() - una sola forma de unir nombres
+    en todo el proyecto, sea de mascotas o de dueños.
+    """
+    return ', '.join(u['nombre'] for u in usuarios)
+
+
 def a_json(usuario):
     """Representacion de un usuario segura para exponer por la API (sin la contrasena)."""
     data = {k: v for k, v in usuario.items() if k != 'contrasena'}
