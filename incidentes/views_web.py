@@ -116,15 +116,22 @@ def reportar_incidente(request, id_paseo):
 
     paseos_repository.marcar_emergencia(paseo['_id'])
 
-    if paseo.get('id_dueno'):
-        notificaciones_repository.crear(
-            id_usuario=paseo['id_dueno'],
-            tipo='emergencia',
-            mensaje=(
-                f'{request.session.get("nombre")} reportó un incidente '
-                f'({form.cleaned_data["tipo"]}) durante el paseo.'
-            ),
-        )
+    # Un incidente durante el paseo es relevante para TODOS los dueños que
+    # tienen una mascota en ese mismo paseo (hasta 8, Ley Kiara - ver
+    # CLAUDE.md, "Corrección de alcance 2026-09-25"), afecte o no
+    # especificamente a la suya - mismo criterio que ya usa
+    # lista_incidentes() del lado del dueño, que muestra TODOS los
+    # incidentes de un paseo propio, no solo los de su propia mascota.
+    if paseo.get('id_duenos'):
+        for id_dueno in paseo['id_duenos']:
+            notificaciones_repository.crear(
+                id_usuario=id_dueno,
+                tipo='emergencia',
+                mensaje=(
+                    f'{request.session.get("nombre")} reportó un incidente '
+                    f'({form.cleaned_data["tipo"]}) durante el paseo.'
+                ),
+            )
         repository.marcar_notificado(incidente['_id'])
 
     messages.success(request, 'El incidente quedó registrado. El dueño ya fue notificado.')

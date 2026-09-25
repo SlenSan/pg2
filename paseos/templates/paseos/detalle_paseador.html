@@ -72,20 +72,34 @@
         {% else %}
         {% for item in horarios %}
         <div class="p-3 rounded-3 {% if not forloop.last %}mb-3{% endif %}" style="background-color: var(--color-muted);">
-          <p class="fw-bold mb-3">
+          <p class="fw-bold mb-1">
             <i class="bi bi-clock"></i>
             {{ item.horario.horario_desde|time:"H:i" }} - {{ item.horario.horario_hasta|time:"H:i" }}
+          </p>
+          <p class="text-muted small mb-3">
+            Quedan {{ item.cupos_restantes }} cupo{{ item.cupos_restantes|pluralize }} libre{{ item.cupos_restantes|pluralize }}
+            de {{ item.cupos_totales }} en este paseo.
           </p>
           <form method="post" action="{% url 'paseos:inscribir_en_horario' id_paseador item.id_paseo %}" novalidate>
             {% csrf_token %}
             <div class="mb-2">
               <label class="form-label">{{ item.form.ids_mascota.label }}</label>
-              {% for casilla in item.form.ids_mascota.subwidgets %}
-              <div class="form-check">
-                {{ casilla.tag }}
-                <label class="form-check-label" for="{{ casilla.id_for_label }}">{{ casilla.choice_label }}</label>
+              {% comment %}
+              data-cupos-restantes: el JS de abajo deshabilita casillas
+              nuevas una vez marcadas tantas como quepan en este horario -
+              evita que alguien marque de mas y se lleve el rechazo recien
+              al enviar (la validacion real, obligatoria, sigue siendo en
+              el servidor - ver inscribir_en_horario() - esto es solo para
+              no frustrar a quien ya marco mas de la cuenta sin saberlo).
+              {% endcomment %}
+              <div class="cupos-checkboxes" data-cupos-restantes="{{ item.cupos_restantes }}">
+                {% for casilla in item.form.ids_mascota.subwidgets %}
+                <div class="form-check">
+                  {{ casilla.tag }}
+                  <label class="form-check-label" for="{{ casilla.id_for_label }}">{{ casilla.choice_label }}</label>
+                </div>
+                {% endfor %}
               </div>
-              {% endfor %}
               {% for error in item.form.ids_mascota.errors %}
                 <div class="text-danger small mt-1">{{ error }}</div>
               {% endfor %}
@@ -99,4 +113,30 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  // Deshabilita casillas nuevas en cuanto se marcan tantas mascotas como
+  // cupos quedan en ESE horario (cada horario tiene su propio limite,
+  // ver data-cupos-restantes) - solo evita la frustracion de marcar de
+  // mas; la validacion real y obligatoria es del servidor
+  // (inscribir_en_horario()), esto no la reemplaza.
+  document.querySelectorAll('.cupos-checkboxes').forEach(function (contenedor) {
+    var maximo = parseInt(contenedor.dataset.cuposRestantes, 10) || 0;
+    var casillas = Array.prototype.slice.call(contenedor.querySelectorAll('input[type="checkbox"]'));
+
+    function actualizar() {
+      var marcadas = casillas.filter(function (c) { return c.checked; }).length;
+      casillas.forEach(function (c) {
+        c.disabled = !c.checked && marcadas >= maximo;
+      });
+    }
+
+    casillas.forEach(function (c) { c.addEventListener('change', actualizar); });
+    actualizar();
+  });
+})();
+</script>
 {% endblock %}

@@ -99,8 +99,17 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
 {
   _id: ObjectId,
   id_paseador: ObjectId,   // referencia a usuarios
-  id_mascotas: [ObjectId], // referencia a mascotas - una o varias del mismo dueño, juntas en el mismo paseo
-  id_dueno: ObjectId,      // referencia a usuarios
+  id_mascotas: [ObjectId], // referencia a mascotas - hasta 8 en total (Ley Kiara, ver Marco
+                            // Normativo del documento de grado), de uno o VARIOS dueños distintos
+  id_duenos: [ObjectId],   // referencia a usuarios - todos los dueños con al menos una mascota
+                            // inscrita en este paseo (no solo uno - ver "Corrección de alcance"
+                            // 2026-09-25 mas abajo). Se mantiene junto con id_mascotas en cada
+                            // inscripcion (no se deriva de mascotas.id_dueno en cada consulta)
+  acepta_inscripciones: Boolean, // true por defecto mientras estado="disponible" - el paseador lo
+                                   // pone en false para cerrar el horario a NUEVAS inscripciones
+                                   // sin expulsar a las mascotas ya inscritas (ver mas abajo).
+                                   // Tambien se cierra solo (implicitamente, sin tocar este campo)
+                                   // al llegar a 8 mascotas o al pasar a "en_vivo"/"historico"
   estado: String,          // "disponible" | "en_vivo" | "historico"
   fecha: Date,
   horario_desde: Date,     // horario PROPUESTO por el paseador (solo mientras estado="disponible")
@@ -112,6 +121,20 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
   fotos: [{ url: String, momento: String }]  // momento: "inicio"|"mitad"|"fin"
 }
 ```
+
+> **Corrección de alcance (2026-09-25):** un paseo YA NO es necesariamente
+> de un solo dueño. El paseador puede llevar hasta 8 mascotas juntas en el
+> mismo paseo (límite real de la Ley Kiara), de dueños distintos - un
+> horario publicado sigue abierto a nuevas inscripciones de OTROS dueños
+> hasta llegar a 8 mascotas en total o hasta que el paseador lo cierre
+> manualmente (`acepta_inscripciones: false`), lo que pase primero. Por
+> eso `id_dueno` (singular) pasó a `id_duenos` (array). Cualquier código o
+> documentación vieja que hable de "el dueño de este paseo" en singular es
+> un resto de la version anterior, no la decision vigente. Consecuencia
+> importante de privacidad: cualquier pantalla que le muestre a un dueño
+> "las mascotas de este paseo" debe filtrar `id_mascotas` a SOLO las de
+> ESE dueño (`mascotas.obtener_varias_por_id_y_dueno`), nunca las 8 - un
+> dueño no debe ver el nombre de una mascota ajena.
 
 ### `coordenadas_detalle`
 ```
@@ -158,6 +181,9 @@ Retención: ~90 días (trazabilidad y validación, no almacenamiento permanente 
   fecha: Date
 }
 ```
+Índice único **compuesto** `(id_paseo, id_dueno)`, no solo `id_paseo` - un
+paseo con varios dueños (ver `paseos.id_duenos` arriba) permite una
+calificación independiente POR dueño, no una sola para todo el paseo.
 
 ### `notificaciones`
 ```

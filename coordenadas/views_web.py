@@ -10,6 +10,8 @@ Vistas web:
 import json
 from datetime import datetime
 
+from bson import ObjectId
+from bson.errors import InvalidId
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
@@ -68,25 +70,57 @@ def _texto_incidente(id_paseo):
     return _TEXTO_INCIDENTE_GENERICO
 
 
-def _pendiente_calificar(paseo):
+def _pendiente_calificar(paseo, id_dueno):
     """
-    True si este paseo ya termino y el dueño TODAVIA no lo califico -
-    misma verificacion que ya usa calificaciones/views_web.py (un
-    documento en `calificaciones` por id_paseo) y la accion rapida
-    "Calificar paseo" del dashboard del dueño. Sirve tanto para la carga
-    inicial del mapa como para el polling, para que el aviso "El paseo
-    finalizó, califícalo ahora" aparezca solo cuando corresponde, en los
-    dos casos que pidio el dueño (pagina ya abierta cuando el paseador
-    termina, o entrando despues a un paseo recien terminado).
+    True si este paseo ya termino y ESTE dueño (uno de posiblemente
+    varios en el mismo paseo - ver CLAUDE.md, "Corrección de alcance
+    2026-09-25") TODAVIA no lo califico. Independiente de si otro dueño
+    del mismo paseo ya calificó - cada uno tiene su propia calificación
+    (indice unico compuesto id_paseo+id_dueno, ver calificaciones/
+    repository.py). Sirve tanto para la carga inicial del mapa como para
+    el polling, para que el aviso "El paseo finalizó, califícalo ahora"
+    aparezca solo cuando corresponde, en los dos casos que pidio el
+    dueño (pagina ya abierta cuando el paseador termina, o entrando
+    despues a un paseo recien terminado).
     """
-    return paseo['estado'] == 'historico' and calificaciones_repository.obtener_por_paseo(paseo['_id']) is None
+    if paseo['estado'] != 'historico':
+        return False
+    return calificaciones_repository.obtener_por_paseo_y_dueno(paseo['_id'], id_dueno) is None
 
 
-def _paseo_del_dueno_o_none(request, id_paseo):
+def _paseo_de_dueno_o_none(request, id_paseo):
+    """
+    El paseo, solo si el dueño en sesion es UNO de los (posiblemente
+    varios) dueños que tienen mascotas inscritas ahi - ver CLAUDE.md,
+    "Corrección de alcance 2026-09-25". ObjectId(...) en vez de comparar
+    strings porque ahora se busca membresía en una lista de ObjectId, no
+    una igualdad de un solo campo.
+    """
     paseo = paseos_repository.obtener_por_id(id_paseo)
-    if not paseo or str(paseo.get('id_dueno')) != request.session.get('id_usuario'):
+    if not paseo:
+        return None
+    try:
+        oid_dueno = ObjectId(request.session.get('id_usuario'))
+    except (InvalidId, TypeError):
+        return None
+    if oid_dueno not in paseo.get('id_duenos', []):
         return None
     return paseo
+
+
+def _mascotas_del_dueno_en_paseo(paseo, id_dueno):
+    """
+    SOLO las mascotas de ESTE dueño dentro del paseo - nunca
+    paseo['id_mascotas'] completo, que puede incluir mascotas de OTROS
+    dueños (hasta 8 en total, Ley Kiara). Mostrarle a un dueño el nombre
+    de una mascota ajena es un problema de privacidad, no solo estetico -
+    ver CLAUDE.md, "Corrección de alcance 2026-09-25".
+    """
+    mascotas = mascotas_repository.obtener_varias_por_id_y_dueno(paseo.get('id_mascotas', []), id_dueno)
+    # Se reordenan segun el orden original en id_mascotas (obtener_varias_por_id_y_dueno
+    # no garantiza orden) para que se vean siempre en el mismo orden que las inscribio.
+    por_id = {m['_id']: m for m in mascotas}
+    return [por_id[mid] for mid in paseo.get('id_mascotas', []) if mid in por_id]
 
 
 def _fecha_iso_utc(valor):
@@ -102,12 +136,13 @@ def _fecha_iso_utc(valor):
 
 @requiere_dueno
 def mapa_paseo(request, id_paseo):
-    paseo = _paseo_del_dueno_o_none(request, id_paseo)
+    paseo = _paseo_de_dueno_o_none(request, id_paseo)
     if not paseo:
         return redirect('paseos:mis_paseos')
 
-    mascotas_por_id = mascotas_repository.obtener_varias_por_id(paseo.get('id_mascotas', []))
-    mascotas = mascotas_repository.resolver_lista(paseo.get('id_mascotas'), mascotas_por_id)
+    id_dueno = request.session['id_usuario']
+    # SOLO las mascotas de ESTE dueño - ver _mascotas_del_dueno_en_paseo().
+    mascotas = _mascotas_del_dueno_en_paseo(paseo, id_dueno)
     paseador = None
     if paseo.get('id_paseador'):
         paseador = usuarios_repository.obtener_por_id(paseo['id_paseador'])
@@ -126,16 +161,17 @@ def mapa_paseo(request, id_paseo):
         # Aviso "El paseo finalizó, califícalo ahora" - distinto del
         # banner de incidente de arriba (pueden convivir), ver
         # _pendiente_calificar().
-        'pendiente_calificar': _pendiente_calificar(paseo),
+        'pendiente_calificar': _pendiente_calificar(paseo, id_dueno),
     })
 
 
 @requiere_dueno
 def coordenadas_de_paseo(request, id_paseo):
-    paseo = _paseo_del_dueno_o_none(request, id_paseo)
+    paseo = _paseo_de_dueno_o_none(request, id_paseo)
     if not paseo:
         return JsonResponse({'error': 'No autorizado.'}, status=403)
 
+    id_dueno = request.session['id_usuario']
     puntos = repository.listar_por_paseo(id_paseo)
     return JsonResponse({
         'estado': paseo['estado'],
@@ -149,12 +185,12 @@ def coordenadas_de_paseo(request, id_paseo):
         # notificaciones del navbar en vez de sumar una aparte (ver
         # mapa.html, que por eso deja vacio el poller generico de
         # base.html solo mientras esta en ese estado).
-        'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, paseo['id_dueno']),
+        'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, id_dueno),
         # Misma logica que mapa_paseo() - si el dueño ya tenia esta
         # pantalla abierta cuando el paseador finalizo, el polling es lo
         # que hace aparecer el aviso de calificar sin que tenga que
         # recargar (ver _pendiente_calificar()).
-        'pendiente_calificar': _pendiente_calificar(paseo),
+        'pendiente_calificar': _pendiente_calificar(paseo, id_dueno),
     })
 
 

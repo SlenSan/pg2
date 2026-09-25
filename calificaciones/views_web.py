@@ -1,5 +1,6 @@
 """Vista web (dueño): calificar un paseo ya finalizado (RF13)."""
 
+from bson import ObjectId
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from pymongo.errors import DuplicateKeyError
@@ -15,12 +16,15 @@ from usuarios.decorators import requiere_dueno
 @requiere_dueno
 def calificar_paseo(request, id_paseo):
     paseo = paseos_repository.obtener_por_id(id_paseo)
-    es_dueno_del_paseo = paseo and str(paseo.get('id_dueno')) == request.session['id_usuario']
+    id_dueno = request.session['id_usuario']
+    # Este dueño debe ser UNO de los (posiblemente varios) dueños del
+    # paseo - ver CLAUDE.md, "Corrección de alcance 2026-09-25".
+    es_dueno_del_paseo = paseo and ObjectId(id_dueno) in paseo.get('id_duenos', [])
     if not es_dueno_del_paseo or paseo['estado'] != 'historico':
         messages.error(request, 'Este paseo no se puede calificar.')
         return redirect('paseos:mis_paseos')
 
-    if repository.obtener_por_paseo(id_paseo):
+    if repository.obtener_por_paseo_y_dueno(id_paseo, id_dueno):
         messages.info(request, 'Ya calificaste este paseo.')
         return redirect('paseos:mis_paseos')
 

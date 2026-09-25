@@ -8,12 +8,22 @@ from bson.errors import InvalidId
 from core.mongo import get_db
 
 
-def obtener_por_paseo(id_paseo):
+def obtener_por_paseo_y_dueno(id_paseo, id_dueno):
+    """
+    La calificacion de ESTE dueño para este paseo, o None. Un paseo puede
+    tener varios dueños (hasta 8 mascotas, Ley Kiara - ver CLAUDE.md,
+    "Corrección de alcance 2026-09-25"), cada uno calificando su propia
+    experiencia por separado (indice unico compuesto id_paseo+id_dueno,
+    ver core/management/commands/crear_indices.py) - "¿ya calificó
+    ALGUIEN este paseo?" ya no es la pregunta correcta en ningun lado,
+    solo "¿ya calificó ESTE dueño?".
+    """
     try:
-        oid = ObjectId(id_paseo)
+        oid_paseo = ObjectId(id_paseo)
+        oid_dueno = ObjectId(id_dueno)
     except (InvalidId, TypeError):
         return None
-    return get_db().calificaciones.find_one({'id_paseo': oid})
+    return get_db().calificaciones.find_one({'id_paseo': oid_paseo, 'id_dueno': oid_dueno})
 
 
 def listar_por_paseador(id_paseador):

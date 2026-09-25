@@ -20,6 +20,7 @@ from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository
 from paseos.forms import InscribirMascotaForm, PublicarHorarioForm, SubirFotoPaseoForm
+from paseos.repository import MAXIMO_MASCOTAS_POR_PASEO
 from usuarios import repository as usuarios_repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
 
@@ -64,7 +65,7 @@ def lista_disponibles(request):
     repetido) - se agrupa por paseador, y el detalle de cada horario se
     ve al entrar a su perfil.
     """
-    paseos = repository.listar_disponibles_sin_asignar()
+    paseos = repository.listar_disponibles_con_cupo()
     paseadores_por_id = usuarios_repository.obtener_varios_por_id(
         [p['id_paseador'] for p in paseos]
     )
@@ -98,7 +99,11 @@ def detalle_paseador(request, id_paseador):
     horarios = [
         _marcar_utc(h)
         for h in repository.listar_disponibles_de_paseador(oid_paseador)
-        if not h.get('id_mascotas')
+        # "Tiene cupo" (ver CLAUDE.md, "Corrección de alcance 2026-09-25"):
+        # ya no es "esta vacio" - un horario con 3/8 mascotas de OTRO dueño
+        # sigue apareciendo aca, mientras el paseador no lo haya cerrado y
+        # no haya llegado al maximo.
+        if h.get('acepta_inscripciones', True) and len(h.get('id_mascotas', [])) < MAXIMO_MASCOTAS_POR_PASEO
     ]
     if not horarios:
         messages.error(request, 'Este paseador no tiene horarios disponibles en este momento.')
@@ -121,12 +126,19 @@ def detalle_paseador(request, id_paseador):
     items_horario = []
     for h in horarios:
         id_paseo = str(h['_id'])
+        cupos_restantes = MAXIMO_MASCOTAS_POR_PASEO - len(h.get('id_mascotas', []))
         # prefix=id_paseo: hay un InscribirMascotaForm por horario en la
         # misma pagina, y sin un prefijo distinto todos terminarian con
         # los mismos ids="id_ids_mascota_N" (HTML invalido, labels rotos).
         items_horario.append({
             'id_paseo': id_paseo,
             'horario': h,
+            'cupos_restantes': cupos_restantes,
+            'cupos_totales': MAXIMO_MASCOTAS_POR_PASEO,
+            # data-cupos-restantes en la plantilla: el JS deshabilita
+            # casillas nuevas una vez marcadas tantas como quepan, para
+            # que nadie termine seleccionando de mas y se lleve el
+            # rechazo recien al enviar (ver inscribir_en_horario()).
             'form': InscribirMascotaForm(mascotas=mis_mascotas, prefix=id_paseo),
         })
 
@@ -174,6 +186,24 @@ def inscribir_en_horario(request, id_paseador, id_paseo):
         messages.error(request, 'Una o más mascotas no son válidas.')
         return redirect('paseos:detalle_paseador', id_paseador=id_paseador)
 
+    # Validaciones "amigables" ANTES de intentar el update atomico, para
+    # poder darle al dueño un mensaje preciso (cuantos cupos quedaban) en
+    # vez del generico "ya no esta disponible" - inscribir_mascotas()
+    # sigue siendo la fuente de verdad real (se valida ahi tambien, de
+    # forma atomica, por si el cupo cambio justo entre este chequeo y el
+    # POST - condicion de carrera).
+    if not paseo.get('acepta_inscripciones', True):
+        messages.error(request, 'Este horario ya no acepta nuevas inscripciones.')
+        return redirect('paseos:detalle_paseador', id_paseador=id_paseador)
+    cupos_restantes = MAXIMO_MASCOTAS_POR_PASEO - len(paseo.get('id_mascotas', []))
+    if len(ids_mascota) > cupos_restantes:
+        messages.error(
+            request,
+            f'Solo quedan {cupos_restantes} cupo{"s" if cupos_restantes != 1 else ""} '
+            f'libre{"s" if cupos_restantes != 1 else ""} en este horario - elige como máximo esa cantidad.',
+        )
+        return redirect('paseos:detalle_paseador', id_paseador=id_paseador)
+
     asignado = repository.inscribir_mascotas(
         id_paseo=id_paseo,
         id_dueno=request.session['id_usuario'],
@@ -194,15 +224,24 @@ def inscribir_en_horario(request, id_paseador, id_paseo):
 
 @requiere_dueno
 def mis_paseos(request):
-    paseos = repository.listar_por_dueno(request.session['id_usuario'])
+    id_dueno = request.session['id_usuario']
+    paseos = repository.listar_por_dueno(id_dueno)
     paseadores_por_id = usuarios_repository.obtener_varios_por_id(
         [p['id_paseador'] for p in paseos]
     )
-    mascotas_por_id = mascotas_repository.obtener_varias_por_id(
-        [mid for p in paseos for mid in p.get('id_mascotas', [])]
-    )
+    # SOLO las mascotas propias de este dueño (nunca obtener_varias_por_id
+    # con id_mascotas completo) - un paseo puede tener mascotas de OTROS
+    # dueños tambien (hasta 8, Ley Kiara). resolver_lista() ya se encarga
+    # de quedarse solo con los ids presentes en este mapa, en el orden
+    # original - ver CLAUDE.md, "Corrección de alcance 2026-09-25".
+    mis_mascotas_por_id = {m['_id']: m for m in mascotas_repository.listar_por_dueno(id_dueno)}
+    # Igual con las calificaciones: un paseo compartido puede tener una
+    # calificacion de OTRO dueño sin que este haya calificado todavia -
+    # "calificado" es siempre relativo a ESTE dueño, nunca "algun dueño".
+    oid_dueno = ObjectId(id_dueno)
     ids_calificados = {
         c['id_paseo'] for c in calificaciones_repository.listar_por_paseos([p['_id'] for p in paseos])
+        if c['id_dueno'] == oid_dueno
     }
     items = [
         {
@@ -210,7 +249,7 @@ def mis_paseos(request):
             'paseo': p,
             'paseador': paseadores_por_id.get(p['id_paseador']),
             'mascotas_nombres': mascotas_repository.nombres_unidos(
-                mascotas_repository.resolver_lista(p.get('id_mascotas'), mascotas_por_id)
+                mascotas_repository.resolver_lista(p.get('id_mascotas'), mis_mascotas_por_id)
             ),
             'calificado': p['_id'] in ids_calificados,
         }
@@ -227,16 +266,20 @@ def historial(request):
     muestra cualquier estado y sirve para rastrear un paseo agendado o
     en curso - se deja intacta esa vista, esta es nueva).
     """
-    paseos = [p for p in repository.listar_por_dueno(request.session['id_usuario']) if p['estado'] == 'historico']
+    id_dueno = request.session['id_usuario']
+    paseos = [p for p in repository.listar_por_dueno(id_dueno) if p['estado'] == 'historico']
     paseadores_por_id = usuarios_repository.obtener_varios_por_id(
         [p['id_paseador'] for p in paseos if p.get('id_paseador')]
     )
-    mascotas_por_id = mascotas_repository.obtener_varias_por_id(
-        [mid for p in paseos for mid in p.get('id_mascotas', [])]
-    )
+    # SOLO las mascotas propias de este dueño - mismo motivo que mis_paseos().
+    mis_mascotas_por_id = {m['_id']: m for m in mascotas_repository.listar_por_dueno(id_dueno)}
+    # Idem la calificacion: la de ESTE dueño, no la de cualquiera que haya
+    # calificado el mismo paseo compartido.
+    oid_dueno = ObjectId(id_dueno)
     calificaciones_por_paseo = {
         c['id_paseo']: c
         for c in calificaciones_repository.listar_por_paseos([p['_id'] for p in paseos])
+        if c['id_dueno'] == oid_dueno
     }
 
     items = []
@@ -245,7 +288,7 @@ def historial(request):
         if p.get('hora_inicio') and p.get('hora_fin'):
             duracion_min = int((p['hora_fin'] - p['hora_inicio']).total_seconds() // 60)
         calificacion = calificaciones_por_paseo.get(p['_id'])
-        mascotas_paseo = mascotas_repository.resolver_lista(p.get('id_mascotas'), mascotas_por_id)
+        mascotas_paseo = mascotas_repository.resolver_lista(p.get('id_mascotas'), mis_mascotas_por_id)
         items.append({
             'id_paseo': str(p['_id']),
             'paseo': p,
@@ -291,20 +334,20 @@ def publicar_disponibilidad(request):
 @requiere_paseador
 def cancelar_disponibilidad(request, id_paseo):
     """
-    Boton "Despublicar" de UN horario especifico de la lista del
-    dashboard (ya no hay un solo horario/switch - puede haber varios).
-    Solo funciona mientras ningun dueño haya inscrito una mascota todavia
-    - la interfaz ya no ofrece esta opcion una vez hay una solicitud
-    pendiente, pero igual se valida aca por si un dueño alcanzo a
-    inscribir justo antes de que este POST llegara (condicion de carrera).
+    Boton "Despublicar"/"Cerrar a nuevas inscripciones" de UN horario
+    especifico de la lista del dashboard. Funciona en cualquier momento,
+    tenga o no mascotas inscritas ya (ver repository.cancelar_disponibilidad
+    para el detalle de los dos comportamientos - se borra si esta vacio,
+    o se cierra a nuevas inscripciones sin tocar lo ya inscrito si no).
     """
     id_paseador = ObjectId(request.session['id_usuario'])
     paseo = repository.cancelar_disponibilidad(id_paseo=id_paseo, id_paseador=id_paseador)
     if not paseo:
-        messages.error(
-            request,
-            'No se pudo despublicar: un dueño ya inscribió una mascota en este paseo.',
-        )
+        messages.error(request, 'No se pudo despublicar: este horario ya no está disponible.')
+    elif paseo.get('id_mascotas'):
+        messages.success(request, 'Este horario ya no acepta nuevas inscripciones.')
+    else:
+        messages.success(request, 'Horario despublicado correctamente.')
     return redirect('usuarios:bienvenida_paseador')
 
 
@@ -321,11 +364,15 @@ def iniciar_paseo(request, id_paseo):
             'o ya tienes otro paseo en curso.',
         )
     else:
-        notificaciones_repository.crear(
-            id_usuario=paseo['id_dueno'],
-            tipo='inicio_paseo',
-            mensaje=f'{request.session.get("nombre")} inició el paseo de tu mascota.',
-        )
+        # Un paseo por notificacion, uno POR CADA dueño involucrado (hasta
+        # 8 mascotas, posiblemente de varios dueños - ver CLAUDE.md,
+        # "Corrección de alcance 2026-09-25"), no solo al primero.
+        for id_dueno in paseo.get('id_duenos', []):
+            notificaciones_repository.crear(
+                id_usuario=id_dueno,
+                tipo='inicio_paseo',
+                mensaje=f'{request.session.get("nombre")} inició el paseo de tu mascota.',
+            )
     return redirect('usuarios:bienvenida_paseador')
 
 
@@ -338,11 +385,12 @@ def finalizar_paseo(request, id_paseo):
     if not paseo:
         messages.error(request, 'No se pudo finalizar el paseo: ya no estaba en curso.')
     else:
-        notificaciones_repository.crear(
-            id_usuario=paseo['id_dueno'],
-            tipo='fin_paseo',
-            mensaje=f'{request.session.get("nombre")} finalizó el paseo de tu mascota.',
-        )
+        for id_dueno in paseo.get('id_duenos', []):
+            notificaciones_repository.crear(
+                id_usuario=id_dueno,
+                tipo='fin_paseo',
+                mensaje=f'{request.session.get("nombre")} finalizó el paseo de tu mascota.',
+            )
     return redirect('usuarios:bienvenida_paseador')
 
 
@@ -386,10 +434,16 @@ def subir_foto(request, id_paseo, momento):
 
 @requiere_paseador
 def historial_paseador(request):
+    """
+    El paseador SI puede ver todas las mascotas y todos los dueños de
+    cada paseo propio (a diferencia del lado del dueño, no hay nada que
+    filtrar por privacidad aca - el paseador ya los llevo a todos juntos
+    en el mismo paseo).
+    """
     id_paseador = ObjectId(request.session['id_usuario'])
     paseos = repository.listar_por_paseador(id_paseador)
     duenos_por_id = usuarios_repository.obtener_varios_por_id(
-        [p['id_dueno'] for p in paseos if p.get('id_dueno')]
+        [did for p in paseos for did in p.get('id_duenos', [])]
     )
     mascotas_por_id = mascotas_repository.obtener_varias_por_id(
         [mid for p in paseos for mid in p.get('id_mascotas', [])]
@@ -397,7 +451,9 @@ def historial_paseador(request):
     items = [
         {
             'paseo': p,
-            'dueno': duenos_por_id.get(p.get('id_dueno')),
+            'duenos_nombres': ', '.join(
+                duenos_por_id[did]['nombre'] for did in p.get('id_duenos', []) if did in duenos_por_id
+            ),
             'mascotas_nombres': mascotas_repository.nombres_unidos(
                 mascotas_repository.resolver_lista(p.get('id_mascotas'), mascotas_por_id)
             ),

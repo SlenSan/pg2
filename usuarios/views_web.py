@@ -134,7 +134,15 @@ def _paseo_activo_dueno(id_dueno, paseos_dueno=None):
     if not paseo_en_vivo:
         return None
 
-    mascotas_por_id = mascotas_repository.obtener_varias_por_id(paseo_en_vivo.get('id_mascotas', []))
+    # SOLO las mascotas de ESTE dueño - el paseo en vivo puede llevar
+    # mascotas de OTROS dueños tambien (hasta 8, Ley Kiara - ver
+    # CLAUDE.md, "Corrección de alcance 2026-09-25"); el banner del
+    # dashboard no debe mostrarle a un dueño el nombre de una mascota
+    # ajena.
+    mascotas_por_id = {
+        m['_id']: m
+        for m in mascotas_repository.obtener_varias_por_id_y_dueno(paseo_en_vivo.get('id_mascotas', []), id_dueno)
+    }
     mascotas = mascotas_repository.resolver_lista(paseo_en_vivo.get('id_mascotas'), mascotas_por_id)
     paseador = None
     if paseo_en_vivo.get('id_paseador'):
@@ -184,8 +192,13 @@ def bienvenida(request):
 
     # --- accion rapida "Calificar paseo": el historico mas reciente sin calificar ---
     ids_historico = [p['_id'] for p in paseos_dueno if p['estado'] == 'historico']
+    # "Calificado" es siempre relativo a ESTE dueño (id_dueno=oid_dueno) -
+    # un paseo compartido (hasta 8 mascotas, Ley Kiara) puede tener la
+    # calificacion de OTRO dueño sin que este haya calificado todavia.
+    oid_dueno = ObjectId(id_dueno)
     ids_calificados = {
         c['id_paseo'] for c in calificaciones_repository.listar_por_paseos(ids_historico)
+        if c['id_dueno'] == oid_dueno
     }
     id_paseo_sin_calificar = next((pid for pid in ids_historico if pid not in ids_calificados), None)
 
@@ -234,16 +247,19 @@ def estado_bienvenida(request):
 
 def _horarios_disponibles_paseador(id_paseador):
     """
-    Horarios 'disponible' de este paseador, con nombre de dueño/mascotas ya
-    resueltos para la plantilla (los que ya tienen mascota(s) inscrita(s)
-    son la tarjeta "Nueva solicitud"; los demas, "esperando dueño"). Usada
-    tanto por bienvenida_paseador() (carga completa) como por
+    Horarios 'disponible' de este paseador, con nombre de dueños/mascotas
+    ya resueltos para la plantilla (los que ya tienen mascota(s)
+    inscrita(s) son la tarjeta "Nueva solicitud"; los demas, "esperando
+    dueño"). El paseador ve TODOS los dueños/mascotas de cada horario sin
+    filtrar (a diferencia del lado del dueño, no hay nada que ocultarle -
+    el se los va a llevar a todos juntos). Usada tanto por
+    bienvenida_paseador() (carga completa) como por
     estado_bienvenida_paseador() (polling), para que ambas calculen
     exactamente lo mismo - mismo patron que _paseo_activo_dueno().
     """
     horarios_crudos = paseos_repository.listar_disponibles_de_paseador(id_paseador)
     duenos_por_id = repository.obtener_varios_por_id(
-        [h['id_dueno'] for h in horarios_crudos if h.get('id_dueno')]
+        [did for h in horarios_crudos for did in h.get('id_duenos', [])]
     )
     mascotas_por_id = mascotas_repository.obtener_varias_por_id(
         [mid for h in horarios_crudos for mid in h.get('id_mascotas', [])]
@@ -251,13 +267,18 @@ def _horarios_disponibles_paseador(id_paseador):
     horarios = []
     for h in horarios_crudos:
         mascotas_horario = mascotas_repository.resolver_lista(h.get('id_mascotas'), mascotas_por_id)
-        dueno = duenos_por_id.get(h.get('id_dueno'))
+        duenos_nombres = ', '.join(
+            duenos_por_id[did]['nombre'] for did in h.get('id_duenos', []) if did in duenos_por_id
+        )
         horarios.append({
             'id_paseo': str(h['_id']),
             'horario_desde': h['horario_desde'].replace(tzinfo=timezone.utc) if h.get('horario_desde') else None,
             'horario_hasta': h['horario_hasta'].replace(tzinfo=timezone.utc) if h.get('horario_hasta') else None,
             'mascota_nombre': mascotas_repository.nombres_unidos(mascotas_horario) or None,
-            'dueno_nombre': dueno['nombre'] if dueno else None,
+            'dueno_nombre': duenos_nombres or None,
+            'cupos_ocupados': len(h.get('id_mascotas', [])),
+            'cupos_totales': paseos_repository.MAXIMO_MASCOTAS_POR_PASEO,
+            'acepta_inscripciones': h.get('acepta_inscripciones', True),
         })
     return horarios
 
@@ -276,17 +297,20 @@ def bienvenida_paseador(request):
     paseo_activo = None
     incidente_form = None
     if paseo:
+        # El paseador SI ve todas las mascotas/dueños de su propio paseo en
+        # vivo, sin filtrar - se los esta llevando a todos juntos.
         mascotas_por_id = mascotas_repository.obtener_varias_por_id(paseo.get('id_mascotas', []))
         mascotas_paseo = mascotas_repository.resolver_lista(paseo.get('id_mascotas'), mascotas_por_id)
-        dueno = None
-        if paseo.get('id_dueno'):
-            dueno = repository.obtener_por_id(paseo['id_dueno'])
+        duenos_por_id = repository.obtener_varios_por_id(paseo.get('id_duenos', []))
+        duenos_nombres = ', '.join(
+            duenos_por_id[did]['nombre'] for did in paseo.get('id_duenos', []) if did in duenos_por_id
+        )
         fotos_existentes = {f['momento'] for f in paseo.get('fotos', [])}
         paseo_activo = {
             'id_paseo': str(paseo['_id']),
             'estado': paseo['estado'],
             'mascota_nombre': mascotas_repository.nombres_unidos(mascotas_paseo) or None,
-            'dueno_nombre': dueno['nombre'] if dueno else None,
+            'dueno_nombre': duenos_nombres or None,
             'fotos_pendientes': [
                 m for m in paseos_repository.MOMENTOS_FOTO_VALIDOS if m not in fotos_existentes
             ],

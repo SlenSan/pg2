@@ -16,6 +16,14 @@ from core.mongo import get_db
 
 MOMENTOS_FOTO_VALIDOS = ('inicio', 'mitad', 'fin')
 
+# Limite real de mascotas por paseo (Ley Kiara, ver Marco Normativo del
+# documento de grado) - un horario publicado sigue abierto a nuevas
+# inscripciones de OTROS dueños (no solo el primero que inscribio) hasta
+# llegar a este total o hasta que el paseador lo cierre manualmente
+# (acepta_inscripciones=False) - ver CLAUDE.md, "Corrección de alcance
+# 2026-09-25".
+MAXIMO_MASCOTAS_POR_PASEO = 8
+
 
 def crear_disponibilidad(*, id_paseador, horario_desde, horario_hasta):
     """
@@ -29,7 +37,8 @@ def crear_disponibilidad(*, id_paseador, horario_desde, horario_hasta):
     paseo = {
         'id_paseador': id_paseador,
         'id_mascotas': [],
-        'id_dueno': None,
+        'id_duenos': [],
+        'acepta_inscripciones': True,
         'estado': 'disponible',
         'fecha': datetime.now(timezone.utc),
         'horario_desde': horario_desde,
@@ -47,25 +56,40 @@ def crear_disponibilidad(*, id_paseador, horario_desde, horario_hasta):
 
 def cancelar_disponibilidad(*, id_paseo, id_paseador):
     """
-    Simetrica a crear_disponibilidad(): borra el documento 'disponible'
-    que el propio paseador publico, siempre que ningun dueño lo haya
-    inscrito todavia (id_mascotas sigue vacio). Atomico via
-    find_one_and_delete: si un dueño lo inscribio justo antes de que este
-    filtro corriera, el filtro no matchea y no se borra nada. Devuelve el
-    documento borrado, o None si no se cumplen las condiciones (no existe,
-    no es suyo, ya no esta 'disponible', o ya tiene mascotas asignadas).
+    Boton "Despublicar"/"Cerrar a nuevas inscripciones" de un horario
+    propio - dos comportamientos distintos segun si ya tiene mascotas:
+
+    - Vacio (nadie inscrito todavia): se BORRA el documento entero, igual
+      que siempre (find_one_and_delete, atomico).
+    - Con mascotas ya inscritas: NO se borra (esas mascotas ya tienen un
+      compromiso con el paseador) - solo se pone
+      acepta_inscripciones=False, para que deje de aceptar inscripciones
+      NUEVAS de otros dueños. El paseador puede seguir iniciando el paseo
+      con lo que ya tiene inscrito.
+
+    Ambos casos son atomicos por su propio filtro (uno hace match solo si
+    esta vacio, el otro solo si no lo esta) - si un dueño inscribio justo
+    antes de que este POST llegara, el primer intento no matchea y cae al
+    segundo, en vez de perder esa inscripcion. Devuelve el documento
+    borrado o actualizado, o None si no se cumplen las condiciones (no
+    existe, no es suyo, o ya no esta 'disponible').
     """
     try:
         oid_paseo = ObjectId(id_paseo)
     except (InvalidId, TypeError):
         return None
 
-    return get_db().paseos.find_one_and_delete({
-        '_id': oid_paseo,
-        'id_paseador': id_paseador,
-        'estado': 'disponible',
-        'id_mascotas': [],
-    })
+    filtro_base = {'_id': oid_paseo, 'id_paseador': id_paseador, 'estado': 'disponible'}
+
+    borrado = get_db().paseos.find_one_and_delete({**filtro_base, 'id_mascotas': []})
+    if borrado:
+        return borrado
+
+    return get_db().paseos.find_one_and_update(
+        {**filtro_base, 'id_mascotas': {'$ne': []}},
+        {'$set': {'acepta_inscripciones': False}},
+        return_document=ReturnDocument.AFTER,
+    )
 
 
 def obtener_en_vivo_de_paseador(id_paseador):
@@ -91,11 +115,20 @@ def listar_disponibles_de_paseador(id_paseador):
     }).sort('horario_desde', 1))
 
 
-def listar_disponibles_sin_asignar():
-    """Paseos publicados y que ningun dueño ha inscrito todavia."""
+def listar_disponibles_con_cupo():
+    """
+    Paseos publicados que TODAVIA aceptan inscripciones nuevas - ya no es
+    "sin asignar" (antes solo id_mascotas=[]; ahora un horario con 3/8
+    mascotas de otro dueño sigue apareciendo aca para que un dueño
+    DISTINTO tambien pueda inscribir, mientras no llegue a
+    MAXIMO_MASCOTAS_POR_PASEO ni el paseador lo haya cerrado). $expr
+    porque el limite se compara contra el tamaño de un array del propio
+    documento, algo que un filtro de igualdad simple no puede expresar.
+    """
     return list(get_db().paseos.find({
         'estado': 'disponible',
-        'id_mascotas': [],
+        'acepta_inscripciones': True,
+        '$expr': {'$lt': [{'$size': '$id_mascotas'}, MAXIMO_MASCOTAS_POR_PASEO]},
     }).sort('fecha', -1))
 
 
@@ -109,10 +142,25 @@ def obtener_por_id(id_paseo):
 
 def inscribir_mascotas(*, id_paseo, id_dueno, ids_mascota):
     """
-    Asigna dueño y una o varias mascotas (del mismo dueño, ya validadas
-    por el llamador) a un paseo 'disponible' sin asignar. Es atomico: si
-    otro dueño ya lo tomo entre que se listo y se envio el formulario, el
-    filtro no matchea y no se sobreescribe nada.
+    Suma una o varias mascotas (de UN dueño, ya validadas por el
+    llamador) a un paseo 'disponible' - a las que ya haya de este u OTROS
+    dueños (ver CLAUDE.md, "Corrección de alcance 2026-09-25"; hasta 8 en
+    total, Ley Kiara). $push/$addToSet en vez de $set: NO sobreescribe lo
+    que ya habia, se agrega. id_duenos usa $addToSet (no $push) porque un
+    mismo dueño puede inscribir mascotas en mas de una ronda sobre el
+    mismo horario - no tiene sentido duplicarlo ahi.
+
+    Atomico via el filtro $expr (compara el tamaño de id_mascotas DESPUES
+    de sumar las nuevas contra el maximo, evaluado por Mongo en el mismo
+    paso que el update): si el cupo ya no alcanza, o si otro dueño lo
+    tomo/lo dejo sin cupo entre que se listo y se envio el formulario, o
+    si el paseador ya lo cerro (acepta_inscripciones=False), el filtro no
+    matchea y no se modifica nada.
+
+    id_mascotas tambien usa $addToSet (no $push a secas): si el MISMO
+    dueño reenvia el mismo formulario dos veces (doble clic, o inscribe
+    una mascota, y despues vuelve a este horario a sumar otra), una
+    mascota que ya estaba no se duplica ni infla el conteo de cupos.
     """
     try:
         oid_paseo = ObjectId(id_paseo)
@@ -124,8 +172,23 @@ def inscribir_mascotas(*, id_paseo, id_dueno, ids_mascota):
         return False
 
     resultado = get_db().paseos.update_one(
-        {'_id': oid_paseo, 'estado': 'disponible', 'id_mascotas': []},
-        {'$set': {'id_dueno': oid_dueno, 'id_mascotas': oids_mascota}},
+        {
+            '_id': oid_paseo,
+            'estado': 'disponible',
+            'acepta_inscripciones': True,
+            '$expr': {
+                '$lte': [
+                    {'$add': [{'$size': '$id_mascotas'}, len(oids_mascota)]},
+                    MAXIMO_MASCOTAS_POR_PASEO,
+                ],
+            },
+        },
+        {
+            '$addToSet': {
+                'id_mascotas': {'$each': oids_mascota},
+                'id_duenos': oid_dueno,
+            },
+        },
     )
     return resultado.modified_count == 1
 
@@ -235,11 +298,21 @@ def marcar_emergencia(id_paseo):
 
 
 def listar_por_dueno(id_dueno):
+    """
+    Paseos donde este dueño tiene AL MENOS una mascota inscrita - no
+    necesariamente el UNICO dueño del paseo (ver CLAUDE.md, "Corrección de
+    alcance 2026-09-25"). {'id_duenos': oid} matchea automaticamente
+    contra el array sin sintaxis especial (Mongo compara "contiene" por
+    default). Quien llame a esto y muestre nombres de mascotas debe
+    filtrarlas a las de ESTE dueño (mascotas.obtener_varias_por_id_y_dueno),
+    nunca a id_mascotas completo - puede haber mascotas de otros dueños
+    en el mismo documento.
+    """
     try:
         oid = ObjectId(id_dueno)
     except (InvalidId, TypeError):
         return []
-    return list(get_db().paseos.find({'id_dueno': oid}).sort('fecha', -1))
+    return list(get_db().paseos.find({'id_duenos': oid}).sort('fecha', -1))
 
 
 def listar_por_paseador(id_paseador):
@@ -254,8 +327,8 @@ def contar_completados_por_paseador(id_paseador):
 def a_json(paseo):
     data = dict(paseo)
     data['_id'] = str(data['_id'])
-    for campo_ref in ('id_paseador', 'id_dueno'):
-        data[campo_ref] = str(data[campo_ref]) if data.get(campo_ref) else None
+    data['id_paseador'] = str(data['id_paseador']) if data.get('id_paseador') else None
+    data['id_duenos'] = [str(i) for i in data.get('id_duenos', [])]
     data['id_mascotas'] = [str(i) for i in data.get('id_mascotas', [])]
     for campo_fecha in ('fecha', 'horario_desde', 'horario_hasta', 'hora_inicio', 'hora_fin'):
         if isinstance(data.get(campo_fecha), datetime):
