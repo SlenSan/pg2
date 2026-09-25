@@ -83,6 +83,32 @@ criterio en el JS de abajo.
   <a href="{% url 'incidentes:lista' %}" class="alert-link text-nowrap">Ver detalles</a>
 </div>
 
+{% comment %}
+Aviso distinto del banner de incidente de arriba - pueden convivir (un
+paseo puede tener un incidente Y estar pendiente de calificar a la vez).
+Reusa ".banner-paseo-activo" (color primario, invitacion positiva - ver
+canigo-theme.css), el mismo estilo que ya usan "Paseo activo ahora" en el
+dashboard del dueño y "Nueva solicitud" en el del paseador, para
+diferenciarlo a proposito del rojo/alerta de arriba. El id_paseo del href
+no cambia durante la vida de esta pagina (a diferencia del dashboard, que
+no sabe cual paseo hasta que llega el polling), asi que no hace falta
+armarlo en JS - solo se alterna ".d-none" segun el polling de abajo.
+{% endcomment %}
+<a
+  href="{% url 'calificaciones:calificar_paseo' id_paseo %}"
+  class="banner-paseo-activo d-flex align-items-center gap-3 mb-3 {% if not pendiente_calificar %}d-none{% endif %}"
+  id="banner-calificar"
+>
+  <span class="banner-paseo-icono"><i class="bi bi-star-fill"></i></span>
+  <div class="flex-grow-1">
+    <div class="banner-paseo-etiqueta">Paseo finalizado</div>
+    <div class="fw-bold">El paseo finalizó, califícalo ahora</div>
+  </div>
+  <div class="d-flex align-items-center gap-1">
+    Calificar <i class="bi bi-chevron-right"></i>
+  </div>
+</a>
+
 <div class="card mb-3" style="overflow: hidden;">
   <div class="card-body p-0">
     <div id="mapa" style="height: 60vh; min-height: 400px;"></div>
@@ -177,6 +203,14 @@ criterio en el JS de abajo.
         // mantiene oculto.
         document.getElementById('alerta-emergencia').classList.toggle('d-none', !data.texto_emergencia);
         document.getElementById('alerta-emergencia-texto').textContent = data.texto_emergencia || '';
+
+        // Aviso de calificar - independiente del de incidente de arriba.
+        // Cubre el caso de que el dueño ya tuviera esta pantalla abierta
+        // cuando el paseador finalizo el paseo (ver _pendiente_calificar
+        // en coordenadas/views_web.py); si entra despues a un paseo ya
+        // historico, la carga inicial del template ya lo resuelve sin
+        // necesitar el polling.
+        document.getElementById('banner-calificar').classList.toggle('d-none', !data.pendiente_calificar);
 
         // Esta pantalla ya trae "hay_notificaciones_sin_leer" en la misma
         // respuesta (ver coordenadas_de_paseo) para no sumar una peticion
