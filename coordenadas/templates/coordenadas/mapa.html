@@ -178,6 +178,15 @@ criterio en el JS de abajo.
         document.getElementById('alerta-emergencia').classList.toggle('d-none', !data.texto_emergencia);
         document.getElementById('alerta-emergencia-texto').textContent = data.texto_emergencia || '';
 
+        // Esta pantalla ya trae "hay_notificaciones_sin_leer" en la misma
+        // respuesta (ver coordenadas_de_paseo) para no sumar una peticion
+        // aparte solo para el punto del navbar - ver el bloque
+        // "polling_notificaciones" que este template deja vacio mas abajo
+        // mientras el paseo esta "en_vivo".
+        document.querySelectorAll('.campana-punto').forEach(function (el) {
+          el.classList.toggle('d-none', !data.hay_notificaciones_sin_leer);
+        });
+
         var puntos = data.puntos.map(function (p) { return [p.latitud, p.longitud]; });
         document.getElementById('sin-puntos').hidden = puntos.length > 0;
 
@@ -238,4 +247,19 @@ criterio en el JS de abajo.
   }
 })();
 </script>
+{% endblock %}
+
+{% comment %}
+Mientras el paseo esta "en_vivo", el polling de arriba (cada 10s) ya trae
+"hay_notificaciones_sin_leer" - se deja este bloque vacio para no sumar
+una segunda peticion solo para el navbar. Si ya es "historico" (o no hay
+ningun intervalo activo - ver el JS de arriba), no hay ningun otro polling
+en esta pantalla, asi que se hereda el poller generico de base.html con
+"block.super".
+{% endcomment %}
+{% block polling_notificaciones %}
+{% if paseo.estado == 'en_vivo' %}
+{% else %}
+{{ block.super }}
+{% endif %}
 {% endblock %}

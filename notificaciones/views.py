@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 
@@ -83,3 +84,19 @@ def lista_notificaciones(request):
         datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     )
     return render(request, 'notificaciones/lista.html', {'items': items, 'no_leidas': no_leidas})
+
+
+@requiere_autenticacion
+def estado_no_leidas(request):
+    """
+    Poller GENERICO del punto de notificaciones del navbar (ver
+    core/templates/base.html) - cubre cualquier pantalla que no tenga ya
+    su propia peticion periodica con este dato incluido (dashboards,
+    mapa en vivo - ver esos templates, que dejan vacio el bloque
+    "polling_notificaciones" para no duplicar la peticion contra este
+    endpoint). Sirve para cualquiera de los dos roles.
+    """
+    id_usuario = request.session['id_usuario']
+    ultima_vista_str = request.session.get('notificaciones_vistas_hasta')
+    ultima_vista = datetime.fromisoformat(ultima_vista_str) if ultima_vista_str else None
+    return JsonResponse({'hay_notificaciones_sin_leer': repository.hay_no_leidas(id_usuario, ultima_vista)})

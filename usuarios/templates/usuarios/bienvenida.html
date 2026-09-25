@@ -17,7 +17,7 @@
   </div>
   <a href="{% url 'notificaciones:lista' %}" class="dashboard-campana" aria-label="Notificaciones">
     <i class="bi bi-bell"></i>
-    <span class="dashboard-campana-punto {% if not hay_notificaciones_sin_leer %}d-none{% endif %}" id="campana-punto"></span>
+    <span class="dashboard-campana-punto campana-punto {% if not hay_notificaciones_sin_leer %}d-none{% endif %}"></span>
   </a>
 </div>
 
@@ -149,7 +149,6 @@
   var urlMapaBase = "{% url 'coordenadas:mapa_paseo' 'PASEO_PLACEHOLDER' %}";
 
   var banner = document.getElementById('banner-paseo-activo');
-  var campanaPunto = document.getElementById('campana-punto');
 
   function actualizar() {
     fetch(urlEstado)
@@ -164,7 +163,14 @@
         } else {
           banner.classList.add('d-none');
         }
-        campanaPunto.classList.toggle('d-none', !data.hay_notificaciones_sin_leer);
+        // .campana-punto (no un id): esta pantalla tiene su propia
+        // campana en el saludo Y la del navbar compartido (base.html) -
+        // las dos se actualizan con la misma respuesta, sin sumar una
+        // segunda peticion solo para el navbar (ver el bloque
+        // "polling_notificaciones" que este template deja vacio).
+        document.querySelectorAll('.campana-punto').forEach(function (el) {
+          el.classList.toggle('d-none', !data.hay_notificaciones_sin_leer);
+        });
       });
   }
 
@@ -172,3 +178,9 @@
 })();
 </script>
 {% endblock %}
+
+{% comment %}
+El poller generico de base.html se deja vacio aca: el propio "actualizar()"
+de arriba ya trae "hay_notificaciones_sin_leer" en cada vuelta.
+{% endcomment %}
+{% block polling_notificaciones %}{% endblock %}

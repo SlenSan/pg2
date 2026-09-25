@@ -17,9 +17,22 @@ from django.views.decorators.http import require_POST
 from coordenadas import repository
 from incidentes import repository as incidentes_repository
 from mascotas import repository as mascotas_repository
+from notificaciones import repository as notificaciones_repository
 from paseos import repository as paseos_repository
 from usuarios import repository as usuarios_repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
+
+
+def _hay_notificaciones_sin_leer(request, id_usuario):
+    """
+    Mismo mecanismo de "vista hasta" en sesion que usuarios/views_web.py -
+    duplicada aca (no importada de ahi) para no crear una dependencia
+    cruzada entre esas dos apps por una funcion de 3 lineas; ambas llaman
+    al mismo notificaciones_repository.hay_no_leidas().
+    """
+    ultima_vista_str = request.session.get('notificaciones_vistas_hasta')
+    ultima_vista = datetime.fromisoformat(ultima_vista_str) if ultima_vista_str else None
+    return notificaciones_repository.hay_no_leidas(id_usuario, ultima_vista)
 
 _TEXTO_INCIDENTE_GENERICO = 'Se reportó un incidente durante este paseo.'
 
@@ -112,6 +125,12 @@ def coordenadas_de_paseo(request, id_paseo):
         # decide si mostrar el banner segun esto, no segun "emergencia".
         'texto_emergencia': _texto_incidente(paseo['_id']),
         'puntos': [repository.a_json(p) for p in puntos],
+        # Esta pantalla ya hace polling cada 10s mientras el paseo esta
+        # "en_vivo" - se aprovecha esa misma peticion para el punto de
+        # notificaciones del navbar en vez de sumar una aparte (ver
+        # mapa.html, que por eso deja vacio el poller generico de
+        # base.html solo mientras esta en ese estado).
+        'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, paseo['id_dueno']),
     })
 
 
@@ -167,4 +186,12 @@ def registrar_coordenada(request, id_paseo):
         fecha_captura=_parsear_fecha(data.get('fecha_captura')),
     )
     total_puntos = paseos_repository.incrementar_total_puntos(paseo['_id'])
-    return JsonResponse({'total_puntos': total_puntos}, status=201)
+    return JsonResponse({
+        'total_puntos': total_puntos,
+        # El dashboard del paseador no hace su propio polling de
+        # notificaciones mientras esta "en_vivo" (no hay "nueva solicitud"
+        # que mostrar ahi - ver estado_bienvenida_paseador()) - se
+        # aprovecha este mismo POST de GPS, que ya se manda cada 10s, para
+        # el punto del navbar en vez de sumar una peticion aparte.
+        'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, paseo['id_paseador']),
+    }, status=201)

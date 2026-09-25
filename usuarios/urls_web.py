@@ -11,5 +11,6 @@ urlpatterns = [
     path('bienvenida/', views_web.bienvenida, name='bienvenida'),
     path('bienvenida/estado/', views_web.estado_bienvenida, name='estado_bienvenida'),
     path('paseador/bienvenida/', views_web.bienvenida_paseador, name='bienvenida_paseador'),
+    path('paseador/bienvenida/estado/', views_web.estado_bienvenida_paseador, name='estado_bienvenida_paseador'),
     path('paseador/perfil/', views_web.perfil_paseador, name='perfil_paseador'),
 ]

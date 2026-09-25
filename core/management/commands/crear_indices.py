@@ -37,3 +37,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             'calificaciones.id_paseo: indice unico OK (evita calificar el mismo paseo dos veces)'
         ))
+
+        db.notificaciones.create_index([('id_usuario', 1), ('fecha', 1)])
+        self.stdout.write(self.style.SUCCESS(
+            'notificaciones: indice id_usuario+fecha OK (el punto del navbar la consulta en casi '
+            'toda pagina autenticada - ver core/context_processors.py)'
+        ))

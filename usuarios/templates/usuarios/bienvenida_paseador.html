@@ -76,43 +76,14 @@
   </button>
 </div>
 
-{% if horarios_disponibles %}
-{% for h in horarios_disponibles %}
-  {% if h.mascota_nombre %}
-  <div class="banner-paseo-activo mb-3">
-    <div class="d-flex align-items-center gap-3 mb-3">
-      <span class="banner-paseo-icono"><i class="bi bi-bell-fill"></i></span>
-      <div class="flex-grow-1">
-        <div class="banner-paseo-etiqueta">
-          Nueva solicitud · {{ h.horario_desde|time:"H:i" }} - {{ h.horario_hasta|time:"H:i" }}
-        </div>
-        <div class="fw-bold">{{ h.mascota_nombre }}</div>
-        {% if h.dueno_nombre %}<div class="banner-paseo-detalle">De {{ h.dueno_nombre }}</div>{% endif %}
-      </div>
-    </div>
-    <form method="post" action="{% url 'paseos:iniciar_paseo' h.id_paseo %}">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-light w-100 fw-bold">Iniciar paseo</button>
-    </form>
-  </div>
-  {% else %}
-  <div class="card mb-3">
-    <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
-      <div>
-        <div class="fw-bold"><i class="bi bi-clock"></i> {{ h.horario_desde|time:"H:i" }} - {{ h.horario_hasta|time:"H:i" }}</div>
-        <div class="text-muted small">Esperando que un dueño lo tome</div>
-      </div>
-      <form method="post" action="{% url 'paseos:cancelar_disponibilidad' h.id_paseo %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-outline-secondary">Despublicar</button>
-      </form>
-    </div>
-  </div>
-  {% endif %}
-{% endfor %}
-{% else %}
-<p class="text-muted">No tienes horarios publicados todavía. Publica uno para que los dueños puedan solicitarte.</p>
-{% endif %}
+{% comment %}
+El contenedor con id fijo es lo que el polling de mas abajo reemplaza
+entero (innerHTML) cada 12s con la misma plantilla re-renderizada por el
+servidor - ver estado_bienvenida_paseador() y _horarios_paseador.html.
+{% endcomment %}
+<div id="horarios-contenedor">
+  {% include 'usuarios/_horarios_paseador.html' %}
+</div>
 
 <div class="modal fade" id="modalPublicarHorario" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
@@ -262,6 +233,21 @@
       estadoEl.textContent = resp.ok
         ? 'Compartiendo tu ubicación...'
         : 'No se pudo enviar tu ubicación. Reintentando...';
+      // Mientras el paseador esta caminando no corre el polling de
+      // "nueva solicitud" (no hay nada que mostrar en esa seccion - ver
+      // estado_bienvenida_paseador()), pero el punto de notificaciones
+      // del navbar (ver base.html) igual necesita actualizarse solo. En
+      // vez de sumar un setInterval aparte solo para eso, se aprovecha
+      // esta misma peticion de GPS que ya se manda cada 10s.
+      if (resp.ok) {
+        return resp.json();
+      }
+    }).then(function (data) {
+      if (data && typeof data.hay_notificaciones_sin_leer === 'boolean') {
+        document.querySelectorAll('.campana-punto').forEach(function (el) {
+          el.classList.toggle('d-none', !data.hay_notificaciones_sin_leer);
+        });
+      }
     }).catch(function () {
       estadoEl.textContent = 'No se pudo enviar tu ubicación. Reintentando...';
     });
@@ -323,5 +309,38 @@
   });
 })();
 </script>
+{% else %}
+<script>
+(function () {
+  var urlEstado = "{% url 'usuarios:estado_bienvenida_paseador' %}";
+  var contenedor = document.getElementById('horarios-contenedor');
+
+  function actualizar() {
+    fetch(urlEstado)
+      .then(function (resp) { return resp.json(); })
+      .then(function (data) {
+        // Se reemplaza el fragmento entero (no un textContent puntual)
+        // porque la lista de horarios puede crecer, encogerse o cambiar
+        // de tarjeta (esperando -> nueva solicitud) - ver
+        // estado_bienvenida_paseador()/_horarios_paseador.html.
+        contenedor.innerHTML = data.horarios_html;
+        document.querySelectorAll('.campana-punto').forEach(function (el) {
+          el.classList.toggle('d-none', !data.hay_notificaciones_sin_leer);
+        });
+      });
+  }
+
+  setInterval(actualizar, 12000);
+})();
+</script>
 {% endif %}
 {% endblock %}
+
+{% comment %}
+Esta pantalla ya cubre el punto de notificaciones del navbar por su propia
+cuenta en los dos casos de arriba (piggyback sobre el POST de GPS mientras
+esta "en_vivo"; el polling de horarios de arriba cuando no) - el poller
+generico de base.html se deja vacio aca para no sumar una peticion
+redundante.
+{% endcomment %}
+{% block polling_notificaciones %}{% endblock %}

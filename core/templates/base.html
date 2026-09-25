@@ -49,11 +49,24 @@
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="navbarNav">
+        {% comment %}
+        El punto naranja (blanco aca, ver canigo-theme.css) de "no leidas"
+        es el mismo en las dos ramas de abajo y se repite adrede (misma
+        logica que ".dashboard-campana-punto" de bienvenida.html, ahora
+        tambien aca) - lo que NO se duplica es su actualizacion: todas las
+        pantallas comparten "campana-punto" como selector de JS, y el
+        polling que las mantiene al dia vive en un solo lugar (ver el
+        bloque "polling_notificaciones" mas abajo), no una copia por
+        plantilla.
+        {% endcomment %}
         {% if request.session.rol == 'paseador' %}
         <div class="navbar-nav gap-3 ms-lg-auto">
           <a class="nav-link text-white" href="{% url 'usuarios:perfil_paseador' %}">Mi perfil</a>
           <a class="nav-link text-white" href="{% url 'paseos:historial_paseador' %}">Historial de paseos</a>
-          <a class="nav-link text-white" href="{% url 'notificaciones:lista' %}">Notificaciones</a>
+          <a class="nav-link text-white navbar-campana" href="{% url 'notificaciones:lista' %}">
+            Notificaciones
+            <span class="navbar-campana-punto campana-punto {% if not hay_notificaciones_sin_leer %}d-none{% endif %}"></span>
+          </a>
           <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
         </div>
         {% else %}
@@ -61,7 +74,10 @@
           <a class="nav-link text-white" href="{% url 'mascotas:lista' %}">Mis mascotas</a>
           <a class="nav-link text-white" href="{% url 'paseos:lista_disponibles' %}">Paseadores disponibles</a>
           <a class="nav-link text-white" href="{% url 'paseos:mis_paseos' %}">Mis paseos</a>
-          <a class="nav-link text-white" href="{% url 'notificaciones:lista' %}">Notificaciones</a>
+          <a class="nav-link text-white navbar-campana" href="{% url 'notificaciones:lista' %}">
+            Notificaciones
+            <span class="navbar-campana-punto campana-punto {% if not hay_notificaciones_sin_leer %}d-none{% endif %}"></span>
+          </a>
           <a class="nav-link text-white" href="{% url 'incidentes:lista' %}">Incidentes</a>
           <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
         </div>
@@ -103,6 +119,36 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  {% comment %}
+  Poller GENERICO del punto de notificaciones del navbar (ver
+  .navbar-campana-punto arriba): cubre cualquier pantalla autenticada que
+  no tenga ya su propio polling. Las pantallas que SI tienen uno propio
+  (dashboard del dueño, dashboard del paseador, y el mapa mientras esta
+  "en_vivo") ya traen "hay_notificaciones_sin_leer" en su propia
+  respuesta y sobreescriben este bloque vacio (o condicionalmente, en el
+  caso del mapa) para no duplicar la peticion - ver esas plantillas.
+  {% endcomment %}
+  {% block polling_notificaciones %}
+  {% if request.session.id_usuario %}
+  <script>
+  (function () {
+    var urlEstado = "{% url 'notificaciones:estado_no_leidas' %}";
+    function actualizar() {
+      fetch(urlEstado)
+        .then(function (resp) { return resp.json(); })
+        .then(function (data) {
+          document.querySelectorAll('.campana-punto').forEach(function (el) {
+            el.classList.toggle('d-none', !data.hay_notificaciones_sin_leer);
+          });
+        });
+    }
+    setInterval(actualizar, 15000);
+  })();
+  </script>
+  {% endif %}
+  {% endblock %}
+
   {% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -15,6 +15,7 @@ from django.contrib import messages
 from django.contrib.auth.hashers import check_password, make_password
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.template.loader import render_to_string
 
 from calificaciones import repository as calificaciones_repository
 from core.media import ErrorSubidaImagen, subir_imagen
@@ -198,9 +199,7 @@ def bienvenida(request):
     paseadores_distintos = len({p['id_paseador'] for p in paseos_dueno if p.get('id_paseador')})
 
     # --- notificaciones sin leer: aproximado por sesion (ver notificaciones/repository.py) ---
-    ultima_vista_str = request.session.get('notificaciones_vistas_hasta')
-    ultima_vista = datetime.fromisoformat(ultima_vista_str) if ultima_vista_str else None
-    hay_notificaciones_sin_leer = notificaciones_repository.hay_no_leidas(id_dueno, ultima_vista)
+    hay_notificaciones_sin_leer = _hay_notificaciones_sin_leer(request, id_dueno)
 
     return render(request, 'usuarios/bienvenida.html', {
         'nombre': request.session.get('nombre'),
@@ -225,15 +224,48 @@ def estado_bienvenida(request):
     """
     id_dueno = request.session['id_usuario']
     paseo_activo = _paseo_activo_dueno(id_dueno)
-
-    ultima_vista_str = request.session.get('notificaciones_vistas_hasta')
-    ultima_vista = datetime.fromisoformat(ultima_vista_str) if ultima_vista_str else None
-    hay_notificaciones_sin_leer = notificaciones_repository.hay_no_leidas(id_dueno, ultima_vista)
+    hay_notificaciones_sin_leer = _hay_notificaciones_sin_leer(request, id_dueno)
 
     return JsonResponse({
         'paseo_activo': paseo_activo,
         'hay_notificaciones_sin_leer': hay_notificaciones_sin_leer,
     })
+
+
+def _horarios_disponibles_paseador(id_paseador):
+    """
+    Horarios 'disponible' de este paseador, con nombre de dueño/mascotas ya
+    resueltos para la plantilla (los que ya tienen mascota(s) inscrita(s)
+    son la tarjeta "Nueva solicitud"; los demas, "esperando dueño"). Usada
+    tanto por bienvenida_paseador() (carga completa) como por
+    estado_bienvenida_paseador() (polling), para que ambas calculen
+    exactamente lo mismo - mismo patron que _paseo_activo_dueno().
+    """
+    horarios_crudos = paseos_repository.listar_disponibles_de_paseador(id_paseador)
+    duenos_por_id = repository.obtener_varios_por_id(
+        [h['id_dueno'] for h in horarios_crudos if h.get('id_dueno')]
+    )
+    mascotas_por_id = mascotas_repository.obtener_varias_por_id(
+        [mid for h in horarios_crudos for mid in h.get('id_mascotas', [])]
+    )
+    horarios = []
+    for h in horarios_crudos:
+        mascotas_horario = mascotas_repository.resolver_lista(h.get('id_mascotas'), mascotas_por_id)
+        dueno = duenos_por_id.get(h.get('id_dueno'))
+        horarios.append({
+            'id_paseo': str(h['_id']),
+            'horario_desde': h['horario_desde'].replace(tzinfo=timezone.utc) if h.get('horario_desde') else None,
+            'horario_hasta': h['horario_hasta'].replace(tzinfo=timezone.utc) if h.get('horario_hasta') else None,
+            'mascota_nombre': mascotas_repository.nombres_unidos(mascotas_horario) or None,
+            'dueno_nombre': dueno['nombre'] if dueno else None,
+        })
+    return horarios
+
+
+def _hay_notificaciones_sin_leer(request, id_usuario):
+    ultima_vista_str = request.session.get('notificaciones_vistas_hasta')
+    ultima_vista = datetime.fromisoformat(ultima_vista_str) if ultima_vista_str else None
+    return notificaciones_repository.hay_no_leidas(id_usuario, ultima_vista)
 
 
 @requiere_paseador
@@ -270,23 +302,7 @@ def bienvenida_paseador(request):
     horarios_disponibles = []
     form_horario = PublicarHorarioForm()
     if not paseo_activo:
-        horarios_crudos = paseos_repository.listar_disponibles_de_paseador(id_paseador)
-        duenos_por_id = repository.obtener_varios_por_id(
-            [h['id_dueno'] for h in horarios_crudos if h.get('id_dueno')]
-        )
-        mascotas_por_id = mascotas_repository.obtener_varias_por_id(
-            [mid for h in horarios_crudos for mid in h.get('id_mascotas', [])]
-        )
-        for h in horarios_crudos:
-            mascotas_horario = mascotas_repository.resolver_lista(h.get('id_mascotas'), mascotas_por_id)
-            dueno = duenos_por_id.get(h.get('id_dueno'))
-            horarios_disponibles.append({
-                'id_paseo': str(h['_id']),
-                'horario_desde': h['horario_desde'].replace(tzinfo=timezone.utc) if h.get('horario_desde') else None,
-                'horario_hasta': h['horario_hasta'].replace(tzinfo=timezone.utc) if h.get('horario_hasta') else None,
-                'mascota_nombre': mascotas_repository.nombres_unidos(mascotas_horario) or None,
-                'dueno_nombre': dueno['nombre'] if dueno else None,
-            })
+        horarios_disponibles = _horarios_disponibles_paseador(id_paseador)
 
     # --- estadisticas del paseador (solo datos que ya existen) ---
     usuario = repository.obtener_por_id(id_paseador)
@@ -300,6 +316,38 @@ def bienvenida_paseador(request):
         'form_horario': form_horario,
         'paseos_completados': paseos_completados,
         'calificacion_promedio': usuario.get('calificacion_promedio'),
+    })
+
+
+@requiere_paseador
+def estado_bienvenida_paseador(request):
+    """
+    Polling del dashboard del paseador (cada 12s desde
+    bienvenida_paseador.html, solo mientras NO esta caminando - ver esa
+    plantilla): asi el paseador ve aparecer "Nueva solicitud" en cuanto un
+    dueño inscribe una mascota en alguno de sus horarios, sin recargar.
+
+    Mientras SI esta caminando (en_vivo), esta seccion ni se muestra en la
+    pantalla, asi que este polling tampoco corre ahi - el punto de
+    notificaciones sin leer se actualiza en ese caso aprovechando el POST
+    de GPS que ya se manda cada 10s (ver registrar_coordenada), en vez de
+    sumar una peticion nueva aparte.
+
+    Devuelve el fragmento de HTML ya renderizado (no JSON con los datos
+    sueltos) porque la lista de horarios cambia de tamaño y de contenido -
+    mas facil y consistente re-renderizar el mismo template que ya usa la
+    carga completa, que reconstruir ese HTML a mano en JS.
+    """
+    id_paseador = ObjectId(request.session['id_usuario'])
+    horarios_disponibles = _horarios_disponibles_paseador(id_paseador)
+    horarios_html = render_to_string(
+        'usuarios/_horarios_paseador.html',
+        {'horarios_disponibles': horarios_disponibles},
+        request=request,
+    )
+    return JsonResponse({
+        'horarios_html': horarios_html,
+        'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, id_paseador),
     })
 
 

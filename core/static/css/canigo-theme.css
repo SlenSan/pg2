@@ -533,6 +533,31 @@ a:hover {
   border: 2px solid var(--color-background);
 }
 
+/* Campana de notificaciones del navbar (compartida por las dos pantallas
+   de dashboard aparte - ver .dashboard-campana arriba, que es un boton
+   propio del saludo del dueño, no de la barra). Vive en base.html para
+   aparecer en CUALQUIER pantalla autenticada, de cualquiera de los dos
+   roles. */
+.navbar-campana {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.navbar-campana-punto {
+  position: absolute;
+  top: -1px;
+  right: -8px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  /* El navbar usa el mismo color naranja que .dashboard-campana-punto,
+     asi que un punto naranja se perderia contra el fondo - blanco para
+     que quede visible sobre la barra. */
+  background-color: #fff;
+  border: 2px solid var(--color-primary);
+}
+
 /* Banner de paseo activo */
 
 .banner-paseo-activo {
