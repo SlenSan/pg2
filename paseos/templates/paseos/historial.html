@@ -13,13 +13,13 @@
       <div class="card-body">
         <a href="{% url 'coordenadas:mapa_paseo' item.id_paseo %}" class="text-decoration-none text-reset d-block mb-2">
           <div class="d-flex align-items-center gap-3">
-            {% if item.mascota.foto %}
-            <img src="{{ item.mascota.foto }}" alt="{{ item.mascota.nombre }}" class="mascota-avatar">
+            {% if item.mascota_avatar.foto %}
+            <img src="{{ item.mascota_avatar.foto }}" alt="{{ item.mascota_avatar.nombre }}" class="mascota-avatar">
             {% else %}
-            <span class="mascota-avatar-vacio">{{ item.mascota.nombre|default:"?"|slice:":1" }}</span>
+            <span class="mascota-avatar-vacio">{{ item.mascota_avatar.nombre|default:"?"|slice:":1" }}</span>
             {% endif %}
             <div>
-              <div class="fw-bold">{{ item.mascota.nombre|default:"—" }}</div>
+              <div class="fw-bold">{{ item.mascotas_nombres|default:"—" }}</div>
               <div class="text-muted small">con {{ item.paseador.nombre|default:"—" }}</div>
             </div>
           </div>

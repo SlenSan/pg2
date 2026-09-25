@@ -98,7 +98,7 @@ def detalle_paseador(request, id_paseador):
     horarios = [
         _marcar_utc(h)
         for h in repository.listar_disponibles_de_paseador(oid_paseador)
-        if not h.get('id_mascota')
+        if not h.get('id_mascotas')
     ]
     if not horarios:
         messages.error(request, 'Este paseador no tiene horarios disponibles en este momento.')
@@ -123,7 +123,7 @@ def detalle_paseador(request, id_paseador):
         id_paseo = str(h['_id'])
         # prefix=id_paseo: hay un InscribirMascotaForm por horario en la
         # misma pagina, y sin un prefijo distinto todos terminarian con
-        # el mismo id="id_mascota" (HTML invalido, labels rotos).
+        # los mismos ids="id_ids_mascota_N" (HTML invalido, labels rotos).
         items_horario.append({
             'id_paseo': id_paseo,
             'horario': h,
@@ -160,28 +160,34 @@ def inscribir_en_horario(request, id_paseador, id_paseo):
     # formulario, para leer los campos con el nombre namespaced correcto.
     form = InscribirMascotaForm(request.POST, mascotas=mis_mascotas, prefix=id_paseo)
     if not form.is_valid():
-        messages.error(request, 'Selecciona una mascota válida.')
+        messages.error(request, 'Selecciona al menos una mascota válida.')
         return redirect('paseos:detalle_paseador', id_paseador=id_paseador)
 
-    id_mascota = form.cleaned_data['id_mascota']
-    mascota = mascotas_repository.obtener_por_id_y_dueno(id_mascota, request.session['id_usuario'])
-    if not mascota:
-        messages.error(request, 'Mascota inválida.')
+    ids_mascota = form.cleaned_data['ids_mascota']
+    mascotas_elegidas = mascotas_repository.obtener_varias_por_id_y_dueno(
+        ids_mascota, request.session['id_usuario']
+    )
+    if len(mascotas_elegidas) != len(ids_mascota):
+        # Alguna de las ids no es del dueño (o ya no existe) - las
+        # opciones del form ya vienen filtradas a sus propias mascotas,
+        # asi que esto solo pasaria con un POST forjado.
+        messages.error(request, 'Una o más mascotas no son válidas.')
         return redirect('paseos:detalle_paseador', id_paseador=id_paseador)
 
-    asignado = repository.inscribir_mascota(
+    asignado = repository.inscribir_mascotas(
         id_paseo=id_paseo,
         id_dueno=request.session['id_usuario'],
-        id_mascota=id_mascota,
+        ids_mascota=ids_mascota,
     )
     if not asignado:
         messages.error(request, 'Este horario ya no está disponible.')
         return redirect('paseos:detalle_paseador', id_paseador=id_paseador)
 
     paseador = usuarios_repository.obtener_por_id(id_paseador)
+    nombres = mascotas_repository.nombres_unidos(mascotas_elegidas)
     messages.success(
         request,
-        f'Inscribiste a {mascota["nombre"]} con {paseador["nombre"] if paseador else "el paseador"}.',
+        f'Inscribiste a {nombres} con {paseador["nombre"] if paseador else "el paseador"}.',
     )
     return redirect('paseos:mis_paseos')
 
@@ -193,7 +199,7 @@ def mis_paseos(request):
         [p['id_paseador'] for p in paseos]
     )
     mascotas_por_id = mascotas_repository.obtener_varias_por_id(
-        [p['id_mascota'] for p in paseos if p.get('id_mascota')]
+        [mid for p in paseos for mid in p.get('id_mascotas', [])]
     )
     ids_calificados = {
         c['id_paseo'] for c in calificaciones_repository.listar_por_paseos([p['_id'] for p in paseos])
@@ -203,7 +209,9 @@ def mis_paseos(request):
             'id_paseo': str(p['_id']),
             'paseo': p,
             'paseador': paseadores_por_id.get(p['id_paseador']),
-            'mascota': mascotas_por_id.get(p['id_mascota']),
+            'mascotas_nombres': mascotas_repository.nombres_unidos(
+                mascotas_repository.resolver_lista(p.get('id_mascotas'), mascotas_por_id)
+            ),
             'calificado': p['_id'] in ids_calificados,
         }
         for p in paseos
@@ -224,7 +232,7 @@ def historial(request):
         [p['id_paseador'] for p in paseos if p.get('id_paseador')]
     )
     mascotas_por_id = mascotas_repository.obtener_varias_por_id(
-        [p['id_mascota'] for p in paseos if p.get('id_mascota')]
+        [mid for p in paseos for mid in p.get('id_mascotas', [])]
     )
     calificaciones_por_paseo = {
         c['id_paseo']: c
@@ -237,11 +245,13 @@ def historial(request):
         if p.get('hora_inicio') and p.get('hora_fin'):
             duracion_min = int((p['hora_fin'] - p['hora_inicio']).total_seconds() // 60)
         calificacion = calificaciones_por_paseo.get(p['_id'])
+        mascotas_paseo = mascotas_repository.resolver_lista(p.get('id_mascotas'), mascotas_por_id)
         items.append({
             'id_paseo': str(p['_id']),
             'paseo': p,
             'paseador': paseadores_por_id.get(p.get('id_paseador')),
-            'mascota': mascotas_por_id.get(p.get('id_mascota')),
+            'mascota_avatar': mascotas_paseo[0] if mascotas_paseo else None,
+            'mascotas_nombres': mascotas_repository.nombres_unidos(mascotas_paseo),
             'duracion_min': duracion_min,
             'puntuacion': calificacion['puntuacion'] if calificacion else None,
         })
@@ -382,13 +392,15 @@ def historial_paseador(request):
         [p['id_dueno'] for p in paseos if p.get('id_dueno')]
     )
     mascotas_por_id = mascotas_repository.obtener_varias_por_id(
-        [p['id_mascota'] for p in paseos if p.get('id_mascota')]
+        [mid for p in paseos for mid in p.get('id_mascotas', [])]
     )
     items = [
         {
             'paseo': p,
             'dueno': duenos_por_id.get(p.get('id_dueno')),
-            'mascota': mascotas_por_id.get(p.get('id_mascota')),
+            'mascotas_nombres': mascotas_repository.nombres_unidos(
+                mascotas_repository.resolver_lista(p.get('id_mascotas'), mascotas_por_id)
+            ),
         }
         for p in paseos
     ]

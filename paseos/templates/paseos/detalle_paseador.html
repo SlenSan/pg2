@@ -78,15 +78,18 @@
           </p>
           <form method="post" action="{% url 'paseos:inscribir_en_horario' id_paseador item.id_paseo %}" novalidate>
             {% csrf_token %}
-            {% for field in item.form %}
-              <div class="mb-2">
-                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% for error in field.errors %}
-                  <div class="text-danger small mt-1">{{ error }}</div>
-                {% endfor %}
+            <div class="mb-2">
+              <label class="form-label">{{ item.form.ids_mascota.label }}</label>
+              {% for casilla in item.form.ids_mascota.subwidgets %}
+              <div class="form-check">
+                {{ casilla.tag }}
+                <label class="form-check-label" for="{{ casilla.id_for_label }}">{{ casilla.choice_label }}</label>
               </div>
-            {% endfor %}
+              {% endfor %}
+              {% for error in item.form.ids_mascota.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+              {% endfor %}
+            </div>
             <button type="submit" class="btn btn-primary w-100">Inscribir en este horario</button>
           </form>
         </div>

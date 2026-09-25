@@ -28,7 +28,7 @@ def crear_disponibilidad(*, id_paseador, horario_desde, horario_hasta):
     """
     paseo = {
         'id_paseador': id_paseador,
-        'id_mascota': None,
+        'id_mascotas': [],
         'id_dueno': None,
         'estado': 'disponible',
         'fecha': datetime.now(timezone.utc),
@@ -49,11 +49,11 @@ def cancelar_disponibilidad(*, id_paseo, id_paseador):
     """
     Simetrica a crear_disponibilidad(): borra el documento 'disponible'
     que el propio paseador publico, siempre que ningun dueño lo haya
-    inscrito todavia (id_mascota sigue en None). Atomico via
+    inscrito todavia (id_mascotas sigue vacio). Atomico via
     find_one_and_delete: si un dueño lo inscribio justo antes de que este
     filtro corriera, el filtro no matchea y no se borra nada. Devuelve el
     documento borrado, o None si no se cumplen las condiciones (no existe,
-    no es suyo, ya no esta 'disponible', o ya tiene mascota asignada).
+    no es suyo, ya no esta 'disponible', o ya tiene mascotas asignadas).
     """
     try:
         oid_paseo = ObjectId(id_paseo)
@@ -64,7 +64,7 @@ def cancelar_disponibilidad(*, id_paseo, id_paseador):
         '_id': oid_paseo,
         'id_paseador': id_paseador,
         'estado': 'disponible',
-        'id_mascota': None,
+        'id_mascotas': [],
     })
 
 
@@ -80,10 +80,10 @@ def obtener_en_vivo_de_paseador(id_paseador):
 def listar_disponibles_de_paseador(id_paseador):
     """
     TODOS los horarios 'disponible' publicados por este paseador ahora
-    mismo (puede tener varios simultaneos), tengan o no mascota inscrita
-    - el dashboard del paseador necesita ver ambos casos (horario libre
-    vs. solicitud pendiente). Quien solo quiera los libres (el lado del
-    dueño) filtra id_mascota=None sobre el resultado.
+    mismo (puede tener varios simultaneos), tengan o no mascota(s)
+    inscrita(s) - el dashboard del paseador necesita ver ambos casos
+    (horario libre vs. solicitud pendiente). Quien solo quiera los libres
+    (el lado del dueño) filtra id_mascotas=[] sobre el resultado.
     """
     return list(get_db().paseos.find({
         'id_paseador': id_paseador,
@@ -95,7 +95,7 @@ def listar_disponibles_sin_asignar():
     """Paseos publicados y que ningun dueño ha inscrito todavia."""
     return list(get_db().paseos.find({
         'estado': 'disponible',
-        'id_mascota': None,
+        'id_mascotas': [],
     }).sort('fecha', -1))
 
 
@@ -107,22 +107,25 @@ def obtener_por_id(id_paseo):
     return get_db().paseos.find_one({'_id': oid})
 
 
-def inscribir_mascota(*, id_paseo, id_dueno, id_mascota):
+def inscribir_mascotas(*, id_paseo, id_dueno, ids_mascota):
     """
-    Asigna dueño y mascota a un paseo 'disponible' sin asignar. Es atomico:
-    si otro dueño ya lo tomo entre que se listo y se envio el formulario,
-    el filtro no matchea y no se sobreescribe nada.
+    Asigna dueño y una o varias mascotas (del mismo dueño, ya validadas
+    por el llamador) a un paseo 'disponible' sin asignar. Es atomico: si
+    otro dueño ya lo tomo entre que se listo y se envio el formulario, el
+    filtro no matchea y no se sobreescribe nada.
     """
     try:
         oid_paseo = ObjectId(id_paseo)
         oid_dueno = ObjectId(id_dueno)
-        oid_mascota = ObjectId(id_mascota)
+        oids_mascota = [ObjectId(i) for i in ids_mascota]
     except (InvalidId, TypeError):
+        return False
+    if not oids_mascota:
         return False
 
     resultado = get_db().paseos.update_one(
-        {'_id': oid_paseo, 'estado': 'disponible', 'id_mascota': None},
-        {'$set': {'id_dueno': oid_dueno, 'id_mascota': oid_mascota}},
+        {'_id': oid_paseo, 'estado': 'disponible', 'id_mascotas': []},
+        {'$set': {'id_dueno': oid_dueno, 'id_mascotas': oids_mascota}},
     )
     return resultado.modified_count == 1
 
@@ -138,7 +141,7 @@ def iniciar_paseo(*, id_paseo, id_paseador):
     varios horarios simultaneos hace falta este chequeo explicito.
     Devuelve el documento actualizado, o None si no se cumplen las
     condiciones (no existe, no es suyo, ya no esta 'disponible', no tiene
-    id_mascota asignado, o ya hay otro paseo en_vivo).
+    ninguna mascota asignada, o ya hay otro paseo en_vivo).
 
     Nota: el chequeo de "otro paseo en_vivo" es un find_one previo, no
     parte del filtro atomico de mas abajo (que solo puede mirar ESTE
@@ -159,7 +162,7 @@ def iniciar_paseo(*, id_paseo, id_paseador):
             '_id': oid_paseo,
             'id_paseador': id_paseador,
             'estado': 'disponible',
-            'id_mascota': {'$ne': None},
+            'id_mascotas': {'$ne': []},
         },
         {'$set': {'estado': 'en_vivo', 'hora_inicio': datetime.now(timezone.utc)}},
         return_document=ReturnDocument.AFTER,
@@ -251,8 +254,9 @@ def contar_completados_por_paseador(id_paseador):
 def a_json(paseo):
     data = dict(paseo)
     data['_id'] = str(data['_id'])
-    for campo_ref in ('id_paseador', 'id_mascota', 'id_dueno'):
+    for campo_ref in ('id_paseador', 'id_dueno'):
         data[campo_ref] = str(data[campo_ref]) if data.get(campo_ref) else None
+    data['id_mascotas'] = [str(i) for i in data.get('id_mascotas', [])]
     for campo_fecha in ('fecha', 'horario_desde', 'horario_hasta', 'hora_inicio', 'hora_fin'):
         if isinstance(data.get(campo_fecha), datetime):
             data[campo_fecha] = data[campo_fecha].isoformat()

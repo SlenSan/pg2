@@ -16,7 +16,7 @@ def lista_mascotas(request):
     # badge "en paseo"/"en casa" del dashboard tambien aqui.
     paseos_dueno = paseos_repository.listar_por_dueno(id_dueno)
     ids_mascotas_en_paseo = {
-        p['id_mascota'] for p in paseos_dueno if p['estado'] == 'en_vivo' and p.get('id_mascota')
+        mid for p in paseos_dueno if p['estado'] == 'en_vivo' for mid in p.get('id_mascotas', [])
     }
     items = [
         {'mascota': m, 'en_paseo': m['_id'] in ids_mascotas_en_paseo}

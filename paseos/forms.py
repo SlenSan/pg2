@@ -36,13 +36,20 @@ class SubirFotoPaseoForm(forms.Form):
 
 
 class InscribirMascotaForm(forms.Form):
-    id_mascota = forms.ChoiceField(
-        label='Elige tu mascota',
-        widget=forms.Select(attrs={'class': 'form-select'}),
+    """
+    Checkboxes en vez de un <select>: un paseo puede llevar una o varias
+    mascotas del mismo dueño juntas (ver CLAUDE.md). required=True (el
+    default de MultipleChoiceField) ya rechaza una seleccion vacia sin
+    necesitar un clean() aparte.
+    """
+    ids_mascota = forms.MultipleChoiceField(
+        label='Elige tu(s) mascota(s)',
+        widget=forms.CheckboxSelectMultiple,
+        error_messages={'required': 'Elige al menos una mascota.'},
     )
 
     def __init__(self, *args, mascotas=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['id_mascota'].choices = [
+        self.fields['ids_mascota'].choices = [
             (str(mascota['_id']), mascota['nombre']) for mascota in (mascotas or [])
         ]

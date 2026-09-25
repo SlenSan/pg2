@@ -4,6 +4,7 @@ Vistas web:
 - Paseador: botón de emergencia en su dashboard (RF12).
 """
 
+from bson import ObjectId
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
@@ -29,8 +30,10 @@ def lista_incidentes(request):
     paseadores_por_id = usuarios_repository.obtener_varios_por_id(
         [p['id_paseador'] for p in paseos]
     )
+    # La mascota afectada sale del propio incidente (id_mascota), no del
+    # paseo (que puede llevar varias) - es None para "accidente_paseador".
     mascotas_por_id = mascotas_repository.obtener_varias_por_id(
-        [p['id_mascota'] for p in paseos if p.get('id_mascota')]
+        [i['id_mascota'] for i in incidentes if i.get('id_mascota')]
     )
 
     items = []
@@ -39,7 +42,7 @@ def lista_incidentes(request):
         items.append({
             'incidente': incidente,
             'paseador': paseadores_por_id.get(paseo['id_paseador']) if paseo else None,
-            'mascota': mascotas_por_id.get(paseo.get('id_mascota')) if paseo else None,
+            'mascota': mascotas_por_id.get(incidente.get('id_mascota')),
         })
 
     return render(request, 'incidentes/lista.html', {'items': items})
@@ -64,7 +67,10 @@ def reportar_incidente(request, id_paseo):
         messages.error(request, 'No se pudo registrar el incidente: el paseo no está activo.')
         return redirect('usuarios:bienvenida_paseador')
 
-    form = ReportarIncidenteForm(request.POST, request.FILES)
+    mascotas_por_id = mascotas_repository.obtener_varias_por_id(paseo.get('id_mascotas', []))
+    mascotas_paseo = mascotas_repository.resolver_lista(paseo.get('id_mascotas'), mascotas_por_id)
+
+    form = ReportarIncidenteForm(request.POST, request.FILES, mascotas=mascotas_paseo)
     if not form.is_valid():
         # El boton de emergencia abre un modal simple (ver
         # bienvenida_paseador.html): no hay donde volver a mostrar el
@@ -73,6 +79,16 @@ def reportar_incidente(request, id_paseo):
         primer_error = next(iter(form.errors.values()))[0]
         messages.error(request, f'No se pudo registrar el incidente: {primer_error}')
         return redirect('usuarios:bienvenida_paseador')
+
+    # A cual mascota afecta (ver CLAUDE.md): null solo para
+    # "accidente_paseador"; con una sola mascota en el paseo se asigna
+    # sola, sin pedirle nada al paseador; con varias, la elige el radio.
+    if form.cleaned_data['tipo'] == 'accidente_paseador':
+        id_mascota_incidente = None
+    elif len(mascotas_paseo) == 1:
+        id_mascota_incidente = mascotas_paseo[0]['_id']
+    else:
+        id_mascota_incidente = ObjectId(form.cleaned_data['id_mascota'])
 
     try:
         evidencia_url = subir_imagen(form.cleaned_data['foto'], carpeta='incidentes')
@@ -91,6 +107,7 @@ def reportar_incidente(request, id_paseo):
     incidente = repository.crear(
         id_paseo=paseo['_id'],
         tipo=form.cleaned_data['tipo'],
+        id_mascota=id_mascota_incidente,
         descripcion=form.cleaned_data['descripcion'],
         evidencia_foto=evidencia_url,
         latitud=latitud,

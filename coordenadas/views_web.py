@@ -15,10 +15,34 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
 from coordenadas import repository
+from incidentes import repository as incidentes_repository
 from mascotas import repository as mascotas_repository
 from paseos import repository as paseos_repository
 from usuarios import repository as usuarios_repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
+
+_TEXTO_INCIDENTE_GENERICO = 'Se reportó un incidente durante este paseo.'
+
+
+def _texto_incidente(id_paseo):
+    """
+    Texto del banner de emergencia del mapa. Muestra a que mascota afecto
+    el incidente MAS RECIENTE de este paseo (si tiene una asignada - ver
+    CLAUDE.md, "accidente_paseador" no aplica a ningun animal en
+    particular), o el mensaje generico de siempre si no. Reusado tanto en
+    la carga inicial de la pagina como en el polling (coordenadas_de_paseo),
+    para que el texto se actualice solo si llega un incidente nuevo
+    mientras el dueño ya esta mirando el mapa.
+    """
+    incidentes = incidentes_repository.listar_por_paseo(id_paseo)
+    if not incidentes:
+        return _TEXTO_INCIDENTE_GENERICO
+    ultimo = incidentes[0]  # ya viene ordenado por fecha_hora desc
+    if ultimo.get('id_mascota'):
+        mascota = mascotas_repository.obtener_varias_por_id([ultimo['id_mascota']]).get(ultimo['id_mascota'])
+        if mascota:
+            return f'Se reportó un incidente que afecta a {mascota["nombre"]}.'
+    return _TEXTO_INCIDENTE_GENERICO
 
 
 def _paseo_del_dueno_o_none(request, id_paseo):
@@ -45,20 +69,20 @@ def mapa_paseo(request, id_paseo):
     if not paseo:
         return redirect('paseos:mis_paseos')
 
-    mascota = None
+    mascotas_por_id = mascotas_repository.obtener_varias_por_id(paseo.get('id_mascotas', []))
+    mascotas = mascotas_repository.resolver_lista(paseo.get('id_mascotas'), mascotas_por_id)
     paseador = None
-    if paseo.get('id_mascota'):
-        mascota = mascotas_repository.obtener_varias_por_id([paseo['id_mascota']]).get(paseo['id_mascota'])
     if paseo.get('id_paseador'):
         paseador = usuarios_repository.obtener_por_id(paseo['id_paseador'])
 
     return render(request, 'coordenadas/mapa.html', {
         'paseo': paseo,
         'id_paseo': str(paseo['_id']),
-        'mascota': mascota,
+        'mascotas': mascotas,
         'paseador': paseador,
         'hora_inicio_iso': _fecha_iso_utc(paseo.get('hora_inicio')),
         'hora_fin_iso': _fecha_iso_utc(paseo.get('hora_fin')),
+        'texto_emergencia': _texto_incidente(paseo['_id']) if paseo.get('emergencia') else None,
     })
 
 
@@ -69,9 +93,11 @@ def coordenadas_de_paseo(request, id_paseo):
         return JsonResponse({'error': 'No autorizado.'}, status=403)
 
     puntos = repository.listar_por_paseo(id_paseo)
+    emergencia = paseo.get('emergencia', False)
     return JsonResponse({
         'estado': paseo['estado'],
-        'emergencia': paseo.get('emergencia', False),
+        'emergencia': emergencia,
+        'texto_emergencia': _texto_incidente(paseo['_id']) if emergencia else None,
         'puntos': [repository.a_json(p) for p in puntos],
     })
 

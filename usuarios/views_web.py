@@ -133,11 +133,8 @@ def _paseo_activo_dueno(id_dueno, paseos_dueno=None):
     if not paseo_en_vivo:
         return None
 
-    mascota = None
-    if paseo_en_vivo.get('id_mascota'):
-        mascota = mascotas_repository.obtener_varias_por_id([paseo_en_vivo['id_mascota']]).get(
-            paseo_en_vivo['id_mascota']
-        )
+    mascotas_por_id = mascotas_repository.obtener_varias_por_id(paseo_en_vivo.get('id_mascotas', []))
+    mascotas = mascotas_repository.resolver_lista(paseo_en_vivo.get('id_mascotas'), mascotas_por_id)
     paseador = None
     if paseo_en_vivo.get('id_paseador'):
         paseador = repository.obtener_por_id(paseo_en_vivo['id_paseador'])
@@ -147,7 +144,7 @@ def _paseo_activo_dueno(id_dueno, paseos_dueno=None):
     minutos = int((ahora - hora_inicio).total_seconds() // 60) if hora_inicio else 0
     return {
         'id_paseo': str(paseo_en_vivo['_id']),
-        'mascota_nombre': mascota['nombre'] if mascota else 'tu mascota',
+        'mascota_nombre': mascotas_repository.nombres_unidos(mascotas) or 'tu mascota',
         'paseador_nombre': paseador['nombre'] if paseador else '',
         'minutos': max(minutos, 0),
     }
@@ -165,12 +162,15 @@ def bienvenida(request):
 
     # --- "Mis mascotas" (maximo 3 tarjetas) ---
     ids_mascotas_en_paseo = {
-        p['id_mascota'] for p in paseos_dueno if p['estado'] == 'en_vivo' and p.get('id_mascota')
+        mid for p in paseos_dueno if p['estado'] == 'en_vivo' for mid in p.get('id_mascotas', [])
     }
     ultimo_paseo_por_mascota = {}
     for p in paseos_dueno:  # ya viene ordenado por fecha desc
-        if p['estado'] == 'historico' and p.get('id_mascota') and p['id_mascota'] not in ultimo_paseo_por_mascota:
-            ultimo_paseo_por_mascota[p['id_mascota']] = p
+        if p['estado'] != 'historico':
+            continue
+        for mid in p.get('id_mascotas', []):
+            if mid not in ultimo_paseo_por_mascota:
+                ultimo_paseo_por_mascota[mid] = p
 
     mascotas_tarjetas = [
         {
@@ -242,27 +242,27 @@ def bienvenida_paseador(request):
     paseo = paseos_repository.obtener_en_vivo_de_paseador(id_paseador)
 
     paseo_activo = None
+    incidente_form = None
     if paseo:
-        mascota = None
+        mascotas_por_id = mascotas_repository.obtener_varias_por_id(paseo.get('id_mascotas', []))
+        mascotas_paseo = mascotas_repository.resolver_lista(paseo.get('id_mascotas'), mascotas_por_id)
         dueno = None
-        if paseo.get('id_mascota'):
-            mascota = mascotas_repository.obtener_varias_por_id([paseo['id_mascota']]).get(paseo['id_mascota'])
         if paseo.get('id_dueno'):
             dueno = repository.obtener_por_id(paseo['id_dueno'])
         fotos_existentes = {f['momento'] for f in paseo.get('fotos', [])}
         paseo_activo = {
             'id_paseo': str(paseo['_id']),
             'estado': paseo['estado'],
-            'mascota_nombre': mascota['nombre'] if mascota else None,
+            'mascota_nombre': mascotas_repository.nombres_unidos(mascotas_paseo) or None,
             'dueno_nombre': dueno['nombre'] if dueno else None,
             'fotos_pendientes': [
                 m for m in paseos_repository.MOMENTOS_FOTO_VALIDOS if m not in fotos_existentes
             ],
         }
-
-    incidente_form = None
-    if paseo_activo:
-        incidente_form = ReportarIncidenteForm()
+        # mascotas=mascotas_paseo: si el paseo lleva mas de una, el form
+        # agrega el radio "¿a cual mascota afecta?" (ver ReportarIncidenteForm);
+        # con una sola, ese campo ni se crea - se asigna sola en la vista.
+        incidente_form = ReportarIncidenteForm(mascotas=mascotas_paseo)
 
     # --- horarios publicados (varios simultaneos posibles) - solo si no
     # esta caminando ahora mismo, mismo criterio que ya tenia esta
@@ -275,16 +275,16 @@ def bienvenida_paseador(request):
             [h['id_dueno'] for h in horarios_crudos if h.get('id_dueno')]
         )
         mascotas_por_id = mascotas_repository.obtener_varias_por_id(
-            [h['id_mascota'] for h in horarios_crudos if h.get('id_mascota')]
+            [mid for h in horarios_crudos for mid in h.get('id_mascotas', [])]
         )
         for h in horarios_crudos:
-            mascota = mascotas_por_id.get(h.get('id_mascota'))
+            mascotas_horario = mascotas_repository.resolver_lista(h.get('id_mascotas'), mascotas_por_id)
             dueno = duenos_por_id.get(h.get('id_dueno'))
             horarios_disponibles.append({
                 'id_paseo': str(h['_id']),
                 'horario_desde': h['horario_desde'].replace(tzinfo=timezone.utc) if h.get('horario_desde') else None,
                 'horario_hasta': h['horario_hasta'].replace(tzinfo=timezone.utc) if h.get('horario_hasta') else None,
-                'mascota_nombre': mascota['nombre'] if mascota else None,
+                'mascota_nombre': mascotas_repository.nombres_unidos(mascotas_horario) or None,
                 'dueno_nombre': dueno['nombre'] if dueno else None,
             })
 

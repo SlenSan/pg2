@@ -20,10 +20,12 @@ TIPOS_VALIDOS = (
 )
 
 
-def crear(*, id_paseo, tipo, descripcion, evidencia_foto, latitud, longitud):
+def crear(*, id_paseo, tipo, id_mascota, descripcion, evidencia_foto, latitud, longitud):
     incidente = {
         'id_paseo': id_paseo if isinstance(id_paseo, ObjectId) else ObjectId(id_paseo),
         'tipo': tipo,
+        # None solo para "accidente_paseador" - ver ReportarIncidenteForm.
+        'id_mascota': id_mascota,
         'descripcion': descripcion,
         'evidencia_foto': evidencia_foto,
         'latitud': latitud,

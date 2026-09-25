@@ -178,6 +178,20 @@
             <label class="form-label" for="{{ incidente_form.tipo.id_for_label }}">{{ incidente_form.tipo.label }}</label>
             {{ incidente_form.tipo }}
           </div>
+          {% if incidente_form.fields.id_mascota %}
+          <div class="mb-3">
+            <label class="form-label">{{ incidente_form.id_mascota.label }}</label>
+            {% for casilla in incidente_form.id_mascota.subwidgets %}
+            <div class="form-check">
+              {{ casilla.tag }}
+              <label class="form-check-label" for="{{ casilla.id_for_label }}">{{ casilla.choice_label }}</label>
+            </div>
+            {% endfor %}
+            {% for error in incidente_form.id_mascota.errors %}
+              <div class="text-danger small mt-1">{{ error }}</div>
+            {% endfor %}
+          </div>
+          {% endif %}
           <div class="mb-3">
             <label class="form-label" for="{{ incidente_form.descripcion.id_for_label }}">{{ incidente_form.descripcion.label }}</label>
             {{ incidente_form.descripcion }}

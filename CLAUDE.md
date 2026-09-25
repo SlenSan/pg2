@@ -99,7 +99,7 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
 {
   _id: ObjectId,
   id_paseador: ObjectId,   // referencia a usuarios
-  id_mascota: ObjectId,    // referencia a mascotas
+  id_mascotas: [ObjectId], // referencia a mascotas - una o varias del mismo dueño, juntas en el mismo paseo
   id_dueno: ObjectId,      // referencia a usuarios
   estado: String,          // "disponible" | "en_vivo" | "historico"
   fecha: Date,
@@ -132,6 +132,9 @@ Retención: ~90 días (trazabilidad y validación, no almacenamiento permanente 
 {
   _id: ObjectId,
   id_paseo: ObjectId,      // referencia a paseos
+  id_mascota: ObjectId,    // referencia a mascotas - null solo para "accidente_paseador"
+                            // (no involucra a ningun animal en particular); para los
+                            // demas tipos, obligatorio si el paseo tiene mas de una mascota
   tipo: String,            // "fuga_animal" | "mordedura_agresion" |
                             // "accidente_animal" | "accidente_paseador" | "otro"
   descripcion: String,

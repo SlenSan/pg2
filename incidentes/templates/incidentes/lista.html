@@ -17,7 +17,7 @@
         <span class="badge bg-danger mb-2">{{ item.incidente.tipo }}</span>
         <p class="card-text">{{ item.incidente.descripcion }}</p>
         <p class="card-text text-muted small mb-1">
-          Mascota: {{ item.mascota.nombre|default:"—" }} · Paseador: {{ item.paseador.nombre|default:"—" }}
+          {% if item.mascota %}Mascota: {{ item.mascota.nombre }} · {% endif %}Paseador: {{ item.paseador.nombre|default:"—" }}
         </p>
         <p class="card-text text-muted small mb-1">
           Ubicación:

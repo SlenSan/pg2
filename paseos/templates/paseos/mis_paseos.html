@@ -11,7 +11,7 @@
   <div class="list-group-item">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
       <div>
-        <strong>{{ item.mascota.nombre|default:"—" }}</strong>
+        <strong>{{ item.mascotas_nombres|default:"—" }}</strong>
         con <strong>{{ item.paseador.nombre|default:"—" }}</strong>
         <div class="text-muted small">
           {% if item.paseo.hora_inicio %}Inicio: {{ item.paseo.hora_inicio }}{% endif %}
