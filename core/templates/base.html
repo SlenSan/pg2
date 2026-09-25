@@ -50,14 +50,14 @@
       </button>
       <div class="collapse navbar-collapse" id="navbarNav">
         {% if request.session.rol == 'paseador' %}
-        <div class="navbar-nav gap-3">
+        <div class="navbar-nav gap-3 ms-lg-auto">
           <a class="nav-link text-white" href="{% url 'usuarios:perfil_paseador' %}">Mi perfil</a>
           <a class="nav-link text-white" href="{% url 'paseos:historial_paseador' %}">Historial de paseos</a>
           <a class="nav-link text-white" href="{% url 'notificaciones:lista' %}">Notificaciones</a>
           <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
         </div>
         {% else %}
-        <div class="navbar-nav gap-3">
+        <div class="navbar-nav gap-3 ms-lg-auto">
           <a class="nav-link text-white" href="{% url 'mascotas:lista' %}">Mis mascotas</a>
           <a class="nav-link text-white" href="{% url 'paseos:lista_disponibles' %}">Paseadores disponibles</a>
           <a class="nav-link text-white" href="{% url 'paseos:mis_paseos' %}">Mis paseos</a>

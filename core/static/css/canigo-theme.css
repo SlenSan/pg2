@@ -105,6 +105,29 @@ a:hover {
   letter-spacing: .01em;
 }
 
+/* Bootstrap fija el padding horizontal de cada .nav-link del navbar con
+   una variable CSS (--bs-navbar-nav-link-padding-x) que solo se activa
+   desde min-width:992px (el mismo punto de quiebre de
+   .navbar-expand-lg), y sin flex-shrink:0 los links pueden angostarse de
+   forma desareja ahi cerca - eso es lo que se veia como espacio
+   disparejo entre ellos. Se pone el padding en 0 y se deja que el "gap"
+   (ver .navbar-nav en base.html) sea la UNICA fuente de espacio entre
+   links, igual para cualquier palabra, sin que se encojan ni envuelvan
+   su texto.
+
+   Mismo @media que usa Bootstrap para esa regla a proposito: en movil
+   (`.navbar-nav` ya viene con padding-x:0 de fabrica, esto no le cambia
+   nada ahi) el menu colapsado se apila en columna con su propio
+   comportamiento de ancho/wrap - no se toca. */
+@media (min-width: 992px) {
+  .navbar-expand-lg .navbar-nav .nav-link {
+    padding-left: 0;
+    padding-right: 0;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
 /* Cards */
 
 .card {
