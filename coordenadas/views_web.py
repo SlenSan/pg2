@@ -26,17 +26,26 @@ _TEXTO_INCIDENTE_GENERICO = 'Se reportó un incidente durante este paseo.'
 
 def _texto_incidente(id_paseo):
     """
-    Texto del banner de emergencia del mapa. Muestra a que mascota afecto
-    el incidente MAS RECIENTE de este paseo (si tiene una asignada - ver
-    CLAUDE.md, "accidente_paseador" no aplica a ningun animal en
-    particular), o el mensaje generico de siempre si no. Reusado tanto en
-    la carga inicial de la pagina como en el polling (coordenadas_de_paseo),
-    para que el texto se actualice solo si llega un incidente nuevo
-    mientras el dueño ya esta mirando el mapa.
+    Texto del banner de emergencia del mapa, o None si no hay que
+    mostrarlo. El resultado de esta funcion es la UNICA fuente de verdad
+    de si el banner se muestra - antes se llamaba solo cuando
+    paseo.emergencia era truthy, pero si por algun motivo ese campo
+    quedaba en True sin un documento real en `incidentes` (desincronia de
+    datos), esta funcion igual devolvia el texto generico: se veia un
+    banner "fantasma" sin nada detras. Ahora, sin incidentes reales,
+    devuelve None sin importar lo que diga paseo.emergencia - "existe un
+    documento real" es una condicion, no una opcional.
+
+    Muestra a que mascota afecto el incidente MAS RECIENTE de este paseo
+    (si tiene una asignada - ver CLAUDE.md, "accidente_paseador" no
+    aplica a ningun animal en particular), o el mensaje generico si no.
+    Reusado tanto en la carga inicial de la pagina como en el polling
+    (coordenadas_de_paseo), para que el texto se actualice solo si llega
+    un incidente nuevo mientras el dueño ya esta mirando el mapa.
     """
     incidentes = incidentes_repository.listar_por_paseo(id_paseo)
     if not incidentes:
-        return _TEXTO_INCIDENTE_GENERICO
+        return None
     ultimo = incidentes[0]  # ya viene ordenado por fecha_hora desc
     if ultimo.get('id_mascota'):
         mascota = mascotas_repository.obtener_varias_por_id([ultimo['id_mascota']]).get(ultimo['id_mascota'])
@@ -82,7 +91,10 @@ def mapa_paseo(request, id_paseo):
         'paseador': paseador,
         'hora_inicio_iso': _fecha_iso_utc(paseo.get('hora_inicio')),
         'hora_fin_iso': _fecha_iso_utc(paseo.get('hora_fin')),
-        'texto_emergencia': _texto_incidente(paseo['_id']) if paseo.get('emergencia') else None,
+        # None si no hay un incidente real (ver _texto_incidente) - esto
+        # es lo unico que decide si el banner se muestra, no
+        # paseo.emergencia por si solo.
+        'texto_emergencia': _texto_incidente(paseo['_id']),
     })
 
 
@@ -93,11 +105,12 @@ def coordenadas_de_paseo(request, id_paseo):
         return JsonResponse({'error': 'No autorizado.'}, status=403)
 
     puntos = repository.listar_por_paseo(id_paseo)
-    emergencia = paseo.get('emergencia', False)
     return JsonResponse({
         'estado': paseo['estado'],
-        'emergencia': emergencia,
-        'texto_emergencia': _texto_incidente(paseo['_id']) if emergencia else None,
+        'emergencia': paseo.get('emergencia', False),
+        # None si no hay un incidente real (ver _texto_incidente) - el JS
+        # decide si mostrar el banner segun esto, no segun "emergencia".
+        'texto_emergencia': _texto_incidente(paseo['_id']),
         'puntos': [repository.a_json(p) for p in puntos],
     })
 

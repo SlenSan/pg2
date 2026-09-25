@@ -65,8 +65,21 @@
   </div>
 </div>
 
-<div class="alert alert-danger d-flex align-items-center justify-content-between gap-2 mb-3" id="alerta-emergencia" {% if not paseo.emergencia %}hidden{% endif %}>
-  <span><i class="bi bi-exclamation-triangle-fill"></i> <span id="alerta-emergencia-texto">{{ texto_emergencia }}</span></span>
+{% comment %}
+Bug corregido: el atributo HTML "hidden" no gana contra ".d-flex", que
+Bootstrap define con "display:flex !important" - un !important siempre
+le gana a "hidden" (display:none normal, sin !important), sin importar
+el orden o la especificidad, asi que el banner quedaba SIEMPRE visible
+sin importar esta condicion. Se cambio a alternar la clase ".d-none"
+(tambien !important, pero definida despues de ".d-flex" en el CSS de
+Bootstrap, asi que en un empate de !important gana ella) - mismo
+criterio en el JS de abajo.
+{% endcomment %}
+<div
+  class="alert alert-danger d-flex align-items-center justify-content-between gap-2 mb-3 {% if not texto_emergencia %}d-none{% endif %}"
+  id="alerta-emergencia"
+>
+  <span><i class="bi bi-exclamation-triangle-fill"></i> <span id="alerta-emergencia-texto">{% if texto_emergencia %}{{ texto_emergencia }}{% endif %}</span></span>
   <a href="{% url 'incidentes:lista' %}" class="alert-link text-nowrap">Ver detalles</a>
 </div>
 
@@ -157,10 +170,13 @@
         badge.textContent = data.estado;
         badge.className = 'badge ' + (claseBadgePorEstado[data.estado] || 'bg-secondary');
 
-        document.getElementById('alerta-emergencia').hidden = !data.emergencia;
-        if (data.texto_emergencia) {
-          document.getElementById('alerta-emergencia-texto').textContent = data.texto_emergencia;
-        }
+        // .d-none (no el atributo "hidden") - ver el comentario en el
+        // HTML de mas arriba sobre por que "hidden" no alcanza junto a
+        // ".d-flex". Sin texto_emergencia (no hay un incidente real
+        // detras, sin importar lo que diga data.emergencia) el banner se
+        // mantiene oculto.
+        document.getElementById('alerta-emergencia').classList.toggle('d-none', !data.texto_emergencia);
+        document.getElementById('alerta-emergencia-texto').textContent = data.texto_emergencia || '';
 
         var puntos = data.puntos.map(function (p) { return [p.latitud, p.longitud]; });
         document.getElementById('sin-puntos').hidden = puntos.length > 0;
