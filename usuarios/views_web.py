@@ -387,12 +387,42 @@ def perfil_paseador(request):
             tenia_descripcion=tenia_descripcion,
         )
 
-    paseos_completados = paseos_repository.contar_completados_por_paseador(ObjectId(request.session['id_usuario']))
+    oid_paseador = ObjectId(request.session['id_usuario'])
+    paseos_completados = paseos_repository.contar_completados_por_paseador(oid_paseador)
+
+    # "Mis reseñas": mismo criterio que ya usa paseos/views_web.py en
+    # detalle_paseador() (el perfil que ve el DUEÑO de este paseador) -
+    # esa vista si lo tenia, pero nunca se replico aca, en "Mi perfil" (la
+    # vista del propio paseador sobre si mismo). Duplicado a proposito en
+    # vez de importarlo de la app paseos, mismo criterio que
+    # _hay_notificaciones_sin_leer en coordenadas/views_web.py: evitar una
+    # dependencia cruzada entre apps por unas pocas lineas.
+    calificaciones_con_comentario = [
+        c for c in calificaciones_repository.listar_por_paseador(oid_paseador) if c.get('comentario')
+    ][:5]
+    duenos_por_id = repository.obtener_varios_por_id(
+        [c['id_dueno'] for c in calificaciones_con_comentario]
+    )
+    resenas = [
+        {'calificacion': c, 'dueno': duenos_por_id.get(c['id_dueno'])}
+        for c in calificaciones_con_comentario
+    ]
+
+    # "Miembro desde": pymongo devuelve fecha_registro naive (UTC, ver
+    # core/mongo.py) - se marca tzinfo=utc explicitamente antes de pasarla
+    # al filtro `|date` de Django, o el naive datetime se formatea tal
+    # cual (asumido ya en hora local) en vez de convertirse a
+    # America/Bogota - mismo problema ya resuelto para horario_desde/
+    # horario_hasta y las notificaciones (ver CLAUDE.md).
+    fecha_registro = usuario.get('fecha_registro')
+    miembro_desde = fecha_registro.replace(tzinfo=timezone.utc) if fecha_registro else None
 
     return render(request, 'usuarios/perfil_paseador.html', {
         'usuario': usuario,
         'form': form,
         'paseos_completados': paseos_completados,
+        'resenas': resenas,
+        'miembro_desde': miembro_desde,
     })
 
 
