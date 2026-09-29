@@ -10,7 +10,30 @@
 {% endblock %}
 
 {% block content %}
-<h1 class="h4 mb-4">Paseadores disponibles ahora</h1>
+<h1 class="h4 mb-3">Paseadores disponibles ahora</h1>
+
+{% comment %}
+Filtro por zona (Incremento 1, RF5/RF6): enlaces normales (no un form ni
+JS) - cada chip es un link a "?zona=X", asi que el filtro queda en la URL
+(se puede compartir/recargar) y el chip activo se marca comparando
+zona_seleccionada en el servidor. Un paseador con horarios mixtos (unos
+en la zona elegida, otros no) sigue apareciendo en la lista filtrada -
+aparece porque TIENE al menos un horario que califica, confirmado antes
+de programar esto.
+{% endcomment %}
+<div class="zona-chips-contenedor mb-4">
+  <a href="{% url 'paseos:lista_disponibles' %}" class="zona-chip {% if not zona_seleccionada %}zona-chip-activa{% endif %}">
+    Todas las zonas
+  </a>
+  {% for zona in zonas_validas %}
+  <a
+    href="?zona={{ zona|urlencode }}"
+    class="zona-chip {% if zona_seleccionada == zona %}zona-chip-activa{% endif %}"
+  >
+    {{ zona }}
+  </a>
+  {% endfor %}
+</div>
 
 {% if items %}
 <div class="row row-cols-1 row-cols-md-2 g-3">
@@ -53,6 +76,13 @@
   {% endfor %}
 </div>
 {% else %}
-<p class="text-muted">No hay paseadores disponibles en este momento. Vuelve más tarde.</p>
+<p class="text-muted">
+  {% if zona_seleccionada %}
+  No hay paseadores disponibles en {{ zona_seleccionada }} en este momento.
+  <a href="{% url 'paseos:lista_disponibles' %}">Ver todas las zonas</a>.
+  {% else %}
+  No hay paseadores disponibles en este momento. Vuelve más tarde.
+  {% endif %}
+</p>
 {% endif %}
 {% endblock %}

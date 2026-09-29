@@ -114,6 +114,10 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
   fecha: Date,
   horario_desde: Date,     // horario PROPUESTO por el paseador (solo mientras estado="disponible")
   horario_hasta: Date,     // idem - distintos de hora_inicio/hora_fin (el momento REAL)
+  zonas: [String],         // 0 a N valores de ZONAS_VALIDAS (paseos/repository.py) - se elige CADA
+                            // VEZ que se publica un horario (no es un dato fijo del perfil del
+                            // paseador); [] significa "no especificó zona", NUNCA "todas las zonas"
+                            // (Incremento 1, RF5/RF6, ver "Corrección de alcance" 2026-09-29 mas abajo)
   hora_inicio: Date,
   hora_fin: Date,
   total_puntos: Number,
@@ -135,6 +139,25 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
 > "las mascotas de este paseo" debe filtrar `id_mascotas` a SOLO las de
 > ESE dueño (`mascotas.obtener_varias_por_id_y_dueno`), nunca las 8 - un
 > dueño no debe ver el nombre de una mascota ajena.
+
+> **Corrección de alcance (2026-09-29):** se agregó `zonas` (Incremento 1,
+> RF5/RF6) - el paseador elige en qué comunas puede pasear cada vez que
+> publica un horario (selección múltiple, opcional). La lista fija son
+> las **17 comunas oficiales de Bucaramanga** (división político-urbana
+> de la Alcaldía, bucaramanga.gov.co/division-politico-urbana), en este
+> orden y con estos nombres exactos - no uses ninguna otra lista de
+> zonas/barrios en el proyecto:
+> `Norte`, `Nororiental`, `San Francisco`, `Occidental`, `García Rovira`,
+> `La Concordia`, `La Ciudadela`, `Sur Occidente`, `La Pedregosa`,
+> `Provenza`, `Sur`, `Cabecera del Llano`, `Oriental`, `Morrorico`,
+> `Centro`, `Lagos del Cacique`, `Mutis` (constante `ZONAS_VALIDAS` en
+> `paseos/repository.py`). Se eligió la división oficial completa (no una
+> lista curada de sectores populares) para que ningún sector de la ciudad
+> quede sin cobertura posible. El dueño filtra por zona en "Paseadores
+> disponibles" (un paseador con horarios mixtos - algunos en la zona
+> filtrada, otros no - sigue apareciendo, porque tiene al menos un
+> horario que califica) y ve las zonas de cada horario en el perfil del
+> paseador.
 
 ### `coordenadas_detalle`
 ```

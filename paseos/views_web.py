@@ -21,7 +21,7 @@ from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository
 from paseos.forms import InscribirMascotaForm, PublicarHorarioForm, SubirFotoPaseoForm
-from paseos.repository import MAXIMO_MASCOTAS_POR_PASEO
+from paseos.repository import MAXIMO_MASCOTAS_POR_PASEO, ZONAS_VALIDAS
 from usuarios import repository as usuarios_repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
 
@@ -65,8 +65,20 @@ def lista_disponibles(request):
     esto ya no es una fila por horario (se veria el mismo paseador
     repetido) - se agrupa por paseador, y el detalle de cada horario se
     ve al entrar a su perfil.
+
+    Filtro por zona (?zona=...): un paseador con VARIOS horarios (algunos
+    en la zona elegida, otros no, o sin zona) sigue apareciendo en la
+    lista filtrada - "aparece si tiene al menos un horario que califica",
+    confirmado explicitamente antes de programar esto. Se valida contra
+    ZONAS_VALIDAS y se ignora (sin filtrar, sin error) cualquier valor que
+    no sea una de las 17 comunas - una URL manipulada a mano no rompe la
+    pantalla, simplemente no filtra nada.
     """
-    paseos = repository.listar_disponibles_con_cupo()
+    zona_seleccionada = request.GET.get('zona') or ''
+    if zona_seleccionada not in ZONAS_VALIDAS:
+        zona_seleccionada = ''
+
+    paseos = repository.listar_disponibles_con_cupo(zona=zona_seleccionada or None)
     paseadores_por_id = usuarios_repository.obtener_varios_por_id(
         [p['id_paseador'] for p in paseos]
     )
@@ -79,6 +91,9 @@ def lista_disponibles(request):
         {
             'id_paseador': str(id_paseador),
             'paseador': paseadores_por_id.get(id_paseador),
+            # Si hay un filtro activo, esto cuenta los horarios que
+            # califican para esa zona, no el total del paseador - es lo
+            # relevante para quien esta filtrando por zona.
             'cantidad_horarios': len(horarios),
         }
         # El orden de horarios_por_paseador sigue el de `paseos` (mas
@@ -86,7 +101,11 @@ def lista_disponibles(request):
         # horario publicado mas recientemente de cada paseador.
         for id_paseador, horarios in horarios_por_paseador.items()
     ]
-    return render(request, 'paseos/lista_disponibles.html', {'items': items})
+    return render(request, 'paseos/lista_disponibles.html', {
+        'items': items,
+        'zonas_validas': ZONAS_VALIDAS,
+        'zona_seleccionada': zona_seleccionada,
+    })
 
 
 @requiere_dueno
@@ -326,6 +345,7 @@ def publicar_disponibilidad(request):
         id_paseador=id_paseador,
         horario_desde=horario_desde,
         horario_hasta=horario_hasta,
+        zonas=form.cleaned_data['zonas'],
     )
     messages.success(request, 'Horario publicado correctamente.')
     return redirect('usuarios:bienvenida_paseador')

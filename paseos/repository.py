@@ -24,8 +24,22 @@ MOMENTOS_FOTO_VALIDOS = ('inicio', 'mitad', 'fin')
 # 2026-09-25".
 MAXIMO_MASCOTAS_POR_PASEO = 8
 
+# Las 17 comunas oficiales de Bucaramanga (division politico-urbana de la
+# Alcaldia, bucaramanga.gov.co/division-politico-urbana), en este orden
+# exacto - se eligio la division oficial completa (no una lista curada de
+# sectores populares) para que ningun sector de la ciudad quede sin
+# cobertura posible. Fuente unica de verdad reusada por el formulario de
+# publicar horario (choices) y por el filtro del dueño (validacion) -
+# ninguna otra lista de zonas en el proyecto.
+ZONAS_VALIDAS = (
+    'Norte', 'Nororiental', 'San Francisco', 'Occidental', 'García Rovira',
+    'La Concordia', 'La Ciudadela', 'Sur Occidente', 'La Pedregosa', 'Provenza',
+    'Sur', 'Cabecera del Llano', 'Oriental', 'Morrorico', 'Centro',
+    'Lagos del Cacique', 'Mutis',
+)
 
-def crear_disponibilidad(*, id_paseador, horario_desde, horario_hasta):
+
+def crear_disponibilidad(*, id_paseador, horario_desde, horario_hasta, zonas=None):
     """
     horario_desde/horario_hasta: horario PROPUESTO por el paseador para
     este horario publicado (naive UTC, igual que el resto de las fechas
@@ -33,6 +47,12 @@ def crear_disponibilidad(*, id_paseador, horario_desde, horario_hasta):
     momento REAL en que el paseo paso a en_vivo/historico. Un paseador
     puede tener varios documentos 'disponible' al mismo tiempo (varios
     horarios publicados); ya no hay limite de uno solo.
+
+    zonas: 0 a N valores de ZONAS_VALIDAS - se elige CADA VEZ que se
+    publica un horario (no es un dato fijo del perfil del paseador), y es
+    opcional: [] significa "no especifico zona", nunca "todas las zonas".
+    La validacion de que cada valor pertenezca a la lista fija la hace el
+    formulario (PublicarHorarioForm), no esta funcion.
     """
     paseo = {
         'id_paseador': id_paseador,
@@ -43,6 +63,7 @@ def crear_disponibilidad(*, id_paseador, horario_desde, horario_hasta):
         'fecha': datetime.now(timezone.utc),
         'horario_desde': horario_desde,
         'horario_hasta': horario_hasta,
+        'zonas': list(zonas) if zonas else [],
         'hora_inicio': None,
         'hora_fin': None,
         'total_puntos': 0,
@@ -115,7 +136,7 @@ def listar_disponibles_de_paseador(id_paseador):
     }).sort('horario_desde', 1))
 
 
-def listar_disponibles_con_cupo():
+def listar_disponibles_con_cupo(zona=None):
     """
     Paseos publicados que TODAVIA aceptan inscripciones nuevas - ya no es
     "sin asignar" (antes solo id_mascotas=[]; ahora un horario con 3/8
@@ -124,12 +145,21 @@ def listar_disponibles_con_cupo():
     MAXIMO_MASCOTAS_POR_PASEO ni el paseador lo haya cerrado). $expr
     porque el limite se compara contra el tamaño de un array del propio
     documento, algo que un filtro de igualdad simple no puede expresar.
+
+    zona: si se da, solo horarios que tengan ESA zona entre las suyas
+    (filtro del dueño en "Paseadores disponibles" - ver CLAUDE.md/Incremento 1
+    de zonas de servicio). {'zonas': zona} matchea automaticamente si el
+    array la contiene, sin sintaxis especial. El llamador (lista_disponibles())
+    ya valida que `zona` sea una de ZONAS_VALIDAS antes de llegar aca.
     """
-    return list(get_db().paseos.find({
+    filtro = {
         'estado': 'disponible',
         'acepta_inscripciones': True,
         '$expr': {'$lt': [{'$size': '$id_mascotas'}, MAXIMO_MASCOTAS_POR_PASEO]},
-    }).sort('fecha', -1))
+    }
+    if zona:
+        filtro['zonas'] = zona
+    return list(get_db().paseos.find(filtro).sort('fecha', -1))
 
 
 def obtener_por_id(id_paseo):

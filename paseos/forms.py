@@ -1,5 +1,7 @@
 from django import forms
 
+from paseos.repository import ZONAS_VALIDAS
+
 
 class PublicarHorarioForm(forms.Form):
     """
@@ -17,6 +19,17 @@ class PublicarHorarioForm(forms.Form):
     hasta = forms.TimeField(
         label='Hasta',
         widget=forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
+    )
+    # required=False + MultipleChoiceField: selección múltiple, opcional
+    # (0 a N zonas, nunca "todas" por defecto - ver
+    # paseos.repository.crear_disponibilidad). choices=ZONAS_VALIDAS es la
+    # validacion de backend "gratis": Django ya rechaza cualquier valor
+    # fuera de esa lista fija al llamar is_valid(), sin codigo extra.
+    zonas = forms.MultipleChoiceField(
+        label='Zonas de servicio',
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        choices=[(z, z) for z in ZONAS_VALIDAS],
     )
 
     def clean(self):

@@ -76,10 +76,25 @@
             <i class="bi bi-clock"></i>
             {{ item.horario.horario_desde|time:"H:i" }} - {{ item.horario.horario_hasta|time:"H:i" }}
           </p>
-          <p class="text-muted small mb-3">
+          <p class="text-muted small mb-2">
             Quedan {{ item.cupos_restantes }} cupo{{ item.cupos_restantes|pluralize }} libre{{ item.cupos_restantes|pluralize }}
             de {{ item.cupos_totales }} en este paseo.
           </p>
+          {% comment %}
+          Zonas de este horario especifico (no del paseador en general -
+          se eligen cada vez que se publica, ver CLAUDE.md). Solo lectura
+          - "Sin zona especificada" si vino vacio, nunca se oculta ni se
+          asume que aplica a todas las zonas.
+          {% endcomment %}
+          <div class="zona-chips-contenedor mb-3">
+            {% if item.horario.zonas %}
+            {% for zona in item.horario.zonas %}
+            <span class="zona-chip zona-chip-activa zona-chip-solo-lectura">{{ zona }}</span>
+            {% endfor %}
+            {% else %}
+            <span class="text-muted small">Sin zona especificada</span>
+            {% endif %}
+          </div>
           <form method="post" action="{% url 'paseos:inscribir_en_horario' id_paseador item.id_paseo %}" novalidate>
             {% csrf_token %}
             <div class="mb-2">

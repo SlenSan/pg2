@@ -94,7 +94,7 @@ servidor - ver estado_bienvenida_paseador() y _horarios_paseador.html.
 </div>
 
 <div class="modal fade" id="modalPublicarHorario" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <form method="post" action="{% url 'paseos:publicar_disponibilidad' %}" class="modal-content">
       {% csrf_token %}
       <div class="modal-header">
@@ -105,9 +105,31 @@ servidor - ver estado_bienvenida_paseador() y _horarios_paseador.html.
           <label class="form-label" for="{{ form_horario.desde.id_for_label }}">{{ form_horario.desde.label }}</label>
           {{ form_horario.desde }}
         </div>
-        <div class="mb-0">
+        <div class="mb-4">
           <label class="form-label" for="{{ form_horario.hasta.id_for_label }}">{{ form_horario.hasta.label }}</label>
           {{ form_horario.hasta }}
+        </div>
+
+        {% comment %}
+        Zonas de servicio (Incremento 1, RF5/RF6) - selección múltiple y
+        OPCIONAL (0 a N comunas; vacío significa "no especificó zona", no
+        "todas las zonas" - ver paseos.repository.crear_disponibilidad).
+        Toggle sin JavaScript: cada "casilla.tag" es un checkbox real,
+        oculto, cuyo label inmediato siguiente es el chip visual -
+        ".zona-chip-input:checked + .zona-chip" en canigo-theme.css hace
+        el cambio de color, no un onclick.
+        {% endcomment %}
+        <div class="card">
+          <div class="card-body">
+            <h3 class="h6 mb-1">Zonas de servicio</h3>
+            <p class="text-muted small mb-3">Selecciona las comunas donde puedes pasear</p>
+            <div class="zona-chips-grid">
+              {% for casilla in form_horario.zonas.subwidgets %}
+              {{ casilla.tag }}
+              <label class="zona-chip" for="{{ casilla.id_for_label }}">{{ casilla.choice_label }}</label>
+              {% endfor %}
+            </div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
