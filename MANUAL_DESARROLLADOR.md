@@ -140,8 +140,10 @@ python manage.py runserver
 ```
 
 El sitio queda en `http://127.0.0.1:8000/`. La pantalla de entrada
-(`seleccionar_rol`, vista `home`) pregunta si sos dueño o paseador antes de
-mostrar el formulario de registro correspondiente.
+(`seleccionar_rol`, vista `home`) pregunta si sos "Paseador" o "Cliente"; el
+rol elegido ahí se conserva en `?rol=` mientras se salta entre login y
+registro (no solo para crear cuenta — ver sección 8, "El rol se elige una
+sola vez").
 
 Para confirmar que la conexión a MongoDB Atlas quedó bien configurada, hay
 un endpoint de diagnóstico: `http://127.0.0.1:8000/api/db-status/` (devuelve
@@ -341,6 +343,26 @@ detalle_paseador`) como en su propio "Mi perfil"
   pertenencia distintas por rol (como `coordenadas:mapa_paseo`), no se usa
   ninguno de los dos — se usa `@requiere_autenticacion` y la vista decide el
   acceso ella misma según `request.session['rol']`.
+- **El rol se elige una sola vez, en el selector, y se conserva entre login
+  y registro**: `seleccionar_rol.html` ("Eres...", tarjetas "Paseador"/
+  "Cliente") enlaza a `login?rol=paseador|dueno`, no a registro. Desde login,
+  el toggle "Crear cuenta" lleva a `registro?rol=<mismo rol>`; desde registro,
+  "Iniciar sesión" lleva a `login?rol=<mismo rol>`. El `rol` viaja en un campo
+  oculto del formulario de login y se valida en el backend contra
+  `{"paseador", "dueno"}` — cualquier otro valor se trata como "sin rol"
+  (mismo comportamiento que el login de siempre, sin comparar rol). En
+  `login()`, el rol elegido **nunca filtra qué cuenta puede entrar**: las
+  credenciales se validan primero, igual que siempre; solo si son correctas
+  se compara el rol de la cuenta contra el elegido, y un mismatch no crea
+  sesión (mensaje: `Esta cuenta está registrada como cliente/paseador...`,
+  sin revelar si el correo existe con el otro rol). Login sin `?rol=` (el
+  caso de un decorador redirigiendo por falta de sesión) sigue sin comparar
+  rol. Ese redirect ahora incluye `?next=` (`usuarios.decorators.
+  _redirigir_a_login`) — **no existía antes de este cambio**; se agregó
+  porque, sin él, no había nada que "respetar" después de iniciar sesión.
+  `login()` valida `next` con `url_has_allowed_host_and_scheme` antes de
+  redirigir ahí (mismo mecanismo que usa `django.contrib.auth`), para
+  que no sea un open redirect.
 - **Nunca pongas `{% %}` de Django dentro de un comentario de JavaScript**
   (`// ...` o `/* ... */` en un `<script>`): el motor de plantillas de
   Django no sabe qué es un comentario de JS, parsea `{% %}` en todo el

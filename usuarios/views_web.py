@@ -17,6 +17,7 @@ from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.utils import timezone as django_timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from calificaciones import repository as calificaciones_repository
 from core.media import ErrorSubidaImagen, subir_imagen
@@ -31,6 +32,11 @@ from usuarios.forms import EditarPerfilPaseadorForm, LoginForm, RegistroDuenoFor
 
 _ROLES_VALIDOS = ('dueno', 'paseador')
 _ROL_MONGO = {'dueno': 'dueño', 'paseador': 'paseador'}
+# Para el mensaje de rol equivocado en login() - nunca usan la palabra
+# "dueño" hacia el usuario final (las tarjetas del selector dicen
+# "Cliente", no "dueño" - ver seleccionar_rol.html).
+_ROL_LABEL_MINUSCULA = {'dueño': 'cliente', 'paseador': 'paseador'}
+_ROL_LABEL_TARJETA = {'dueño': 'Cliente', 'paseador': 'Paseador'}
 
 
 def _url_dashboard(rol):
@@ -117,6 +123,26 @@ def registro(request):
 
 
 def login(request):
+    """
+    Rol opcional via ?rol= (paseador|dueno), elegido en el selector de
+    rol (seleccionar_rol.html): encamina al indicador/toggle correcto,
+    pero NUNCA determina ni filtra que cuenta puede entrar. Las
+    credenciales se validan PRIMERO, igual que siempre; solo si son
+    correctas se compara el rol de la cuenta contra el elegido - si no
+    coincide, no se crea sesion y el mensaje no revela si el correo
+    existe con el otro rol (evita confirmarle a quien no acerto el rol
+    que esa cuenta sí existe).
+
+    Sin ?rol= (por ejemplo, un decorador sin sesion redirigiendo con
+    ?next= - ver usuarios/decorators.py), el comportamiento es el mismo
+    de siempre: no se compara rol, y si llega `next` se respeta despues
+    de iniciar sesion.
+    """
+    rol = request.POST.get('rol') or request.GET.get('rol')
+    if rol not in _ROLES_VALIDOS:
+        rol = None
+    siguiente = request.POST.get('next') or request.GET.get('next') or ''
+
     if request.method == 'POST':
         form = LoginForm(request.POST)
         if form.is_valid():
@@ -124,12 +150,26 @@ def login(request):
             contrasena = form.cleaned_data['contrasena']
             if not usuario or not check_password(contrasena, usuario['contrasena']):
                 form.add_error(None, 'Correo o contraseña incorrectos.')
+            elif rol and usuario['rol'] != _ROL_MONGO[rol]:
+                form.add_error(None, 'Esta cuenta está registrada como {}. Ingresa desde "{}".'.format(
+                    _ROL_LABEL_MINUSCULA[usuario['rol']], _ROL_LABEL_TARJETA[usuario['rol']],
+                ))
             else:
                 _iniciar_sesion(request, usuario)
+                if siguiente and url_has_allowed_host_and_scheme(
+                    siguiente, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+                ):
+                    return redirect(siguiente)
                 return redirect(_url_dashboard(usuario['rol']))
     else:
         form = LoginForm()
-    return render(request, 'usuarios/login.html', {'form': form, 'modo': 'login'})
+
+    return render(request, 'usuarios/login.html', {
+        'form': form,
+        'modo': 'login',
+        'rol': rol,
+        'next': siguiente,
+    })
 
 
 def logout(request):

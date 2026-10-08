@@ -1,7 +1,9 @@
 from functools import wraps
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.shortcuts import redirect
+from django.urls import reverse
 
 # Panel propio de cada rol - usado para redirigir a alguien AUTENTICADO
 # pero con el rol equivocado (ver _requiere_rol mas abajo) y por
@@ -13,13 +15,25 @@ URL_DASHBOARD_POR_ROL = {
 }
 
 
+def _redirigir_a_login(request):
+    """
+    Incluye ?next= con la URL que se intentaba visitar, para que
+    usuarios.views_web.login() pueda volver ahi despues de iniciar
+    sesion en vez de siempre al dashboard del rol (ver ajustes antes del
+    despliegue, octubre 2026 - este ?next= no existia antes: sin el, la
+    regla de login "respeta next" no tenia nada que respetar).
+    """
+    destino = '{}?{}'.format(reverse('usuarios:login'), urlencode({'next': request.get_full_path()}))
+    return redirect(destino)
+
+
 def requiere_autenticacion(view_func):
     """Protege una vista web: exige sesion activa, de cualquier rol (dueño o paseador)."""
 
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         if not request.session.get('id_usuario'):
-            return redirect('usuarios:login')
+            return _redirigir_a_login(request)
         return view_func(request, *args, **kwargs)
 
     return wrapper
@@ -30,7 +44,7 @@ def _requiere_rol(rol_esperado):
         @wraps(view_func)
         def wrapper(request, *args, **kwargs):
             if not request.session.get('id_usuario'):
-                return redirect('usuarios:login')
+                return _redirigir_a_login(request)
             rol_sesion = request.session.get('rol')
             if rol_sesion != rol_esperado:
                 # Autenticado, pero con el rol equivocado para ESTA vista -

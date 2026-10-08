@@ -13,30 +13,30 @@
 
 {% block auth_form %}
 {% comment %}
-Decision (hallazgo (a), corrección de octubre 2026): esta pantalla es
-SOLO para crear cuenta - el rol nunca influye en el login (el login es
-el mismo formulario para cualquier rol ya existente, el rol ya esta
-guardado en el usuario). El titulo y los botones lo dicen explicitamente
-ahora, en vez de "Eres..." (que sonaba a una pregunta de login).
+Decision (ajustes de logica antes del despliegue, octubre 2026): el rol
+se elige ACA, al inicio, y se conserva entre login y registro - esto
+revierte parcialmente el hallazgo (a) (commit e307a8c), que habia
+encaminado estas tarjetas directo a REGISTRO (dejando el login sin
+rol). Ahora eligen el rol primero y van a LOGIN con ese rol
+(?rol=paseador|dueno) - "Eres..." en vez de "¿Cómo quieres crear tu
+cuenta?", porque esta pantalla ya no es solo para cuentas nuevas. Desde
+login, el toggle superior (ver base_auth.html) lleva a registro
+conservando el mismo rol si hace falta crear cuenta nueva.
 {% endcomment %}
-<h1 class="h3 text-center mb-4">¿Cómo quieres crear tu cuenta?</h1>
+<h1 class="h3 text-center mb-4">Eres...</h1>
 
 <div class="row g-3">
   <div class="col-12 col-sm-6">
-    <a href="{% url 'usuarios:registro' %}?rol=dueno" class="rol-tarjeta">
-      <span class="rol-tarjeta-icono"><i class="bi bi-person-heart"></i></span>
-      <span class="rol-tarjeta-titulo">Crear cuenta como dueño</span>
+    <a href="{% url 'usuarios:login' %}?rol=paseador" class="rol-tarjeta">
+      <span class="rol-tarjeta-icono"><i class="bi bi-person-walking"></i></span>
+      <span class="rol-tarjeta-titulo">Paseador</span>
     </a>
   </div>
   <div class="col-12 col-sm-6">
-    <a href="{% url 'usuarios:registro' %}?rol=paseador" class="rol-tarjeta">
-      <span class="rol-tarjeta-icono"><i class="bi bi-person-walking"></i></span>
-      <span class="rol-tarjeta-titulo">Crear cuenta como paseador</span>
+    <a href="{% url 'usuarios:login' %}?rol=dueno" class="rol-tarjeta">
+      <span class="rol-tarjeta-icono"><i class="bi bi-person-heart"></i></span>
+      <span class="rol-tarjeta-titulo">Cliente</span>
     </a>
   </div>
 </div>
-
-<p class="text-center mt-4 mb-0">
-  ¿Ya tienes cuenta? <a href="{% url 'usuarios:login' %}" class="auth-link">Inicia sesión</a>.
-</p>
 {% endblock %}

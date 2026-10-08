@@ -41,32 +41,23 @@ footer, empujándolo fuera de la pantalla en login/registro.
     <div class="auth-form-wrapper">
       {% block auth_toggle %}
       <div class="auth-toggle mb-4">
+        {% comment %}
+        Decision vigente (ajustes antes del despliegue, octubre 2026): el
+        rol se elige UNA vez, en el selector (seleccionar_rol.html), y se
+        conserva mientras se salta entre login y registro - ninguno de
+        los dos vuelve a mandar al selector si ya hay un rol elegido.
+        Revierte parcialmente el hallazgo (a) (commit e307a8c), que habia
+        dejado el login sin rol y el toggle "Crear cuenta" apuntando
+        siempre al selector.
+        {% endcomment %}
         <a
-          href="{% url 'usuarios:login' %}"
+          href="{% url 'usuarios:login' %}{% if rol %}?rol={{ rol }}{% endif %}"
           class="auth-toggle-btn {% if modo == 'login' %}active{% endif %}"
         >
           Iniciar sesión
         </a>
-        {% comment %}
-        Sin ?rol=, no a usuarios:registro directo: eso es justo lo que
-        causaba que alguien terminara registrado como "dueño" sin darse
-        cuenta (ver el fix en usuarios.views_web.registro). Si ya estamos
-        en el registro, este link mantiene el rol actual en vez de mandar
-        de nuevo a elegir.
-
-        Si estamos en LOGIN (modo != 'registro'), va a {% url 'home' %} -
-        confirmado que "home" (config/urls.py) YA renderiza
-        seleccionar_rol.html, asi que esto YA manda al selector de rol,
-        sin falta cambiar la URL. Es el comportamiento correcto a
-        proposito (hallazgo (a), corrección de octubre 2026): el
-        selector de rol es SOLO para crear cuenta (no existe el concepto
-        de "elegir rol para iniciar sesion" - el rol ya esta guardado en
-        el usuario), asi que desde login, "Crear cuenta" debe llevar ahi
-        a elegir con qué rol registrarse - no es un resto raro, es la
-        decision vigente.
-        {% endcomment %}
         <a
-          href="{% if modo == 'registro' %}?rol={{ rol }}{% else %}{% url 'home' %}{% endif %}"
+          href="{% if modo == 'registro' %}?rol={{ rol }}{% elif rol %}{% url 'usuarios:registro' %}?rol={{ rol }}{% else %}{% url 'home' %}{% endif %}"
           class="auth-toggle-btn {% if modo == 'registro' %}active{% endif %}"
         >
           Crear cuenta

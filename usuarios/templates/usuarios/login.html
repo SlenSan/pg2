@@ -5,8 +5,18 @@
 {% block auth_subtitulo %}Accede a tu cuenta y monitorea a tu mascota.{% endblock %}
 
 {% block auth_form %}
+{% if rol %}
+<div class="d-flex justify-content-between align-items-center mb-3 small">
+  <span class="text-muted">
+    Ingresando como <strong>{% if rol == 'paseador' %}Paseador{% else %}Cliente{% endif %}</strong>
+  </span>
+  <a href="{% url 'home' %}" class="auth-link">Cambiar rol</a>
+</div>
+{% endif %}
 <form method="post" novalidate>
   {% csrf_token %}
+  <input type="hidden" name="rol" value="{{ rol|default:'' }}">
+  <input type="hidden" name="next" value="{{ next|default:'' }}">
 
   <div class="mb-3">
     <label class="form-label" for="{{ form.correo.id_for_label }}">{{ form.correo.label }}</label>
