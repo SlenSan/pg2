@@ -649,6 +649,25 @@ a:hover {
   color: var(--color-muted-foreground);
 }
 
+/* Estado de certificados de mascota (Ley Kiara, ver mascotas/repository.py
+   estado_certificado_salud) y certificados del paseador - mismos 3 colores
+   que ya usan los badges de arriba, reusados en vez de inventar una paleta
+   nueva. */
+.badge-certificado-vigente {
+  background-color: var(--color-accent) !important;
+  color: var(--color-accent-foreground);
+}
+
+.badge-certificado-vencido {
+  background-color: var(--color-danger) !important;
+  color: var(--color-danger-foreground);
+}
+
+.badge-certificado-sin_certificado {
+  background-color: var(--color-muted) !important;
+  color: var(--color-muted-foreground);
+}
+
 /* Acciones rapidas */
 
 .accion-rapida {

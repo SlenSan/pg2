@@ -1,11 +1,16 @@
 """Acceso a la coleccion `mascotas` de MongoDB."""
 
-from datetime import datetime, timezone
+import calendar
+from datetime import date, datetime, timezone
 
 from bson import ObjectId
 from bson.errors import InvalidId
 
 from core.mongo import get_db, mapear_por_id
+
+# Ley 2480 de 2025 (Ley Kiara): el certificado de salud vence a los 6
+# MESES CALENDARIO de expedido (no dias) - ver estado_certificado_salud().
+_MESES_VIGENCIA_CERTIFICADO_SALUD = 6
 
 
 def crear_mascota(*, id_dueno, nombre, raza, edad, peso, observaciones='', foto=''):
@@ -102,3 +107,68 @@ def resolver_lista(ids_mascota, mascotas_por_id):
 def nombres_unidos(mascotas):
     """'Dobby, Luna' (o '' si la lista esta vacia) a partir de una lista de documentos de mascota."""
     return ', '.join(m['nombre'] for m in mascotas)
+
+
+def actualizar_certificado_salud(id_mascota, *, url, public_id, formato, fecha_expedicion):
+    get_db().mascotas.update_one({'_id': ObjectId(id_mascota)}, {'$set': {
+        'certificado_salud': {
+            'url': url,
+            'public_id': public_id,
+            'formato': formato,
+            'fecha_expedicion': fecha_expedicion,
+            'subido_en': datetime.now(timezone.utc),
+        },
+    }})
+
+
+def actualizar_carne_vacunacion(id_mascota, *, url, public_id, formato):
+    get_db().mascotas.update_one({'_id': ObjectId(id_mascota)}, {'$set': {
+        'carne_vacunacion': {
+            'url': url,
+            'public_id': public_id,
+            'formato': formato,
+            'subido_en': datetime.now(timezone.utc),
+        },
+    }})
+
+
+def _sumar_meses(fecha, meses):
+    """Suma meses CALENDARIO a `fecha` (no dias) - un certificado expedido
+    el 31 de enero vence el 31 de julio, no "31*6 dias despues". Si el mes
+    de destino es mas corto (ej. expedido el 31 y destino es febrero), se
+    ajusta al ultimo dia de ese mes."""
+    mes_total = fecha.month - 1 + meses
+    anio = fecha.year + mes_total // 12
+    mes = mes_total % 12 + 1
+    dia = min(fecha.day, calendar.monthrange(anio, mes)[1])
+    return date(anio, mes, dia)
+
+
+def estado_certificado_salud(certificado_salud):
+    """
+    Estado del certificado de salud de una mascota (Ley Kiara: vence a
+    los 6 meses calendario de expedido), SIEMPRE calculado al leer -
+    nunca se guarda un campo "vencido"/"vigente" en Mongo, porque
+    quedaria desactualizado con el simple paso del tiempo. Una sola
+    funcion para las 3 pantallas que lo muestran (listado y edicion de
+    mascotas del dueño, vista del paseador sobre su paseo), para que
+    "vencido" signifique lo mismo en todas.
+
+    Devuelve {'clave': 'sin_certificado'|'vigente'|'vencido', 'texto': ...}
+    - `clave` para la clase CSS del badge, `texto` ya armado para mostrar.
+    """
+    if not certificado_salud or not certificado_salud.get('fecha_expedicion'):
+        return {'clave': 'sin_certificado', 'texto': 'Sin certificado'}
+
+    fecha_expedicion = certificado_salud['fecha_expedicion']
+    if isinstance(fecha_expedicion, datetime):
+        fecha_expedicion = fecha_expedicion.date()
+
+    fecha_vencimiento = _sumar_meses(fecha_expedicion, _MESES_VIGENCIA_CERTIFICADO_SALUD)
+    hoy = datetime.now(timezone.utc).date()
+    if hoy >= fecha_vencimiento:
+        return {'clave': 'vencido', 'texto': 'Vencido'}
+    return {
+        'clave': 'vigente',
+        'texto': f'Vigente (vence el {fecha_vencimiento.strftime("%d/%m/%Y")})',
+    }

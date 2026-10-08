@@ -33,6 +33,12 @@
         {% if item.mascota.observaciones %}
         <p class="card-text text-muted small mb-0">{{ item.mascota.observaciones }}</p>
         {% endif %}
+        <div class="d-flex flex-wrap gap-1 mt-2">
+          <span class="badge badge-certificado-{{ item.estado_salud.clave }}">{{ item.estado_salud.texto }}</span>
+          {% if item.tiene_carne %}
+          <span class="badge badge-certificado-vigente">Carné cargado</span>
+          {% endif %}
+        </div>
       </div>
       <div class="card-footer bg-transparent border-top-0 text-end">
         <a href="{% url 'mascotas:editar' item.id %}" class="small">Editar</a>

@@ -26,6 +26,26 @@
     </form>
     <p class="text-muted small mt-2 mb-3" id="estado-gps">Compartiendo tu ubicación...</p>
 
+    {% if paseo_activo.mascotas_certificados %}
+    <div class="mb-3">
+      <p class="small text-muted mb-1">Certificados (Ley Kiara):</p>
+      {% for m in paseo_activo.mascotas_certificados %}
+      <div class="d-flex justify-content-between align-items-center small mb-1">
+        <span>{{ m.nombre }}</span>
+        <span>
+          <span class="badge badge-certificado-{{ m.estado_salud.clave }}">{{ m.estado_salud.texto }}</span>
+          {% if m.url_certificado_salud %}
+          <a href="{{ m.url_certificado_salud }}" target="_blank" rel="noopener">Ver</a>
+          {% endif %}
+          {% if m.url_carne_vacunacion %}
+          <a href="{{ m.url_carne_vacunacion }}" target="_blank" rel="noopener">Carné</a>
+          {% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     {% if paseo_activo.fotos_pendientes %}
     <div class="d-flex flex-wrap gap-2 mb-3">
       {% for momento in paseo_activo.fotos_pendientes %}

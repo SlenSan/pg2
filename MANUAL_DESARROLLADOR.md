@@ -219,7 +219,13 @@ y cómo se relacionan:
 - **`usuarios`** — dueños y paseadores en la misma colección, distinguidos
   por `rol` (`"dueño"` | `"paseador"`). Campos como `calificacion_promedio`,
   `verificado` y `descripcion` solo aplican a paseadores.
-- **`mascotas`** — cada una referencia a su dueño (`id_dueno`).
+- **`mascotas`** — cada una referencia a su dueño (`id_dueno`). Dos
+  subdocumentos opcionales añadidos para la Ley 2480 de 2025 (Ley Kiara):
+  `certificado_salud: {url, public_id, formato, fecha_expedicion,
+  subido_en}` y `carne_vacunacion: {url, public_id, formato, subido_en}`.
+  A diferencia de `foto` (solo URL), estos SÍ guardan `public_id` —
+  permite borrarlos de Cloudinary al reemplazarlos sin tener que
+  reconstruirlo desde la URL (ver sección 8).
 - **`paseos`** — la colección central. Un documento nace cuando el paseador
   publica un horario (`estado: "disponible"`) y transita a `"en_vivo"` y
   luego `"historico"`. Desde la extensión de multi-dueño, **un mismo paseo
@@ -388,6 +394,60 @@ detalle_paseador`) como en su propio "Mi perfil"
   esto es solo limpieza del archivo viejo. Verificado ejecutando: tras
   reemplazar la foto de una mascota, el `public_id` de la foto anterior
   ya no existe en Cloudinary (`cloudinary.api.resource()` devuelve 404).
+- **Certificados de mascota (Ley 2480 de 2025, Ley Kiara)**:
+  `mascotas:certificados` (`mascotas/views.py::certificados_mascota`,
+  dueño-only, mismo ownership check que editar) sube
+  `certificado_salud`/`carne_vacunacion` de forma independiente - se
+  puede subir uno, el otro, los dos, o ninguno (la vista exige al menos
+  uno). El estado del certificado de salud ("Sin certificado" / "Vigente
+  (vence el DD/MM/AAAA)" / "Vencido", 6 MESES CALENDARIO desde
+  `fecha_expedicion`, no días) se calcula **siempre al leer, nunca se
+  guarda** - una sola función (`mascotas.repository.
+  estado_certificado_salud()`) reusada en el listado, la edición de
+  mascotas y la vista del paseador sobre su paseo en vivo, para que
+  "vencido" signifique lo mismo en los tres lugares. `carne_vacunacion`
+  no tiene ese concepto de vigencia (el esquema no le pide
+  `fecha_expedicion` - ver CLAUDE.md), así que solo se muestra
+  "Cargado"/"Sin carné cargado".
+  Visibilidad: el dueño de la mascota (las vistas de arriba) y el
+  paseador que la tiene asignada en su paseo **en vivo** ahora mismo
+  (`usuarios.views_web.bienvenida_paseador`, badge + link "Ver"/"Carné"
+  por mascota) - ningún otro paseador puede llegar a esos datos porque
+  la consulta ya está acotada a los paseos del paseador que hace la
+  petición (`paseos_repository.obtener_en_vivo_de_paseador`). **No se
+  agregó** a "Mis paseos"/historial del paseador ni a los horarios
+  "disponible" todavía - la consigna hablaba de "la vista del paseador
+  sobre su paseo" en singular; si se necesita en esas otras pantallas,
+  es una extensión aparte.
+- **Validación de archivo por contenido real, no solo por extensión**:
+  `core/media.py::subir_certificado()` (usada por certificados de
+  mascota y, en un commit aparte, del paseador) rechaza un archivo si
+  sus primeros bytes no coinciden con la extensión declarada (firma
+  JPEG `\xff\xd8\xff`, PNG `\x89PNG\r\n\x1a\n`, PDF `%PDF-`) - un archivo
+  de texto renombrado a `.pdf` no pasa. También valida tamaño (máx. 5MB)
+  antes de intentar subir nada. Usa `resource_type="auto"` en la subida
+  a Cloudinary (a diferencia de `subir_imagen()`, que asume imagen) -
+  necesario para que Cloudinary acepte un PDF.
+- **Limitación conocida y DELIBERADA de Cloudinary (capa gratuita): los
+  PDF se suben bien pero su URL devuelve 401 al intentar verla** (las
+  imágenes SÍ se ven con normalidad). Confirmado ejecutando: se subió un
+  certificado_salud en PDF real (no simulado) y su `secure_url` responde
+  401 (`image/gif` de 0 bytes) al pedirla directamente, mientras que un
+  carné de vacunación en JPG subido de la misma forma responde 200. La
+  causa es una configuración de la cuenta de Cloudinary, no del código:
+  **Cloudinary → Settings → Security → "Allow delivery of PDF and ZIP
+  files"** (desactivado por defecto en cuentas gratuitas). No se
+  implementó ningún workaround (como convertir el PDF a imagen) - decisión
+  explícita de la consigna de este cambio. Hasta que se active esa
+  opción, un certificado/carné subido como PDF se guarda bien en Mongo y
+  Cloudinary, pero el link "Ver" de alguien que lo abra devolverá error.
+- **Limitación conocida: las URLs de Cloudinary son públicas para
+  cualquiera que tenga el link exacto** - no hay control de acceso de
+  Cloudinary en sí (a diferencia de la vista de Canigo, que sí exige
+  sesión y ownership antes de MOSTRAR el link). Alguien que consiga la
+  URL de un certificado (por ejemplo, compartiéndola fuera de la
+  plataforma) puede verla sin autenticarse. No se cambió este
+  comportamiento.
 - **No existe una pantalla de "detalle" de mascota** (solo listado y
   formulario) - el link "Editar" se agregó en el listado
   (`mascotas/templates/mascotas/lista.html`); si en el futuro se agrega

@@ -372,6 +372,21 @@ def bienvenida_paseador(request):
             'fotos_pendientes': [
                 m for m in paseos_repository.MOMENTOS_FOTO_VALIDOS if m not in fotos_existentes
             ],
+            # Certificados (Ley Kiara): el paseador asignado puede ver el
+            # estado de cada mascota que esta paseando AHORA, aunque sea de
+            # otro dueño (ver CLAUDE.md, mascotas con hasta 8 por paseo) -
+            # a diferencia de "mascota_nombre" arriba (un solo string
+            # unido), aca se necesita una entrada POR mascota para que cada
+            # una tenga su propio badge/link.
+            'mascotas_certificados': [
+                {
+                    'nombre': m['nombre'],
+                    'estado_salud': mascotas_repository.estado_certificado_salud(m.get('certificado_salud')),
+                    'url_certificado_salud': (m.get('certificado_salud') or {}).get('url'),
+                    'url_carne_vacunacion': (m.get('carne_vacunacion') or {}).get('url'),
+                }
+                for m in mascotas_paseo
+            ],
         }
         # mascotas=mascotas_paseo: si el paseo lleva mas de una, el form
         # agrega el radio "¿a cual mascota afecta?" (ver ReportarIncidenteForm);
