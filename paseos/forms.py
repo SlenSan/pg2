@@ -25,10 +25,19 @@ class PublicarHorarioForm(forms.Form):
     # paseos.repository.crear_disponibilidad). choices=ZONAS_VALIDAS es la
     # validacion de backend "gratis": Django ya rechaza cualquier valor
     # fuera de esa lista fija al llamar is_valid(), sin codigo extra.
+    # attrs={'class': 'zona-chip-input'} en el WIDGET (no a mano en la
+    # plantilla con {{ casilla.tag }}): asi cualquier plantilla que
+    # renderice este campo la trae puesta por construccion. Sin esto, el
+    # checkbox se renderizaba sin clase -> la regla CSS
+    # ".zona-chip-input { opacity: 0; position: absolute; ... }" nunca
+    # aplicaba (confirmado con getComputedStyle: opacity "1", position
+    # "static"), dejando la casilla visible y desalineada de su propia
+    # etiqueta en el grid - de ahi que se pudiera marcar la zona vecina
+    # por error (bug (b) del reporte de hallazgos).
     zonas = forms.MultipleChoiceField(
         label='Zonas de servicio',
         required=False,
-        widget=forms.CheckboxSelectMultiple,
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'zona-chip-input'}),
         choices=[(z, z) for z in ZONAS_VALIDAS],
     )
 
