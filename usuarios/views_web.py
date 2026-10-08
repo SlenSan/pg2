@@ -18,9 +18,10 @@ from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.utils import timezone as django_timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 
 from calificaciones import repository as calificaciones_repository
-from core.media import ErrorSubidaImagen, subir_imagen
+from core.media import ErrorArchivoInvalido, ErrorSubidaImagen, eliminar_archivo, subir_certificado, subir_imagen
 from incidentes.forms import ReportarIncidenteForm
 from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
@@ -28,7 +29,14 @@ from paseos import repository as paseos_repository
 from paseos.forms import PublicarHorarioForm
 from usuarios import repository
 from usuarios.decorators import URL_DASHBOARD_POR_ROL, requiere_dueno, requiere_paseador
-from usuarios.forms import EditarPerfilPaseadorForm, LoginForm, RegistroDuenoForm, RegistroPaseadorForm
+from usuarios.forms import (
+    TIPO_PRIMEROS_AUXILIOS,
+    CertificadoPaseadorForm,
+    EditarPerfilPaseadorForm,
+    LoginForm,
+    RegistroDuenoForm,
+    RegistroPaseadorForm,
+)
 
 _ROLES_VALIDOS = ('dueno', 'paseador')
 _ROL_MONGO = {'dueno': 'dueño', 'paseador': 'paseador'}
@@ -531,6 +539,60 @@ def perfil_paseador(request):
         'resenas': resenas,
         'miembro_desde': miembro_desde,
     })
+
+
+@requiere_paseador
+def certificados_paseador(request):
+    """
+    El paseador agrega/borra sus propios certificados (RF14 no se toca
+    aca: "verificado" sigue siendo un campo distinto, administrado fuera
+    de esta pantalla - ver MANUAL_DESARROLLADOR.md). Cada envio de este
+    formulario AGREGA un certificado nuevo a la lista, no edita uno
+    existente.
+    """
+    id_usuario = request.session['id_usuario']
+    usuario = repository.obtener_por_id(id_usuario)
+
+    if request.method == 'POST':
+        form = CertificadoPaseadorForm(request.POST, request.FILES)
+        if form.is_valid():
+            try:
+                subido = subir_certificado(form.cleaned_data['archivo'], carpeta='certificados_paseadores')
+            except ErrorArchivoInvalido as exc:
+                form.add_error('archivo', str(exc))
+            else:
+                fecha = form.cleaned_data['fecha_expedicion']
+                repository.agregar_certificado_paseador(
+                    id_usuario,
+                    tipo=form.cleaned_data['tipo'],
+                    nombre=form.cleaned_data['nombre'],
+                    entidad=form.cleaned_data['entidad'],
+                    fecha_expedicion=datetime.combine(fecha, datetime.min.time()),
+                    url=subido['url'],
+                    public_id=subido['public_id'],
+                    formato=subido['formato'],
+                )
+                messages.success(request, 'Certificado agregado.')
+                return redirect('usuarios:certificados_paseador')
+    else:
+        form = CertificadoPaseadorForm()
+
+    certificados = usuario.get('certificados', [])
+    return render(request, 'usuarios/certificados_paseador.html', {
+        'form': form,
+        'certificados': certificados,
+        'tiene_primeros_auxilios': any(c['tipo'] == TIPO_PRIMEROS_AUXILIOS for c in certificados),
+    })
+
+
+@require_POST
+@requiere_paseador
+def eliminar_certificado_paseador(request, id_certificado):
+    certificado = repository.eliminar_certificado_paseador(request.session['id_usuario'], id_certificado)
+    if certificado and certificado.get('public_id'):
+        eliminar_archivo(certificado['public_id'])
+    messages.success(request, 'Certificado eliminado.')
+    return redirect('usuarios:certificados_paseador')
 
 
 def _iniciar_sesion(request, usuario):

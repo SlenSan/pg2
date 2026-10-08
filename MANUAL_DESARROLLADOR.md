@@ -200,7 +200,7 @@ Responsabilidad de cada app:
 | App | Responsabilidad | Colección(es) principal(es) |
 |---|---|---|
 | `core` | Infraestructura compartida: cliente de MongoDB (`mongo.py`), subida de imágenes a Cloudinary (`media.py`), tema visual (`static/css/canigo-theme.css`), layout base (`templates/base.html`), context processor del punto de notificaciones, comando `crear_indices`, y un endpoint de diagnóstico (`/api/db-status/`). | ninguna propia |
-| `usuarios` | Registro/login/logout (comunes a los dos roles), dashboards de dueño y paseador, perfil editable del paseador, decoradores de autenticación (`decorators.py`) | `usuarios` |
+| `usuarios` | Registro/login/logout (comunes a los dos roles), dashboards de dueño y paseador, perfil editable del paseador (incl. certificados), decoradores de autenticación (`decorators.py`) | `usuarios` |
 | `mascotas` | Registrar, listar y editar las mascotas de un dueño | `mascotas` |
 | `paseos` | Publicar/despublicar disponibilidad (con zonas de servicio), listar paseadores e inscribir mascotas, iniciar/finalizar el paseo, "Paseos activos"/historial del dueño y "Mis paseos" del paseador | `paseos` (colección central) |
 | `coordenadas` | Recepción de puntos GPS del paseador, mapa en vivo/histórico del dueño, cálculo de distancia recorrida | `coordenadas_detalle` |
@@ -218,7 +218,13 @@ y cómo se relacionan:
 
 - **`usuarios`** — dueños y paseadores en la misma colección, distinguidos
   por `rol` (`"dueño"` | `"paseador"`). Campos como `calificacion_promedio`,
-  `verificado` y `descripcion` solo aplican a paseadores.
+  `verificado` y `descripcion` solo aplican a paseadores. Nuevo array
+  opcional (solo paseador): `certificados: [{id, tipo, nombre, entidad,
+  fecha_expedicion, url, public_id, formato, subido_en}]` - `tipo` es una
+  lista cerrada (`usuarios.forms.TIPOS_CERTIFICADO_PASEADOR`), no texto
+  libre. Cada certificado tiene su propio `id` (un `ObjectId` generado al
+  agregarlo, distinto del `_id` del usuario) para poder borrarlo
+  individualmente.
 - **`mascotas`** — cada una referencia a su dueño (`id_dueno`). Dos
   subdocumentos opcionales añadidos para la Ley 2480 de 2025 (Ley Kiara):
   `certificado_salud: {url, public_id, formato, fecha_expedicion,
@@ -448,6 +454,42 @@ detalle_paseador`) como en su propio "Mi perfil"
   URL de un certificado (por ejemplo, compartiéndola fuera de la
   plataforma) puede verla sin autenticarse. No se cambió este
   comportamiento.
+- **Certificados del paseador**: `usuarios:certificados_paseador`
+  (`usuarios/views_web.py`, `@requiere_paseador`) agrega certificados a
+  `usuarios.certificados` (cada envío del formulario AGREGA uno nuevo, no
+  edita uno existente - para "editar", se borra y se sube de nuevo).
+  `usuarios:eliminar_certificado_paseador` (`@require_POST`,
+  `@requiere_paseador`) borra uno por su `id` de subdocumento - el
+  `$pull` en Mongo ya está acotado al `_id` del usuario en sesión, así
+  que un paseador nunca puede borrar un certificado ajeno aunque
+  manipule el id en la URL. Mismas validaciones de archivo que los
+  certificados de mascota (`core/media.py::subir_certificado`, carpeta
+  `canigo/certificados_paseadores`). Visible en "Mi perfil" (el propio
+  paseador, con botón "Eliminar") y en el perfil público que ve el dueño
+  (`paseos:detalle_paseador`, solo lectura) - en ambos lugares, el texto
+  literal **"Documentos cargados por el paseador. Canigo no verifica su
+  autenticidad."** (nunca la palabra "verificado" para estos documentos,
+  para no confundirlos con el campo `verificado` de RF14, que es un
+  mecanismo totalmente distinto - ver mas abajo). Si no hay un
+  certificado de tipo "Primeros auxilios para perros"
+  (`usuarios.forms.TIPO_PRIMEROS_AUXILIOS`), se muestra "Sin certificado
+  de primeros auxilios cargado" - independiente de si hay otros
+  certificados cargados.
+- **RF14 ("Verificado") es un mecanismo DISTINTO a los certificados, y
+  no se tocó**: `usuarios.verificado` (Boolean, solo paseador) se
+  inicializa en `False` al registrarse (`usuarios/repository.py::
+  crear_usuario`) y se muestra como insignia verde "Verificado" en 3
+  plantillas (`perfil_paseador.html`, `paseos/detalle_paseador.html`,
+  `paseos/lista_disponibles.html`). **Nada en el código actual lo
+  cambia después de la creación de la cuenta** - no hay vista, botón,
+  comando de gestión ni integración con Django admin (las colecciones
+  de Mongo no son modelos de Django, así que `/admin/` no puede tocarlo
+  aunque se registrara: `usuarios/admin.py` está vacío). Confirmado
+  revisando todo el repositorio (`grep verificado`): la única forma hoy
+  de poner `verificado=True` es editando el documento directamente en
+  MongoDB Atlas (o un script aparte), fuera de la aplicación. Esta tarea
+  NO conecta los certificados con `verificado` ni agrega una forma de
+  cambiarlo - esa decisión queda pendiente, a criterio del usuario.
 - **No existe una pantalla de "detalle" de mascota** (solo listado y
   formulario) - el link "Editar" se agregó en el listado
   (`mascotas/templates/mascotas/lista.html`); si en el futuro se agrega

@@ -41,6 +41,29 @@
       </div>
     </div>
 
+    <div class="card mb-4">
+      <div class="card-body">
+        <h2 class="h5 mb-3">Certificados</h2>
+        {% if not tiene_primeros_auxilios %}
+        <p class="text-muted small">Sin certificado de primeros auxilios cargado.</p>
+        {% endif %}
+        {% if certificados_paseador %}
+        {% for c in certificados_paseador %}
+        <div class="mb-2 {% if not forloop.last %}pb-2 border-bottom{% endif %}">
+          <div class="fw-bold small">{{ c.nombre }}</div>
+          <div class="text-muted small">{{ c.tipo }} · {{ c.entidad }} · {{ c.fecha_expedicion|date:"d/m/Y" }}</div>
+          <a href="{{ c.url }}" target="_blank" rel="noopener" class="small">Ver archivo</a>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="text-muted small mb-0">Este paseador aún no ha cargado certificados.</p>
+        {% endif %}
+        <p class="text-muted small mt-2 mb-0">
+          Documentos cargados por el paseador. Canigo no verifica su autenticidad.
+        </p>
+      </div>
+    </div>
+
     {% if resenas %}
     <div class="card mb-4">
       <div class="card-body">

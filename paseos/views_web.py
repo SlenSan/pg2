@@ -24,6 +24,7 @@ from paseos.forms import InscribirMascotaForm, PublicarHorarioForm, SubirFotoPas
 from paseos.repository import MAXIMO_MASCOTAS_POR_PASEO, ZONAS_VALIDAS
 from usuarios import repository as usuarios_repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
+from usuarios.forms import TIPO_PRIMEROS_AUXILIOS
 
 
 def _horario_a_utc(hora_desde, hora_hasta):
@@ -162,12 +163,15 @@ def detalle_paseador(request, id_paseador):
             'form': InscribirMascotaForm(mascotas=mis_mascotas, prefix=id_paseo),
         })
 
+    certificados_paseador = paseador.get('certificados', [])
     return render(request, 'paseos/detalle_paseador.html', {
         'id_paseador': id_paseador,
         'paseador': paseador,
         'horarios': items_horario,
         'tiene_mascotas': tiene_mascotas,
         'resenas': resenas,
+        'certificados_paseador': certificados_paseador,
+        'tiene_primeros_auxilios': any(c['tipo'] == TIPO_PRIMEROS_AUXILIOS for c in certificados_paseador),
     })
 
 

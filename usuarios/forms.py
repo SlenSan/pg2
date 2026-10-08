@@ -1,6 +1,16 @@
+from datetime import date
+
 from django import forms
 
 _INPUT_CLASS = 'form-control'
+
+# Lista cerrada (no texto libre) - ver CLAUDE.md/consigna del punto 4.
+TIPO_PRIMEROS_AUXILIOS = 'Primeros auxilios para perros'
+TIPOS_CERTIFICADO_PASEADOR = (
+    (TIPO_PRIMEROS_AUXILIOS, TIPO_PRIMEROS_AUXILIOS),
+    ('Capacitación en cuidado o manejo canino', 'Capacitación en cuidado o manejo canino'),
+    ('Otro certificado relacionado', 'Otro certificado relacionado'),
+)
 
 
 class _RegistroBaseForm(forms.Form):
@@ -91,6 +101,43 @@ class EditarPerfilPaseadorForm(forms.Form):
                 'Ya tenías una descripción escrita: no puedes dejarla vacía, solo cambiarla.'
             )
         return descripcion
+
+
+class CertificadoPaseadorForm(forms.Form):
+    """Agregar un certificado nuevo a la lista del paseador (ver
+    usuarios.repository.agregar_certificado_paseador) - cada envío crea un
+    certificado nuevo, no edita uno existente (para editar uno, se borra
+    y se sube de nuevo)."""
+
+    tipo = forms.ChoiceField(
+        choices=TIPOS_CERTIFICADO_PASEADOR,
+        label='Tipo de certificado',
+        widget=forms.Select(attrs={'class': _INPUT_CLASS}),
+    )
+    nombre = forms.CharField(
+        max_length=150,
+        label='Nombre del certificado',
+        widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
+    )
+    entidad = forms.CharField(
+        max_length=150,
+        label='Entidad que lo expidió',
+        widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
+    )
+    fecha_expedicion = forms.DateField(
+        label='Fecha de expedición',
+        widget=forms.DateInput(attrs={'class': _INPUT_CLASS, 'type': 'date'}),
+    )
+    archivo = forms.FileField(
+        label='Archivo (JPG, PNG o PDF, máx. 5MB)',
+        widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
+    )
+
+    def clean_fecha_expedicion(self):
+        fecha = self.cleaned_data['fecha_expedicion']
+        if fecha > date.today():
+            raise forms.ValidationError('La fecha de expedición no puede ser futura.')
+        return fecha
 
 
 class LoginForm(forms.Form):

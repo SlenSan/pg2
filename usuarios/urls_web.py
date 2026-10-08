@@ -13,4 +13,10 @@ urlpatterns = [
     path('paseador/bienvenida/', views_web.bienvenida_paseador, name='bienvenida_paseador'),
     path('paseador/bienvenida/estado/', views_web.estado_bienvenida_paseador, name='estado_bienvenida_paseador'),
     path('paseador/perfil/', views_web.perfil_paseador, name='perfil_paseador'),
+    path('paseador/certificados/', views_web.certificados_paseador, name='certificados_paseador'),
+    path(
+        'paseador/certificados/<str:id_certificado>/eliminar/',
+        views_web.eliminar_certificado_paseador,
+        name='eliminar_certificado_paseador',
+    ),
 ]

@@ -73,6 +73,53 @@ def actualizar_perfil_paseador(*, id_usuario, telefono, descripcion, foto_perfil
     )
 
 
+def agregar_certificado_paseador(id_usuario, *, tipo, nombre, entidad, fecha_expedicion, url, public_id, formato):
+    """
+    $push a `usuarios.certificados` (array, solo rol=paseador) - cada
+    certificado tiene su propio `id` (un ObjectId nuevo, no el `_id` del
+    usuario) para poder borrarlo individualmente despues (ver
+    eliminar_certificado_paseador). No hay "editar" un certificado
+    existente - se borra y se sube de nuevo.
+    """
+    oid = id_usuario if isinstance(id_usuario, ObjectId) else ObjectId(id_usuario)
+    certificado = {
+        'id': ObjectId(),
+        'tipo': tipo,
+        'nombre': nombre,
+        'entidad': entidad,
+        'fecha_expedicion': fecha_expedicion,
+        'url': url,
+        'public_id': public_id,
+        'formato': formato,
+        'subido_en': datetime.now(timezone.utc),
+    }
+    get_db().usuarios.update_one({'_id': oid}, {'$push': {'certificados': certificado}})
+    return certificado
+
+
+def eliminar_certificado_paseador(id_usuario, id_certificado):
+    """
+    $pull por `id` del subdocumento - acotado a `_id: oid_usuario` en el
+    filtro, asi que un paseador solo puede borrar certificados de SU
+    PROPIO arreglo (la vista ya lo limita a su propia sesion, pero el
+    filtro de Mongo lo hace doblemente seguro). Devuelve el certificado
+    borrado (o None si no existia) para poder limpiar su archivo en
+    Cloudinary sin una consulta aparte.
+    """
+    oid = id_usuario if isinstance(id_usuario, ObjectId) else ObjectId(id_usuario)
+    try:
+        oid_certificado = ObjectId(id_certificado)
+    except (InvalidId, TypeError):
+        return None
+    usuario = get_db().usuarios.find_one_and_update(
+        {'_id': oid},
+        {'$pull': {'certificados': {'id': oid_certificado}}},
+    )
+    if not usuario:
+        return None
+    return next((c for c in usuario.get('certificados', []) if c['id'] == oid_certificado), None)
+
+
 def resolver_lista(ids_usuario, usuarios_por_id):
     """
     Lista ORDENADA de documentos de usuario a partir de una lista de ids
