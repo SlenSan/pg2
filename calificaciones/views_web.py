@@ -20,13 +20,20 @@ def calificar_paseo(request, id_paseo):
     # Este dueño debe ser UNO de los (posiblemente varios) dueños del
     # paseo - ver CLAUDE.md, "Corrección de alcance 2026-09-25".
     es_dueno_del_paseo = paseo and ObjectId(id_dueno) in paseo.get('id_duenos', [])
+    # Los 3 redirect de este archivo que mencionan "no se puede/ya se
+    # calificó" van a Historial, no a "Paseos activos" (antes "Mis
+    # paseos") - un paseo calificable es SIEMPRE 'historico', y desde el
+    # cambio de alcance del punto (d) del reporte de hallazgos, "Paseos
+    # activos" ya no muestra NUNCA paseos 'historico' (solo
+    # disponible/en_vivo) - mandar ahi dejaria al dueño sin ver el paseo
+    # del que se le esta hablando.
     if not es_dueno_del_paseo or paseo['estado'] != 'historico':
         messages.error(request, 'Este paseo no se puede calificar.')
-        return redirect('paseos:mis_paseos')
+        return redirect('paseos:historial')
 
     if repository.obtener_por_paseo_y_dueno(id_paseo, id_dueno):
         messages.info(request, 'Ya calificaste este paseo.')
-        return redirect('paseos:mis_paseos')
+        return redirect('paseos:historial')
 
     paseador = usuarios_repository.obtener_por_id(paseo['id_paseador'])
     duracion_min = None
@@ -47,7 +54,7 @@ def calificar_paseo(request, id_paseo):
                 )
             except DuplicateKeyError:
                 messages.info(request, 'Ya calificaste este paseo.')
-                return redirect('paseos:mis_paseos')
+                return redirect('paseos:historial')
             promedio = repository.calcular_promedio(paseo['id_paseador'])
             usuarios_repository.actualizar_calificacion_promedio(paseo['id_paseador'], promedio)
             notificaciones_repository.crear(

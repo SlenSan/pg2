@@ -244,8 +244,14 @@ def inscribir_en_horario(request, id_paseador, id_paseo):
 
 @requiere_dueno
 def mis_paseos(request):
+    """
+    "Paseos activos" (antes "Mis paseos" - ver reporte de hallazgos,
+    punto (d)): SOLO 'disponible'/'en_vivo' (repository.
+    listar_activos_por_dueno). Lo ya terminado vive en historial() - cada
+    paseo aparece en una sola de las dos pantallas, nunca en ambas.
+    """
     id_dueno = request.session['id_usuario']
-    paseos = repository.listar_por_dueno(id_dueno)
+    paseos = repository.listar_activos_por_dueno(id_dueno)
     paseadores_por_id = usuarios_repository.obtener_varios_por_id(
         [p['id_paseador'] for p in paseos]
     )
@@ -255,14 +261,9 @@ def mis_paseos(request):
     # de quedarse solo con los ids presentes en este mapa, en el orden
     # original - ver CLAUDE.md, "Corrección de alcance 2026-09-25".
     mis_mascotas_por_id = {m['_id']: m for m in mascotas_repository.listar_por_dueno(id_dueno)}
-    # Igual con las calificaciones: un paseo compartido puede tener una
-    # calificacion de OTRO dueño sin que este haya calificado todavia -
-    # "calificado" es siempre relativo a ESTE dueño, nunca "algun dueño".
-    oid_dueno = ObjectId(id_dueno)
-    ids_calificados = {
-        c['id_paseo'] for c in calificaciones_repository.listar_por_paseos([p['_id'] for p in paseos])
-        if c['id_dueno'] == oid_dueno
-    }
+    # Sin "calificado"/ids_calificados aca: esta pantalla ya no muestra
+    # NUNCA paseos 'historico' (los unicos que se pueden calificar), asi
+    # que esa pregunta dejo de aplicar - vive en historial().
     items = [
         {
             'id_paseo': str(p['_id']),
@@ -271,7 +272,6 @@ def mis_paseos(request):
             'mascotas_nombres': mascotas_repository.nombres_unidos(
                 mascotas_repository.resolver_lista(p.get('id_mascotas'), mis_mascotas_por_id)
             ),
-            'calificado': p['_id'] in ids_calificados,
         }
         for p in paseos
     ]

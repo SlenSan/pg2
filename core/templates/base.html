@@ -73,7 +73,7 @@
         <div class="navbar-nav gap-3 ms-lg-auto">
           <a class="nav-link text-white" href="{% url 'mascotas:lista' %}">Mis mascotas</a>
           <a class="nav-link text-white" href="{% url 'paseos:lista_disponibles' %}">Paseadores disponibles</a>
-          <a class="nav-link text-white" href="{% url 'paseos:mis_paseos' %}">Mis paseos</a>
+          <a class="nav-link text-white" href="{% url 'paseos:mis_paseos' %}">Paseos activos</a>
           <a class="nav-link text-white navbar-campana" href="{% url 'notificaciones:lista' %}">
             Notificaciones
             <span class="navbar-campana-punto campana-punto {% if not hay_notificaciones_sin_leer %}d-none{% endif %}"></span>

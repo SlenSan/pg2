@@ -200,7 +200,7 @@ Responsabilidad de cada app:
 | `core` | Infraestructura compartida: cliente de MongoDB (`mongo.py`), subida de imágenes a Cloudinary (`media.py`), tema visual (`static/css/canigo-theme.css`), layout base (`templates/base.html`), context processor del punto de notificaciones, comando `crear_indices`, y un endpoint de diagnóstico (`/api/db-status/`). | ninguna propia |
 | `usuarios` | Registro/login/logout (comunes a los dos roles), dashboards de dueño y paseador, perfil editable del paseador, decoradores de autenticación (`decorators.py`) | `usuarios` |
 | `mascotas` | Registrar y listar las mascotas de un dueño | `mascotas` |
-| `paseos` | Publicar/despublicar disponibilidad (con zonas de servicio), listar paseadores e inscribir mascotas, iniciar/finalizar el paseo, "Mis paseos" e historial de ambos roles | `paseos` (colección central) |
+| `paseos` | Publicar/despublicar disponibilidad (con zonas de servicio), listar paseadores e inscribir mascotas, iniciar/finalizar el paseo, "Paseos activos"/historial del dueño y "Mis paseos" del paseador | `paseos` (colección central) |
 | `coordenadas` | Recepción de puntos GPS del paseador, mapa en vivo/histórico del dueño, cálculo de distancia recorrida | `coordenadas_detalle` |
 | `incidentes` | Botón de emergencia del paseador, historial de incidentes del dueño | `incidentes` |
 | `calificaciones` | Calificar un paseo finalizado (1–5 + comentario opcional) | `calificaciones` |

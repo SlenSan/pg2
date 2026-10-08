@@ -345,6 +345,28 @@ def listar_por_dueno(id_dueno):
     return list(get_db().paseos.find({'id_duenos': oid}).sort('fecha', -1))
 
 
+def listar_activos_por_dueno(id_dueno):
+    """
+    Paseos de este dueño que siguen "activos" - 'disponible' (agendado,
+    esperando que empiece) o 'en_vivo' (en curso ahora mismo). Para
+    "Paseos activos" (antes "Mis paseos" - ver reporte de hallazgos,
+    punto (d)): lo que ya termino ('historico') vive SOLO en Historial,
+    nunca aca - cada paseo aparece en una sola de las dos pantallas.
+    Filtro hecho aca (Mongo), no en la vista ni en la plantilla - mismo
+    criterio de repository pattern estricto que el resto del proyecto.
+    No reemplaza listar_por_dueno() (sigue haciendo falta sin filtrar de
+    estado en incidentes/, notificaciones/ y el dashboard del dueño).
+    """
+    try:
+        oid = ObjectId(id_dueno)
+    except (InvalidId, TypeError):
+        return []
+    return list(get_db().paseos.find({
+        'id_duenos': oid,
+        'estado': {'$in': ['disponible', 'en_vivo']},
+    }).sort('fecha', -1))
+
+
 def listar_por_paseador(id_paseador):
     return list(get_db().paseos.find({'id_paseador': id_paseador}).sort('fecha', -1))
 

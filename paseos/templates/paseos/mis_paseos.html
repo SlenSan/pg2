@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Mis paseos — Canigo{% endblock %}
+{% block title %}Paseos activos — Canigo{% endblock %}
 
 {% block content %}
-<h1 class="h4 mb-4">Mis paseos</h1>
+<h1 class="h4 mb-4">Paseos activos</h1>
 
 {% if items %}
 <div class="list-group">
@@ -15,28 +15,24 @@
         con <strong>{{ item.paseador.nombre|default:"—" }}</strong>
         <div class="text-muted small">
           {% if item.paseo.hora_inicio %}Inicio: {{ item.paseo.hora_inicio }}{% endif %}
-          {% if item.paseo.hora_fin %} · Fin: {{ item.paseo.hora_fin }}{% endif %}
         </div>
       </div>
       <div class="text-end">
         <span class="badge
           {% if item.paseo.estado == 'disponible' %}bg-secondary
-          {% elif item.paseo.estado == 'en_vivo' %}bg-success
-          {% else %}bg-dark{% endif %}">
+          {% else %}bg-success{% endif %}">
           {{ item.paseo.estado }}
         </span>
+        {% comment %}
+        "Ver mapa" (seguimiento en vivo) ya existia para esta pantalla -
+        solo aparece una vez que el paseo tiene hora_inicio, que recien se
+        registra al pasar a 'en_vivo' (ver paseos.repository.iniciar_paseo)
+        - un paseo todavia 'disponible' (agendado, sin empezar) no la
+        tiene, asi que naturalmente no muestra este link.
+        {% endcomment %}
         {% if item.paseo.hora_inicio %}
         <div class="mt-1">
           <a href="{% url 'coordenadas:mapa_paseo' item.id_paseo %}" class="btn btn-outline-primary">Ver mapa</a>
-        </div>
-        {% endif %}
-        {% if item.paseo.estado == 'historico' %}
-        <div class="mt-1">
-          {% if item.calificado %}
-          <span class="text-muted small">Ya calificado</span>
-          {% else %}
-          <a href="{% url 'calificaciones:calificar_paseo' item.id_paseo %}" class="btn btn-outline-success">Calificar</a>
-          {% endif %}
         </div>
         {% endif %}
       </div>
@@ -46,8 +42,8 @@
 </div>
 {% else %}
 <p class="text-muted">
-  Todavía no has inscrito a tu mascota en ningún paseo.
-  <a href="{% url 'paseos:lista_disponibles' %}">Ver paseadores disponibles</a>.
+  No tienes paseos activos.
+  <a href="{% url 'paseos:historial' %}">Ver historial</a>.
 </p>
 {% endif %}
 {% endblock %}
