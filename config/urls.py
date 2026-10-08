@@ -29,5 +29,6 @@ urlpatterns = [
     path('coordenadas/', include('coordenadas.urls_web')),
     path('incidentes/', include('incidentes.urls_web')),
     path('calificaciones/', include('calificaciones.urls_web')),
+    path('administracion/', include('administracion.urls_web')),
     path('api/', include('core.urls')),
 ]

@@ -13,6 +13,12 @@ _TIPO_INFO = {
     'fin_paseo': {'titulo': 'Paseo finalizado', 'icono': 'bi-flag-fill', 'color': 'ambar'},
     'emergencia': {'titulo': '¡Emergencia reportada!', 'icono': 'bi-exclamation-triangle-fill', 'color': 'rojo'},
     'calificacion': {'titulo': 'Nueva calificación', 'icono': 'bi-star-fill', 'color': 'amarillo'},
+    # RF14 (verificacion de paseadores, panel de administracion) - NO
+    # esta en la lista cerrada que documenta CLAUDE.md
+    # ("inicio_paseo"|"fin_paseo"|"emergencia"|"calificacion"); se agrega
+    # aca porque la tarea que lo pidio fue explicita en reusar
+    # `notificaciones` para esto - ver MANUAL_DESARROLLADOR.md.
+    'verificacion': {'titulo': 'Verificación de perfil', 'icono': 'bi-patch-check-fill', 'color': 'verde'},
 }
 
 

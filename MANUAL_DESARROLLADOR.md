@@ -206,7 +206,8 @@ Responsabilidad de cada app:
 | `coordenadas` | Recepción de puntos GPS del paseador, mapa en vivo/histórico del dueño, cálculo de distancia recorrida | `coordenadas_detalle` |
 | `incidentes` | Botón de emergencia del paseador, historial de incidentes del dueño | `incidentes` |
 | `calificaciones` | Calificar un paseo finalizado (1–5 + comentario opcional) | `calificaciones` |
-| `notificaciones` | Notificaciones in-app (inicio/fin de paseo, emergencia, calificación) y el endpoint que alimenta el punto naranja del navbar | `notificaciones` |
+| `notificaciones` | Notificaciones in-app (inicio/fin de paseo, emergencia, calificación, verificación) y el endpoint que alimenta el punto naranja del navbar | `notificaciones` |
+| `administracion` | Panel de verificación de paseadores (RF14). Sin colección propia - todo el acceso pasa por `usuarios.repository` | ninguna propia |
 
 ## 6. Modelo de datos
 
@@ -224,7 +225,11 @@ y cómo se relacionan:
   lista cerrada (`usuarios.forms.TIPOS_CERTIFICADO_PASEADOR`), no texto
   libre. Cada certificado tiene su propio `id` (un `ObjectId` generado al
   agregarlo, distinto del `_id` del usuario) para poder borrarlo
-  individualmente.
+  individualmente. También nuevos (RF14, panel de administración, solo
+  paseador): `verificacion: {estado, revisado_por, fecha, observacion}`
+  (estado actual de la última revisión) y `verificacion_historial:
+  [{estado, revisado_por, fecha, observacion}]` (todas las revisiones,
+  nunca se borra una entrada vieja) - ver sección 8.
 - **`mascotas`** — cada una referencia a su dueño (`id_dueno`). Dos
   subdocumentos opcionales añadidos para la Ley 2480 de 2025 (Ley Kiara):
   `certificado_salud: {url, public_id, formato, fecha_expedicion,
@@ -486,29 +491,72 @@ detalle_paseador`) como en su propio "Mi perfil"
   `canigo/certificados_paseadores`). Visible en "Mi perfil" (el propio
   paseador, con botón "Eliminar") y en el perfil público que ve el dueño
   (`paseos:detalle_paseador`, solo lectura) - en ambos lugares, el texto
-  literal **"Documentos cargados por el paseador. Canigo no verifica su
-  autenticidad."** (nunca la palabra "verificado" para estos documentos,
-  para no confundirlos con el campo `verificado` de RF14, que es un
-  mecanismo totalmente distinto - ver mas abajo). Si no hay un
-  certificado de tipo "Primeros auxilios para perros"
-  (`usuarios.forms.TIPO_PRIMEROS_AUXILIOS`), se muestra "Sin certificado
-  de primeros auxilios cargado" - independiente de si hay otros
-  certificados cargados.
-- **RF14 ("Verificado") es un mecanismo DISTINTO a los certificados, y
-  no se tocó**: `usuarios.verificado` (Boolean, solo paseador) se
-  inicializa en `False` al registrarse (`usuarios/repository.py::
-  crear_usuario`) y se muestra como insignia verde "Verificado" en 3
-  plantillas (`perfil_paseador.html`, `paseos/detalle_paseador.html`,
-  `paseos/lista_disponibles.html`). **Nada en el código actual lo
-  cambia después de la creación de la cuenta** - no hay vista, botón,
-  comando de gestión ni integración con Django admin (las colecciones
-  de Mongo no son modelos de Django, así que `/admin/` no puede tocarlo
-  aunque se registrara: `usuarios/admin.py` está vacío). Confirmado
-  revisando todo el repositorio (`grep verificado`): la única forma hoy
-  de poner `verificado=True` es editando el documento directamente en
-  MongoDB Atlas (o un script aparte), fuera de la aplicación. Esta tarea
-  NO conecta los certificados con `verificado` ni agrega una forma de
-  cambiarlo - esa decisión queda pendiente, a criterio del usuario.
+  literal **"Documentos cargados por el paseador y revisados por el
+  administrador de Canigo cuando el perfil está verificado. Canigo no
+  valida su autenticidad ante la entidad emisora."** (texto actualizado
+  cuando se agregó el panel de administración - ver más abajo; antes
+  decía "Canigo no verifica su autenticidad", pero ahora un admin SÍ
+  revisa el perfil para verificarlo, así que ese texto habría sido
+  contradictorio). Si no hay un certificado de tipo "Primeros auxilios
+  para perros" (`usuarios.forms.TIPO_PRIMEROS_AUXILIOS`), se muestra
+  "Sin certificado de primeros auxilios cargado" - independiente de si
+  hay otros certificados cargados.
+- **RF14 ("Verificado"): panel de administración** (`administracion/`,
+  sin colección propia - todo pasa por `usuarios.repository`). No es un
+  rol nuevo: una cuenta (de cualquier rol) es administradora si su
+  correo está en `settings.CANIGO_ADMIN_EMAILS` (variable de entorno,
+  lista separada por comas - ver `.env.example`). El correo se guarda en
+  `request.session['correo']` al iniciar sesión (antes no se guardaba
+  nada de eso en sesión) para que `usuarios.decorators.requiere_admin()`
+  no necesite una consulta extra a Mongo en cada request; una sesión que
+  ya estaba activa ANTES de este cambio no lo tiene hasta el próximo
+  login (se trata como "no admin" mientras tanto). `requiere_admin`: sin
+  sesión → login (con `?next=`); con sesión pero sin ser admin → `404`
+  (no `403` ni un mensaje de "no autorizado" - no se revela que la ruta
+  existe a quien no es admin). El link "Verificación" del navbar
+  (`core/templates/base.html`) usa el context processor
+  `core.context_processors.es_admin` (nuevo) para decidir si se muestra,
+  sin que cada vista tenga que calcularlo a mano.
+
+  Panel en `/administracion/verificacion/` (filtro `?filtro=pendientes|
+  verificados|todos` por links, mismo patrón que el filtro de zonas en
+  `paseos/lista_disponibles.html` - sin JS). Acciones
+  `marcar_verificado`/`retirar_verificado` (`@require_POST`): guardan en
+  el usuario `verificado: bool` + `verificacion: {estado, revisado_por,
+  fecha, observacion}` (estado actual) y además `$push` la misma entrada
+  a `verificacion_historial` (array, nunca se borra). `revisado_por` es
+  el CORREO del admin, o el literal `"sistema"` para el retiro
+  automático (ver abajo). Regla de negocio (NO en el repository, que
+  solo escribe - la valida la vista): no se puede verificar a un
+  paseador sin al menos un certificado de "Primeros auxilios para
+  perros" - rechazado con mensaje aunque se mande el POST directo sin
+  pasar por el botón (que además aparece `disabled` en el HTML si no lo
+  tiene, como complemento). Si un paseador verificado borra su ÚLTIMO
+  certificado de primeros auxilios
+  (`usuarios.views_web.eliminar_certificado_paseador`), la verificación
+  se retira automáticamente en la misma request
+  (`revisado_por='sistema'`) y se notifica al paseador - mismo mecanismo
+  de `notificaciones` que ya existía (`tipo='verificacion'`, **nuevo
+  valor que no está en la lista cerrada que documenta CLAUDE.md**:
+  `"inicio_paseo"|"fin_paseo"|"emergencia"|"calificacion"` - se agregó
+  porque la tarea pidió explícitamente reusar ese mecanismo; si hace
+  falta, actualizar CLAUDE.md para reflejarlo). `notificaciones/views.py::
+  _TIPO_INFO` tiene una entrada para este tipo nuevo (icono/color), igual
+  que los demás.
+
+  "Certificados revisados por Canigo el DD/MM/AAAA" se muestra debajo de
+  la insignia "Verificado" en el perfil propio del paseador y en el
+  perfil público que ve el dueño, tomando `usuario.verificacion.fecha`
+  (naive UTC desde Mongo - se marca `tzinfo=utc` explícitamente en la
+  vista antes de pasarla al filtro `|date`, mismo cuidado de siempre,
+  ver más abajo). La insignia en `paseos/lista_disponibles.html` (listado
+  de paseadores) no se tocó - solo se agregó la fecha en el perfil
+  completo, no en las tarjetas del listado.
+
+  Confirmado ejecutando: antes de este cambio, nada en el código movía
+  `verificado` después de `crear_usuario()` (quedaba en `False` para
+  siempre, solo se podía cambiar editando Mongo directamente) - ahora el
+  panel es la única forma de cambiarlo desde la aplicación.
 - **No existe una pantalla de "detalle" de mascota** (solo listado y
   formulario) - el link "Editar" se agregó en el listado
   (`mascotas/templates/mascotas/lista.html`); si en el futuro se agrega
@@ -539,7 +587,9 @@ dashboard):
 - **Variables de entorno de producción** (mismos nombres que en local, ver
   sección 3, valores reales configurados en el dashboard de Render, nunca en
   el repositorio): `DJANGO_SECRET_KEY` (Render la genera sola),
-  `DJANGO_DEBUG` (`False`), `MONGO_URI`, `MONGO_DB_NAME`, `CLOUDINARY_URL`.
+  `DJANGO_DEBUG` (`False`), `MONGO_URI`, `MONGO_DB_NAME`, `CLOUDINARY_URL`,
+  `CANIGO_ADMIN_EMAILS` (correos con acceso a `/administracion/verificacion/`,
+  separados por coma - ver sección 8, RF14).
   Render también inyecta automáticamente `RENDER_EXTERNAL_HOSTNAME`, que
   `config/settings.py` usa para completar `ALLOWED_HOSTS`/
   `CSRF_TRUSTED_ORIGINS` sin configuración manual adicional.

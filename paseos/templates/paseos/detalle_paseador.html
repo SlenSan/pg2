@@ -29,7 +29,12 @@
           {% endif %}
           <div>
             <h1 class="h4 mb-1">{{ paseador.nombre }}</h1>
-            {% if paseador.verificado %}<span class="badge bg-success">Verificado</span>{% endif %}
+            {% if paseador.verificado %}
+            <span class="badge bg-success">Verificado</span>
+            {% if fecha_verificacion %}
+            <div class="text-muted small">Certificados revisados por Canigo el {{ fecha_verificacion|date:"d/m/Y" }}</div>
+            {% endif %}
+            {% endif %}
           </div>
         </div>
         <p class="mb-1">
@@ -59,7 +64,9 @@
         <p class="text-muted small mb-0">Este paseador aún no ha cargado certificados.</p>
         {% endif %}
         <p class="text-muted small mt-2 mb-0">
-          Documentos cargados por el paseador. Canigo no verifica su autenticidad.
+          Documentos cargados por el paseador y revisados por el administrador de Canigo
+          cuando el perfil está verificado. Canigo no valida su autenticidad ante la
+          entidad emisora.
         </p>
       </div>
     </div>

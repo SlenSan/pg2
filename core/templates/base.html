@@ -67,6 +67,9 @@
             Notificaciones
             <span class="navbar-campana-punto campana-punto {% if not hay_notificaciones_sin_leer %}d-none{% endif %}"></span>
           </a>
+          {% if es_admin %}
+          <a class="nav-link text-white" href="{% url 'administracion:verificacion' %}">Verificación</a>
+          {% endif %}
           <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
         </div>
         {% else %}
@@ -79,6 +82,9 @@
             <span class="navbar-campana-punto campana-punto {% if not hay_notificaciones_sin_leer %}d-none{% endif %}"></span>
           </a>
           <a class="nav-link text-white" href="{% url 'incidentes:lista' %}">Incidentes</a>
+          {% if es_admin %}
+          <a class="nav-link text-white" href="{% url 'administracion:verificacion' %}">Verificación</a>
+          {% endif %}
           <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
         </div>
         {% endif %}

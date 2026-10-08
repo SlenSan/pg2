@@ -120,6 +120,63 @@ def eliminar_certificado_paseador(id_usuario, id_certificado):
     return next((c for c in usuario.get('certificados', []) if c['id'] == oid_certificado), None)
 
 
+def listar_paseadores(verificado=None):
+    """
+    Paseadores para el panel de administracion (RF14). `verificado`:
+    None = todos, True = solo verificados, False = solo pendientes.
+    """
+    query = {'rol': 'paseador'}
+    if verificado is not None:
+        query['verificado'] = verificado
+    return list(get_db().usuarios.find(query).sort('fecha_registro', -1))
+
+
+def _entrada_verificacion(*, estado, revisado_por, observacion):
+    return {
+        'estado': estado,
+        'revisado_por': revisado_por,
+        'fecha': datetime.now(timezone.utc),
+        'observacion': (observacion or '').strip(),
+    }
+
+
+def marcar_verificado(id_usuario, *, revisado_por, observacion=''):
+    """
+    Marca a un paseador como verificado (RF14). La regla "debe tener al
+    menos un certificado de primeros auxilios" NO se valida aca - es una
+    regla de negocio que valida la vista (administracion/views_web.py)
+    antes de llamar a esta funcion; este repository solo escribe.
+    `revisado_por` es el CORREO del admin (o "sistema" para el retiro
+    automatico - ver retirar_verificado()). Guarda el estado actual en
+    `verificacion` y agrega la misma entrada al final de
+    `verificacion_historial` ($push), para no perder el historial previo.
+    """
+    entrada = _entrada_verificacion(estado='verificado', revisado_por=revisado_por, observacion=observacion)
+    oid = id_usuario if isinstance(id_usuario, ObjectId) else ObjectId(id_usuario)
+    get_db().usuarios.update_one(
+        {'_id': oid},
+        {'$set': {'verificado': True, 'verificacion': entrada}, '$push': {'verificacion_historial': entrada}},
+    )
+    return entrada
+
+
+def retirar_verificado(id_usuario, *, revisado_por, observacion=''):
+    """
+    Retira la verificacion - usada tanto por un admin desde el panel
+    como automaticamente por el sistema (`revisado_por='sistema'`)
+    cuando un paseador verificado borra su ultimo certificado de
+    primeros auxilios (ver eliminar_certificado_paseador en
+    usuarios/views_web.py).
+    """
+    entrada = _entrada_verificacion(estado='no_verificado', revisado_por=revisado_por, observacion=observacion)
+    oid = id_usuario if isinstance(id_usuario, ObjectId) else ObjectId(id_usuario)
+    get_db().usuarios.update_one(
+        {'_id': oid},
+        {'$set': {'verificado': False, 'verificacion': entrada}, '$push': {'verificacion_historial': entrada}},
+    )
+    return entrada
+
+
 def resolver_lista(ids_usuario, usuarios_por_id):
     """
     Lista ORDENADA de documentos de usuario a partir de una lista de ids

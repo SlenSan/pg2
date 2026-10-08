@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+from django.conf import settings
+
 from notificaciones import repository as notificaciones_repository
 
 
@@ -22,3 +24,15 @@ def notificaciones(request):
     return {
         'hay_notificaciones_sin_leer': notificaciones_repository.hay_no_leidas(id_usuario, ultima_vista),
     }
+
+
+def es_admin(request):
+    """
+    Disponibiliza "es_admin" en cualquier render, para que el navbar
+    (core/templates/base.html) muestre el link al panel de verificacion
+    SOLO a quienes son admin (ver usuarios.decorators.requiere_admin) -
+    sin esto, cada vista tendria que calcularlo a mano solo para el
+    navbar.
+    """
+    correo_sesion = (request.session.get('correo') or '').strip().lower()
+    return {'es_admin': bool(correo_sesion) and correo_sesion in settings.CANIGO_ADMIN_EMAILS}

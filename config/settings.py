@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     'coordenadas',
     'incidentes',
     'calificaciones',
+    'administracion',
 ]
 
 MIDDLEWARE = [
@@ -102,6 +103,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'core.context_processors.notificaciones',
+                'core.context_processors.es_admin',
             ],
         },
     },
@@ -144,6 +146,16 @@ MONGO_DB_NAME = os.environ.get('MONGO_DB_NAME', 'canigo')
 # Render porque este ultimo es efimero (se borra en cada redeploy).
 # Formato: cloudinary://<api_key>:<api_secret>@<cloud_name>
 CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL', '')
+
+# Panel de administracion de Canigo (RF14 - verificacion de paseadores):
+# NO es un rol nuevo en `usuarios` (ver CLAUDE.md, solo "dueño"/"paseador").
+# Una cuenta ya existente (de cualquier rol) es administradora si su correo
+# esta en esta lista - ver usuarios/decorators.py::requiere_admin().
+CANIGO_ADMIN_EMAILS = [
+    correo.strip().lower()
+    for correo in os.environ.get('CANIGO_ADMIN_EMAILS', '').split(',')
+    if correo.strip()
+]
 
 
 # Password validation

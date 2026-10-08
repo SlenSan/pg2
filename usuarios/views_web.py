@@ -549,12 +549,19 @@ def perfil_paseador(request):
     fecha_registro = usuario.get('fecha_registro')
     miembro_desde = fecha_registro.replace(tzinfo=timezone.utc) if fecha_registro else None
 
+    # RF14: fecha de la ultima revision (naive UTC desde Mongo - se marca
+    # explicitamente antes del filtro |date, mismo cuidado que
+    # miembro_desde arriba).
+    fecha_verificacion_cruda = (usuario.get('verificacion') or {}).get('fecha')
+    fecha_verificacion = fecha_verificacion_cruda.replace(tzinfo=timezone.utc) if fecha_verificacion_cruda else None
+
     return render(request, 'usuarios/perfil_paseador.html', {
         'usuario': usuario,
         'form': form,
         'paseos_completados': paseos_completados,
         'resenas': resenas,
         'miembro_desde': miembro_desde,
+        'fecha_verificacion': fecha_verificacion,
     })
 
 
@@ -605,10 +612,40 @@ def certificados_paseador(request):
 @require_POST
 @requiere_paseador
 def eliminar_certificado_paseador(request, id_certificado):
-    certificado = repository.eliminar_certificado_paseador(request.session['id_usuario'], id_certificado)
+    """
+    RF14: si el certificado borrado era de "Primeros auxilios para
+    perros", el paseador estaba verificado, Y no le queda ningun otro
+    certificado de ese tipo, la verificacion se retira automaticamente
+    (revisado_por="sistema") - ver usuarios.repository.retirar_verificado.
+    Se calcula sobre el estado ANTES de borrar (usuario_antes), quitando
+    a mano el certificado que se esta borrando, en vez de volver a leer
+    Mongo despues del $pull - mismo resultado, una consulta menos.
+    """
+    id_usuario = request.session['id_usuario']
+    usuario_antes = repository.obtener_por_id(id_usuario)
+    certificado = repository.eliminar_certificado_paseador(id_usuario, id_certificado)
     if certificado and certificado.get('public_id'):
         eliminar_archivo(certificado['public_id'])
     messages.success(request, 'Certificado eliminado.')
+
+    if certificado and certificado['tipo'] == TIPO_PRIMEROS_AUXILIOS and usuario_antes.get('verificado'):
+        le_quedan = [
+            c for c in usuario_antes.get('certificados', [])
+            if c['tipo'] == TIPO_PRIMEROS_AUXILIOS and c['id'] != certificado['id']
+        ]
+        if not le_quedan:
+            repository.retirar_verificado(
+                id_usuario,
+                revisado_por='sistema',
+                observacion='Retirada automáticamente: se eliminó el único certificado de primeros auxilios.',
+            )
+            notificaciones_repository.crear(
+                id_usuario=id_usuario,
+                tipo='verificacion',
+                mensaje='Tu verificación fue retirada automáticamente: ya no tienes un certificado de primeros auxilios cargado.',
+            )
+            messages.warning(request, 'Tu verificación se retiró automáticamente al quedarte sin certificado de primeros auxilios.')
+
     return redirect('usuarios:certificados_paseador')
 
 
@@ -616,3 +653,10 @@ def _iniciar_sesion(request, usuario):
     request.session['id_usuario'] = str(usuario['_id'])
     request.session['nombre'] = usuario['nombre']
     request.session['rol'] = usuario['rol']
+    # Guardado en sesion (y no solo leido de Mongo en cada peticion) para
+    # que usuarios.decorators.requiere_admin() pueda compararlo sin una
+    # consulta extra - ver settings.CANIGO_ADMIN_EMAILS. Una sesion que
+    # ya estaba activa ANTES de este cambio no lo tiene hasta el proximo
+    # login (se trata como "no admin" mientras tanto, nunca como admin
+    # por error).
+    request.session['correo'] = usuario['correo']

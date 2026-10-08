@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Verificación de paseadores — Canigo{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-4">Verificación de paseadores</h1>
+
+{% comment %}
+Mismo patron que el filtro de zonas en paseos/lista_disponibles.html:
+links normales a "?filtro=X" (no un form ni JS), para que el filtro
+quede en la URL (se puede compartir/recargar) y se marque comparando
+`filtro` en el servidor.
+{% endcomment %}
+<div class="zona-chips-contenedor mb-4">
+  <a href="?filtro=pendientes" class="zona-chip {% if filtro == 'pendientes' %}zona-chip-activa{% endif %}">Pendientes</a>
+  <a href="?filtro=verificados" class="zona-chip {% if filtro == 'verificados' %}zona-chip-activa{% endif %}">Verificados</a>
+  <a href="?filtro=todos" class="zona-chip {% if filtro == 'todos' %}zona-chip-activa{% endif %}">Todos</a>
+</div>
+
+{% if items %}
+{% for item in items %}
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+      <div>
+        <div class="fw-bold">{{ item.paseador.nombre }}</div>
+        <div class="text-muted small">{{ item.paseador.correo }}</div>
+      </div>
+      <span class="badge {% if item.paseador.verificado %}bg-success{% else %}bg-secondary{% endif %}">
+        {% if item.paseador.verificado %}Verificado{% else %}Pendiente{% endif %}
+      </span>
+    </div>
+
+    {% if item.paseador.verificacion %}
+    <p class="text-muted small mb-2">
+      Última revisión: {{ item.paseador.verificacion.estado }} por {{ item.paseador.verificacion.revisado_por }}
+      el {{ item.paseador.verificacion.fecha|date:"d/m/Y" }}
+      {% if item.paseador.verificacion.observacion %}— "{{ item.paseador.verificacion.observacion }}"{% endif %}
+    </p>
+    {% endif %}
+
+    <p class="small fw-bold mb-1">Certificados:</p>
+    {% if item.certificados %}
+    <ul class="small mb-3">
+      {% for c in item.certificados %}
+      <li>
+        {{ c.tipo }} — {{ c.nombre }} ({{ c.entidad }}, {{ c.fecha_expedicion|date:"d/m/Y" }})
+        <a href="{{ c.url }}" target="_blank" rel="noopener">Ver</a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted small mb-3">Sin certificados cargados.</p>
+    {% endif %}
+    {% if not item.tiene_primeros_auxilios %}
+    <p class="text-danger small mb-3">Sin certificado de primeros auxilios cargado.</p>
+    {% endif %}
+
+    <div class="d-flex flex-wrap gap-2">
+      <form method="post" action="{% url 'administracion:marcar_verificado' item.id %}" class="d-flex gap-2 flex-wrap flex-grow-1">
+        {% csrf_token %}
+        {{ form_observacion.observacion }}
+        <button type="submit" class="btn btn-success" {% if not item.tiene_primeros_auxilios %}disabled{% endif %}>
+          Marcar como verificado
+        </button>
+      </form>
+      <form method="post" action="{% url 'administracion:retirar_verificado' item.id %}" class="d-flex gap-2 flex-wrap flex-grow-1">
+        {% csrf_token %}
+        {{ form_observacion.observacion }}
+        <button type="submit" class="btn btn-outline-danger">Retirar verificación</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<p class="text-muted">No hay paseadores en este filtro.</p>
+{% endif %}
+{% endblock %}

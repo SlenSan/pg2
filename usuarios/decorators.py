@@ -1,7 +1,9 @@
 from functools import wraps
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.contrib import messages
+from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse
 
@@ -65,3 +67,27 @@ requiere_dueno = _requiere_rol('dueño')
 
 requiere_paseador = _requiere_rol('paseador')
 """Protege una vista web: exige sesion activa de un usuario con rol 'paseador'."""
+
+
+def requiere_admin(view_func):
+    """
+    Protege el panel de administracion (RF14 - verificacion de
+    paseadores). NO es un rol nuevo en `usuarios` (ver CLAUDE.md): una
+    cuenta YA EXISTENTE (de cualquier rol) es administradora si su
+    correo esta en settings.CANIGO_ADMIN_EMAILS.
+
+    Sin sesion, va a login (igual que cualquier otra vista protegida,
+    con ?next= para volver aca despues). CON sesion pero sin ser admin,
+    404 - no se revela que la ruta existe a nadie que no sea admin (ni
+    "no tienes permiso", que ya confirmaria que la URL es real).
+    """
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.session.get('id_usuario'):
+            return _redirigir_a_login(request)
+        correo_sesion = (request.session.get('correo') or '').strip().lower()
+        if correo_sesion not in settings.CANIGO_ADMIN_EMAILS:
+            raise Http404()
+        return view_func(request, *args, **kwargs)
+
+    return wrapper

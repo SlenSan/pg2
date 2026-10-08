@@ -164,6 +164,10 @@ def detalle_paseador(request, id_paseador):
         })
 
     certificados_paseador = paseador.get('certificados', [])
+    # RF14: fecha de la ultima revision (naive UTC desde Mongo - mismo
+    # cuidado de siempre antes de pasarla a |date, ver CLAUDE.md).
+    fecha_verificacion_cruda = (paseador.get('verificacion') or {}).get('fecha')
+    fecha_verificacion = fecha_verificacion_cruda.replace(tzinfo=dt_timezone.utc) if fecha_verificacion_cruda else None
     return render(request, 'paseos/detalle_paseador.html', {
         'id_paseador': id_paseador,
         'paseador': paseador,
@@ -171,6 +175,7 @@ def detalle_paseador(request, id_paseador):
         'tiene_mascotas': tiene_mascotas,
         'resenas': resenas,
         'certificados_paseador': certificados_paseador,
+        'fecha_verificacion': fecha_verificacion,
         'tiene_primeros_auxilios': any(c['tipo'] == TIPO_PRIMEROS_AUXILIOS for c in certificados_paseador),
     })
 
