@@ -65,6 +65,28 @@
   </div>
 </div>
 
+{% if mascotas_certificados %}
+<div class="card mb-3">
+  <div class="card-body">
+    <p class="small text-muted mb-2">Certificados (Ley Kiara):</p>
+    {% for m in mascotas_certificados %}
+    <div class="d-flex justify-content-between align-items-center small mb-1">
+      <span>{{ m.nombre }}</span>
+      <span>
+        <span class="badge badge-certificado-{{ m.estado_salud.clave }}">{{ m.estado_salud.texto }}</span>
+        {% if m.url_certificado_salud %}
+        <a href="{{ m.url_certificado_salud }}" target="_blank" rel="noopener">Ver</a>
+        {% endif %}
+        {% if m.url_carne_vacunacion %}
+        <a href="{{ m.url_carne_vacunacion }}" target="_blank" rel="noopener">Carné</a>
+        {% endif %}
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 {% comment %}
 Bug corregido: el atributo HTML "hidden" no gana contra ".d-flex", que
 Bootstrap define con "display:flex !important" - un !important siempre

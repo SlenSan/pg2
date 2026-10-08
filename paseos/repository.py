@@ -371,6 +371,33 @@ def listar_por_paseador(id_paseador):
     return list(get_db().paseos.find({'id_paseador': id_paseador}).sort('fecha', -1))
 
 
+def paseador_tiene_acceso_a_mascota(id_paseador, id_mascota):
+    """
+    True si existe AL MENOS UN paseo, en CUALQUIER estado, donde este
+    paseador es el asignado (`id_paseador`) y esa mascota esta incluida
+    (`id_mascotas`) - control de acceso para los certificados de la
+    mascota (Ley Kiara). Una mascota se agrega a `id_mascotas` al
+    inscribirse en un horario "disponible" (ver inscribir_mascotas()) y
+    ese array ya NUNCA se modifica despues (ni al pasar a "en_vivo" ni a
+    "historico") - por eso no hace falta filtrar por estado aca: "alguna
+    vez la llevó o la va a llevar" es exactamente "aparece en algun
+    documento con ese id_paseador".
+
+    Una sola función, pensada para llamarse DESDE el backend antes de
+    mostrar cualquier dato de certificado a un paseador - no basta con
+    ocultar el link en la plantilla.
+    """
+    try:
+        oid_paseador = id_paseador if isinstance(id_paseador, ObjectId) else ObjectId(id_paseador)
+        oid_mascota = id_mascota if isinstance(id_mascota, ObjectId) else ObjectId(id_mascota)
+    except (InvalidId, TypeError):
+        return False
+    return get_db().paseos.count_documents(
+        {'id_paseador': oid_paseador, 'id_mascotas': oid_mascota},
+        limit=1,
+    ) > 0
+
+
 def contar_completados_por_paseador(id_paseador):
     """Cuenta de paseos con estado='historico' de este paseador (estadistica de perfil/dashboard)."""
     return get_db().paseos.count_documents({'id_paseador': id_paseador, 'estado': 'historico'})

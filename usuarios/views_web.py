@@ -313,6 +313,35 @@ def estado_bienvenida(request):
     })
 
 
+def _certificados_de_mascotas_para_paseador(id_paseador, mascotas):
+    """
+    Estado del certificado de salud + links de cada mascota, PARA ESTE
+    PASEADOR - Ley Kiara: el paseador necesita verlo antes de empezar el
+    paseo, no solo mientras camina. Antes de devolver cualquier dato,
+    confirma con paseos_repository.paseador_tiene_acceso_a_mascota() que
+    existe un paseo (en cualquier estado) donde este paseador lleva a esa
+    mascota - "en backend, no solo ocultando el enlace": aunque en la
+    practica `mascotas` ya viene de una consulta acotada a paseos propios
+    de este paseador (nunca deberia fallar), la comprobacion se hace
+    explicita aca en vez de asumirlo por como se llego a la lista.
+
+    Reusada por _horarios_disponibles_paseador() (paseos "disponible" ya
+    con mascota(s) asignada(s)) y por bienvenida_paseador() (paseo
+    "en_vivo") - mismo criterio en los dos lugares.
+    """
+    resultado = []
+    for m in mascotas:
+        if not paseos_repository.paseador_tiene_acceso_a_mascota(id_paseador, m['_id']):
+            continue
+        resultado.append({
+            'nombre': m['nombre'],
+            'estado_salud': mascotas_repository.estado_certificado_salud(m.get('certificado_salud')),
+            'url_certificado_salud': (m.get('certificado_salud') or {}).get('url'),
+            'url_carne_vacunacion': (m.get('carne_vacunacion') or {}).get('url'),
+        })
+    return resultado
+
+
 def _horarios_disponibles_paseador(id_paseador):
     """
     Horarios 'disponible' de este paseador, con nombre de dueños/mascotas
@@ -346,6 +375,7 @@ def _horarios_disponibles_paseador(id_paseador):
             'cupos_ocupados': len(h.get('id_mascotas', [])),
             'cupos_totales': paseos_repository.MAXIMO_MASCOTAS_POR_PASEO,
             'acepta_inscripciones': h.get('acepta_inscripciones', True),
+            'mascotas_certificados': _certificados_de_mascotas_para_paseador(id_paseador, mascotas_horario),
         })
     return horarios
 
@@ -380,21 +410,8 @@ def bienvenida_paseador(request):
             'fotos_pendientes': [
                 m for m in paseos_repository.MOMENTOS_FOTO_VALIDOS if m not in fotos_existentes
             ],
-            # Certificados (Ley Kiara): el paseador asignado puede ver el
-            # estado de cada mascota que esta paseando AHORA, aunque sea de
-            # otro dueño (ver CLAUDE.md, mascotas con hasta 8 por paseo) -
-            # a diferencia de "mascota_nombre" arriba (un solo string
-            # unido), aca se necesita una entrada POR mascota para que cada
-            # una tenga su propio badge/link.
-            'mascotas_certificados': [
-                {
-                    'nombre': m['nombre'],
-                    'estado_salud': mascotas_repository.estado_certificado_salud(m.get('certificado_salud')),
-                    'url_certificado_salud': (m.get('certificado_salud') or {}).get('url'),
-                    'url_carne_vacunacion': (m.get('carne_vacunacion') or {}).get('url'),
-                }
-                for m in mascotas_paseo
-            ],
+            # Certificados (Ley Kiara) - ver _certificados_de_mascotas_para_paseador().
+            'mascotas_certificados': _certificados_de_mascotas_para_paseador(id_paseador, mascotas_paseo),
         }
         # mascotas=mascotas_paseo: si el paseo lleva mas de una, el form
         # agrega el radio "¿a cual mascota afecta?" (ver ReportarIncidenteForm);

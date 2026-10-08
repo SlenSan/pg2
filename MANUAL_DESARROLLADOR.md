@@ -416,15 +416,34 @@ detalle_paseador`) como en su propio "Mi perfil"
   `fecha_expedicion` - ver CLAUDE.md), así que solo se muestra
   "Cargado"/"Sin carné cargado".
   Visibilidad: el dueño de la mascota (las vistas de arriba) y el
-  paseador que la tiene asignada en su paseo **en vivo** ahora mismo
-  (`usuarios.views_web.bienvenida_paseador`, badge + link "Ver"/"Carné"
-  por mascota) - ningún otro paseador puede llegar a esos datos porque
-  la consulta ya está acotada a los paseos del paseador que hace la
-  petición (`paseos_repository.obtener_en_vivo_de_paseador`). **No se
-  agregó** a "Mis paseos"/historial del paseador ni a los horarios
-  "disponible" todavía - la consigna hablaba de "la vista del paseador
-  sobre su paseo" en singular; si se necesita en esas otras pantallas,
-  es una extensión aparte.
+  paseador que la tiene asignada en **cualquier paseo suyo, en
+  cualquier estado** (Ley Kiara: el paseo se planea según el
+  certificado, así que el paseador lo necesita ANTES de empezar, no
+  solo mientras camina - ajuste posterior a la primera versión de este
+  punto, que solo lo mostraba en el paseo en vivo). Una mascota queda
+  asociada a un paseo en el momento en que el dueño la inscribe en un
+  horario `disponible` (`paseos_repository.inscribir_mascotas`,
+  `paseos:inscribir_en_horario`) - ese `id_mascotas` ya NUNCA se
+  modifica después (ni al pasar a `en_vivo` ni a `historico`), así que
+  "cualquier estado" no necesita revisar cada uno por separado.
+  `paseos_repository.paseador_tiene_acceso_a_mascota(id_paseador,
+  id_mascota)` es la única función que decide esto - cuenta si existe al
+  menos un documento de `paseos` con ese `id_paseador` y esa mascota en
+  `id_mascotas`, sin filtrar por `estado`. El badge se muestra en 3
+  lugares, los 3 llamando a esa misma función antes de incluir el dato
+  (nunca solo ocultando el link en la plantilla):
+  `usuarios.views_web._horarios_disponibles_paseador` (horarios
+  "disponible" con mascota ya asignada, dashboard del paseador),
+  `usuarios.views_web.bienvenida_paseador` (paseo "en_vivo", mismo
+  dashboard) y `coordenadas.views_web.mapa_paseo` (sirve tanto "en_vivo"
+  como "historico" con la misma plantilla - cubre "detalle/mapa de un
+  paseo histórico" sin necesitar una pantalla aparte). La función de
+  construcción del badge (`_certificados_de_mascotas_para_paseador`)
+  está duplicada entre `usuarios/views_web.py` y
+  `coordenadas/views_web.py` a propósito (mismo criterio que
+  `_hay_notificaciones_sin_leer`, para evitar una dependencia cruzada
+  entre esas dos apps) - lo que NO está duplicado es la función de
+  acceso en sí, que vive una sola vez en `paseos/repository.py`.
 - **Validación de archivo por contenido real, no solo por extensión**:
   `core/media.py::subir_certificado()` (usada por certificados de
   mascota y, en un commit aparte, del paseador) rechaza un archivo si

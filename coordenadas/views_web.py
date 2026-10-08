@@ -140,6 +140,28 @@ def _mascotas_del_dueno_en_paseo(paseo, id_dueno):
     return [por_id[mid] for mid in paseo.get('id_mascotas', []) if mid in por_id]
 
 
+def _certificados_de_mascotas_para_paseador(id_paseador, mascotas):
+    """
+    Mismo criterio que usuarios.views_web._certificados_de_mascotas_para_paseador()
+    - duplicada a proposito en vez de importada de esa app (mismo
+    criterio que _hay_notificaciones_sin_leer de arriba: evitar una
+    dependencia cruzada entre apps por una funcion chica), pero las DOS
+    llaman a la misma función de acceso compartida:
+    paseos_repository.paseador_tiene_acceso_a_mascota().
+    """
+    resultado = []
+    for m in mascotas:
+        if not paseos_repository.paseador_tiene_acceso_a_mascota(id_paseador, m['_id']):
+            continue
+        resultado.append({
+            'nombre': m['nombre'],
+            'estado_salud': mascotas_repository.estado_certificado_salud(m.get('certificado_salud')),
+            'url_certificado_salud': (m.get('certificado_salud') or {}).get('url'),
+            'url_carne_vacunacion': (m.get('carne_vacunacion') or {}).get('url'),
+        })
+    return resultado
+
+
 def _fecha_iso_utc(valor):
     """
     Los datetimes que devuelve pymongo son naive (UTC sin tzinfo - ver
@@ -168,6 +190,7 @@ def mapa_paseo(request, id_paseo):
 
     id_usuario = request.session['id_usuario']
     es_dueno = request.session.get('rol') == 'dueño'
+    mascotas_certificados = []
     if es_dueno:
         # SOLO las mascotas de ESTE dueño - ver _mascotas_del_dueno_en_paseo()
         # (puede haber mascotas de OTROS dueños en el mismo paseo).
@@ -178,6 +201,12 @@ def mapa_paseo(request, id_paseo):
         # se las esta llevando a todas juntas, no hay nada que ocultarle.
         mascotas_por_id = mascotas_repository.obtener_varias_por_id(paseo.get('id_mascotas', []))
         mascotas = mascotas_repository.resolver_lista(paseo.get('id_mascotas'), mascotas_por_id)
+        # Certificados (Ley Kiara): el paseador necesita verlos ANTES de
+        # empezar, no solo durante el paseo en vivo - este mapa sirve
+        # tanto para "en_vivo" como para "historico" (mismo _paseo_accesible_o_none
+        # de arriba), asi que cubre el caso "detalle/mapa de un paseo
+        # histórico" sin una pantalla aparte.
+        mascotas_certificados = _certificados_de_mascotas_para_paseador(id_usuario, mascotas)
 
     paseador = None
     if paseo.get('id_paseador'):
@@ -187,6 +216,7 @@ def mapa_paseo(request, id_paseo):
         'paseo': paseo,
         'id_paseo': str(paseo['_id']),
         'mascotas': mascotas,
+        'mascotas_certificados': mascotas_certificados,
         'paseador': paseador,
         'hora_inicio_iso': _fecha_iso_utc(paseo.get('hora_inicio')),
         'hora_fin_iso': _fecha_iso_utc(paseo.get('hora_fin')),

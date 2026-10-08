@@ -26,6 +26,25 @@ alcance 2026-09-25".
         {% if h.dueno_nombre %}<div class="banner-paseo-detalle">De {{ h.dueno_nombre }}</div>{% endif %}
       </div>
     </div>
+    {% if h.mascotas_certificados %}
+    <div class="mb-3">
+      <p class="banner-paseo-detalle mb-1">Certificados (Ley Kiara):</p>
+      {% for m in h.mascotas_certificados %}
+      <div class="d-flex justify-content-between align-items-center small mb-1">
+        <span>{{ m.nombre }}</span>
+        <span>
+          <span class="badge badge-certificado-{{ m.estado_salud.clave }}">{{ m.estado_salud.texto }}</span>
+          {% if m.url_certificado_salud %}
+          <a href="{{ m.url_certificado_salud }}" target="_blank" rel="noopener" class="banner-paseo-detalle">Ver</a>
+          {% endif %}
+          {% if m.url_carne_vacunacion %}
+          <a href="{{ m.url_carne_vacunacion }}" target="_blank" rel="noopener" class="banner-paseo-detalle">Carné</a>
+          {% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
     <div class="d-flex flex-column gap-2">
       <form method="post" action="{% url 'paseos:iniciar_paseo' h.id_paseo %}">
         {% csrf_token %}
