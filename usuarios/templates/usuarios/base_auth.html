@@ -53,6 +53,17 @@ footer, empujándolo fuera de la pantalla en login/registro.
         cuenta (ver el fix en usuarios.views_web.registro). Si ya estamos
         en el registro, este link mantiene el rol actual en vez de mandar
         de nuevo a elegir.
+
+        Si estamos en LOGIN (modo != 'registro'), va a {% url 'home' %} -
+        confirmado que "home" (config/urls.py) YA renderiza
+        seleccionar_rol.html, asi que esto YA manda al selector de rol,
+        sin falta cambiar la URL. Es el comportamiento correcto a
+        proposito (hallazgo (a), corrección de octubre 2026): el
+        selector de rol es SOLO para crear cuenta (no existe el concepto
+        de "elegir rol para iniciar sesion" - el rol ya esta guardado en
+        el usuario), asi que desde login, "Crear cuenta" debe llevar ahi
+        a elegir con qué rol registrarse - no es un resto raro, es la
+        decision vigente.
         {% endcomment %}
         <a
           href="{% if modo == 'registro' %}?rol={{ rol }}{% else %}{% url 'home' %}{% endif %}"

@@ -12,24 +12,31 @@
 {% block auth_toggle %}{% endblock %}
 
 {% block auth_form %}
-<h1 class="h3 text-center mb-4">Eres...</h1>
+{% comment %}
+Decision (hallazgo (a), corrección de octubre 2026): esta pantalla es
+SOLO para crear cuenta - el rol nunca influye en el login (el login es
+el mismo formulario para cualquier rol ya existente, el rol ya esta
+guardado en el usuario). El titulo y los botones lo dicen explicitamente
+ahora, en vez de "Eres..." (que sonaba a una pregunta de login).
+{% endcomment %}
+<h1 class="h3 text-center mb-4">¿Cómo quieres crear tu cuenta?</h1>
 
 <div class="row g-3">
   <div class="col-12 col-sm-6">
-    {% comment %}
-    El rol solo afecta el registro (que formulario mostrarle a alguien
-    nuevo); el login es el mismo para cualquier rol, ya existente.
-    {% endcomment %}
-    <a href="{% url 'usuarios:registro' %}?rol=paseador" class="rol-tarjeta">
-      <span class="rol-tarjeta-icono"><i class="bi bi-person-walking"></i></span>
-      <span class="rol-tarjeta-titulo">Paseador</span>
+    <a href="{% url 'usuarios:registro' %}?rol=dueno" class="rol-tarjeta">
+      <span class="rol-tarjeta-icono"><i class="bi bi-person-heart"></i></span>
+      <span class="rol-tarjeta-titulo">Crear cuenta como dueño</span>
     </a>
   </div>
   <div class="col-12 col-sm-6">
-    <a href="{% url 'usuarios:registro' %}?rol=dueno" class="rol-tarjeta">
-      <span class="rol-tarjeta-icono"><i class="bi bi-person-heart"></i></span>
-      <span class="rol-tarjeta-titulo">Cliente</span>
+    <a href="{% url 'usuarios:registro' %}?rol=paseador" class="rol-tarjeta">
+      <span class="rol-tarjeta-icono"><i class="bi bi-person-walking"></i></span>
+      <span class="rol-tarjeta-titulo">Crear cuenta como paseador</span>
     </a>
   </div>
 </div>
+
+<p class="text-center mt-4 mb-0">
+  ¿Ya tienes cuenta? <a href="{% url 'usuarios:login' %}" class="auth-link">Inicia sesión</a>.
+</p>
 {% endblock %}

@@ -75,4 +75,12 @@
     privacidad de Canigo.
   </p>
 </form>
+
+{% comment %}
+Link explicito ademas del toggle de arriba (auth_toggle en base_auth.html,
+que ya permite ir a login) - hallazgo (a), corrección de octubre 2026.
+{% endcomment %}
+<p class="text-center mt-3 mb-0">
+  ¿Ya tienes cuenta? <a href="{% url 'usuarios:login' %}" class="auth-link">Inicia sesión</a>.
+</p>
 {% endblock %}
