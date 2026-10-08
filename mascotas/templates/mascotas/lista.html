@@ -34,6 +34,9 @@
         <p class="card-text text-muted small mb-0">{{ item.mascota.observaciones }}</p>
         {% endif %}
       </div>
+      <div class="card-footer bg-transparent border-top-0 text-end">
+        <a href="{% url 'mascotas:editar' item.id %}" class="small">Editar</a>
+      </div>
     </div>
   </div>
   {% endfor %}

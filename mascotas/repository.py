@@ -32,6 +32,40 @@ def listar_por_dueno(id_dueno):
     return list(get_db().mascotas.find({'id_dueno': oid}).sort('fecha_registro', -1))
 
 
+def obtener_por_id_y_dueno(id_mascota, id_dueno):
+    """
+    None si la mascota no existe O no es de ese dueño - la vista usa el
+    mismo mensaje para los dos casos (no hay motivo para distinguirle a
+    quien manipula el id en la URL si el id existe pero es ajeno).
+    """
+    try:
+        oid = ObjectId(id_mascota)
+        oid_dueno = ObjectId(id_dueno)
+    except (InvalidId, TypeError):
+        return None
+    return get_db().mascotas.find_one({'_id': oid, 'id_dueno': oid_dueno})
+
+
+def actualizar_mascota(id_mascota, *, nombre, raza, edad, peso, observaciones='', foto=None):
+    """
+    `foto=None` significa "no reemplazar" (se deja la que ya tenia) -
+    distinto de `foto=''`, que si se guardaria como "sin foto". Edicion
+    reusa MascotaForm, donde `foto` ya es opcional (igual que en
+    registro), asi que no reemplazarla es el camino normal, no una
+    excepcion.
+    """
+    cambios = {
+        'nombre': nombre,
+        'raza': raza,
+        'edad': edad,
+        'peso': peso,
+        'observaciones': observaciones,
+    }
+    if foto is not None:
+        cambios['foto'] = foto
+    get_db().mascotas.update_one({'_id': ObjectId(id_mascota)}, {'$set': cambios})
+
+
 def obtener_varias_por_id(ids):
     """Devuelve {ObjectId: mascota} para una lista de ids."""
     return mapear_por_id('mascotas', ids)

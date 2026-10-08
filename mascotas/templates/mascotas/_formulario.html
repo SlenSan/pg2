@@ -1,0 +1,27 @@
+{% comment %}
+Campos de MascotaForm, compartidos por registro.html y editar.html -
+"editar mascota" reusa el mismo formulario/validaciones que registrar
+(sin duplicar), solo cambia el texto del boton y el valor inicial de
+los campos (ver mascotas/views.py).
+{% endcomment %}
+{% for field in form %}
+  <div class="mb-3">
+    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {% if field.name == 'foto' %}
+    {% if foto_actual %}
+    <div class="small text-muted mt-1">
+      Foto actual: <img src="{{ foto_actual }}" alt="" class="rounded" style="height: 40px; width: 40px; object-fit: cover; vertical-align: middle;">
+      — subí una nueva solo si quieres reemplazarla.
+    </div>
+    {% endif %}
+    <img id="vista-previa-foto" src="" alt="Vista previa" class="mt-2 rounded d-none" style="max-height: 160px; object-fit: cover;">
+    {% endif %}
+    {% for error in field.errors %}
+      <div class="text-danger small mt-1">{{ error }}</div>
+    {% endfor %}
+  </div>
+{% endfor %}
+{% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+{% endif %}

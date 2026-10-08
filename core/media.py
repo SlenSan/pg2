@@ -18,6 +18,7 @@ Uso:
 inicio/mitad/fin) e "incidentes" (evidencia_foto).
 """
 
+import re
 from urllib.parse import urlparse
 
 import cloudinary
@@ -70,3 +71,39 @@ def subir_imagen(archivo, carpeta):
     except CloudinaryError as exc:
         raise ErrorSubidaImagen(f'No se pudo subir la imagen a Cloudinary: {exc}') from exc
     return resultado['secure_url']
+
+
+def _public_id_desde_url(url):
+    """
+    El esquema de Mongo solo guarda la URL de la imagen (nunca su
+    public_id - ver CLAUDE.md, `foto: String`), asi que para borrarla de
+    Cloudinary al reemplazarla hay que reconstruir el public_id a partir
+    de la URL misma: todo lo que sigue a "/upload/", sin el segmento de
+    version ("v1234567/") si esta presente, y sin la extension final.
+    None si la URL no tiene la forma esperada (por ejemplo, quedo vacia o
+    es de otro origen) - en ese caso no se intenta borrar nada.
+    """
+    try:
+        despues_de_upload = url.split('/upload/', 1)[1]
+    except (IndexError, AttributeError):
+        return None
+    despues_de_upload = re.sub(r'^v\d+/', '', despues_de_upload)
+    return despues_de_upload.rsplit('.', 1)[0] or None
+
+
+def eliminar_imagen(url):
+    """
+    Borra de Cloudinary la imagen en `url`, si se le pudo determinar un
+    public_id (ver _public_id_desde_url). Es "mejor esfuerzo": si no se
+    puede (URL con forma inesperada, Cloudinary no configurado, fallo de
+    red), no lanza - el llamador ya guardo el reemplazo en Mongo, esto es
+    solo limpieza del archivo viejo, no debe tumbar el flujo principal.
+    """
+    public_id = _public_id_desde_url(url)
+    if not public_id:
+        return
+    try:
+        _asegurar_configuracion()
+        cloudinary.uploader.destroy(public_id)
+    except (CloudinaryError, ErrorSubidaImagen):
+        pass

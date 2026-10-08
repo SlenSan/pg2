@@ -201,7 +201,7 @@ Responsabilidad de cada app:
 |---|---|---|
 | `core` | Infraestructura compartida: cliente de MongoDB (`mongo.py`), subida de imágenes a Cloudinary (`media.py`), tema visual (`static/css/canigo-theme.css`), layout base (`templates/base.html`), context processor del punto de notificaciones, comando `crear_indices`, y un endpoint de diagnóstico (`/api/db-status/`). | ninguna propia |
 | `usuarios` | Registro/login/logout (comunes a los dos roles), dashboards de dueño y paseador, perfil editable del paseador, decoradores de autenticación (`decorators.py`) | `usuarios` |
-| `mascotas` | Registrar y listar las mascotas de un dueño | `mascotas` |
+| `mascotas` | Registrar, listar y editar las mascotas de un dueño | `mascotas` |
 | `paseos` | Publicar/despublicar disponibilidad (con zonas de servicio), listar paseadores e inscribir mascotas, iniciar/finalizar el paseo, "Paseos activos"/historial del dueño y "Mis paseos" del paseador | `paseos` (colección central) |
 | `coordenadas` | Recepción de puntos GPS del paseador, mapa en vivo/histórico del dueño, cálculo de distancia recorrida | `coordenadas_detalle` |
 | `incidentes` | Botón de emergencia del paseador, historial de incidentes del dueño | `incidentes` |
@@ -363,6 +363,35 @@ detalle_paseador`) como en su propio "Mi perfil"
   `login()` valida `next` con `url_has_allowed_host_and_scheme` antes de
   redirigir ahí (mismo mecanismo que usa `django.contrib.auth`), para
   que no sea un open redirect.
+- **Editar mascota reusa el mismo formulario que registrarla**:
+  `mascotas:editar` (`mascotas/views.py::editar_mascota`) usa el mismo
+  `MascotaForm` que `registrar_mascota` - no hay un form de edición
+  separado. El HTML de los campos tambien esta factorizado una sola vez
+  (`mascotas/templates/mascotas/_formulario.html`, incluido por
+  `registro.html` y `editar.html`), para no duplicar el markup. `foto`
+  ya era opcional en `MascotaForm` desde antes (registro tambien la
+  permite vacía), así que "no reemplazar la foto si no se sube una
+  nueva" no necesitó un campo nuevo: `repository.actualizar_mascota()`
+  distingue `foto=None` ("no tocar la que ya había") de `foto=''`
+  ("borrarla"), y la vista solo pasa una URL cuando sí se subió un
+  archivo. El dueño no es editable (no está en el form) - ver CLAUDE.md.
+  Ownership: `repository.obtener_por_id_y_dueno()`; si la mascota no
+  existe o es de otro dueño, mismo mensaje en ambos casos (no revela
+  cuál fue el motivo) y redirige al listado.
+- **Borrado de la foto anterior en Cloudinary al reemplazarla**: el
+  esquema de Mongo solo guarda la URL (`mascotas.foto: String`, ver
+  CLAUDE.md) - no el `public_id` de Cloudinary. `core/media.py::
+  eliminar_imagen()` reconstruye el `public_id` a partir de la URL
+  (todo lo que sigue a `/upload/`, sin el segmento de versión ni la
+  extensión) y llama a `cloudinary.uploader.destroy()`. Es mejor
+  esfuerzo: si no puede, no lanza - el reemplazo en Mongo ya quedó bien,
+  esto es solo limpieza del archivo viejo. Verificado ejecutando: tras
+  reemplazar la foto de una mascota, el `public_id` de la foto anterior
+  ya no existe en Cloudinary (`cloudinary.api.resource()` devuelve 404).
+- **No existe una pantalla de "detalle" de mascota** (solo listado y
+  formulario) - el link "Editar" se agregó en el listado
+  (`mascotas/templates/mascotas/lista.html`); si en el futuro se agrega
+  una pantalla de detalle, debería llevar el mismo link.
 - **Nunca pongas `{% %}` de Django dentro de un comentario de JavaScript**
   (`// ...` o `/* ... */` en un `<script>`): el motor de plantillas de
   Django no sabe qué es un comentario de JS, parsea `{% %}` en todo el

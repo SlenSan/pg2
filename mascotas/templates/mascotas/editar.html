@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}Registrar mascota — Canigo{% endblock %}
+{% block title %}Editar {{ mascota.nombre }} — Canigo{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-12 col-md-6 col-lg-5">
     <div class="card">
       <div class="card-body p-4">
-        <h1 class="h4 mb-4">Registrar mascota</h1>
+        <h1 class="h4 mb-4">Editar mascota</h1>
         <form method="post" enctype="multipart/form-data" novalidate>
           {% csrf_token %}
-          {% include "mascotas/_formulario.html" %}
-          <button type="submit" class="btn btn-primary w-100">Guardar</button>
+          {% include "mascotas/_formulario.html" with foto_actual=mascota.foto %}
+          <button type="submit" class="btn btn-primary w-100">Guardar cambios</button>
         </form>
         <p class="mt-3 mb-0 text-center">
           <a href="{% url 'mascotas:lista' %}">Volver a mis mascotas</a>
