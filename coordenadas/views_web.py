@@ -12,6 +12,7 @@ from datetime import datetime
 
 from bson import ObjectId
 from bson.errors import InvalidId
+from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
@@ -23,7 +24,7 @@ from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository as paseos_repository
 from usuarios import repository as usuarios_repository
-from usuarios.decorators import requiere_dueno, requiere_paseador
+from usuarios.decorators import URL_DASHBOARD_POR_ROL, requiere_autenticacion, requiere_paseador
 
 
 def _hay_notificaciones_sin_leer(request, id_usuario):
@@ -88,24 +89,40 @@ def _pendiente_calificar(paseo, id_dueno):
     return calificaciones_repository.obtener_por_paseo_y_dueno(paseo['_id'], id_dueno) is None
 
 
-def _paseo_de_dueno_o_none(request, id_paseo):
+def _paseo_accesible_o_none(request, id_paseo):
     """
-    El paseo, solo si el dueño en sesion es UNO de los (posiblemente
-    varios) dueños que tienen mascotas inscritas ahi - ver CLAUDE.md,
-    "Corrección de alcance 2026-09-25". ObjectId(...) en vez de comparar
-    strings porque ahora se busca membresía en una lista de ObjectId, no
-    una igualdad de un solo campo.
+    El paseo, solo si quien esta en sesion tiene un motivo real para
+    verlo - el mapa de seguimiento ahora es compartido por los dos roles
+    (antes era @requiere_dueno a secas, bloqueando al paseador por
+    completo incluso para sus propios paseos - ver el reporte de
+    hallazgos, punto (c)):
+
+    - paseador: solo si ES el paseador asignado a este paseo
+      (paseo.id_paseador).
+    - dueño: solo si es UNO de los (posiblemente varios) dueños que
+      tienen mascotas inscritas ahi (paseo.id_duenos) - un paseo puede
+      ser multi-dueño, ver CLAUDE.md "Corrección de alcance 2026-09-25".
+      Esto YA estaba bien antes de este cambio (se verifica membresia en
+      el array, no "cualquier dueño autenticado") - se mantiene igual,
+      solo se le agrega la rama del paseador al lado.
+
+    Cualquier otra combinacion (rol desconocido, no pertenece al paseo)
+    devuelve None - nunca se muestra el paseo sin un motivo valido.
     """
     paseo = paseos_repository.obtener_por_id(id_paseo)
     if not paseo:
         return None
     try:
-        oid_dueno = ObjectId(request.session.get('id_usuario'))
+        oid_usuario = ObjectId(request.session.get('id_usuario'))
     except (InvalidId, TypeError):
         return None
-    if oid_dueno not in paseo.get('id_duenos', []):
-        return None
-    return paseo
+
+    rol = request.session.get('rol')
+    if rol == 'paseador':
+        return paseo if paseo.get('id_paseador') == oid_usuario else None
+    if rol == 'dueño':
+        return paseo if oid_usuario in paseo.get('id_duenos', []) else None
+    return None
 
 
 def _mascotas_del_dueno_en_paseo(paseo, id_dueno):
@@ -134,15 +151,34 @@ def _fecha_iso_utc(valor):
     return valor.strftime('%Y-%m-%dT%H:%M:%SZ') if valor else None
 
 
-@requiere_dueno
+@requiere_autenticacion
 def mapa_paseo(request, id_paseo):
-    paseo = _paseo_de_dueno_o_none(request, id_paseo)
+    """
+    Mapa de seguimiento - compartido por los dos roles (antes era
+    @requiere_dueno a secas: un paseador nunca podia entrar aca, ni
+    siquiera a sus propios paseos - ver el reporte de hallazgos, punto
+    (c)). El control real de "a quien le pertenece este paseo" lo hace
+    _paseo_accesible_o_none(), no el decorador.
+    """
+    paseo = _paseo_accesible_o_none(request, id_paseo)
     if not paseo:
-        return redirect('paseos:mis_paseos')
+        rol_sesion = request.session.get('rol')
+        messages.error(request, 'No tienes acceso a ese paseo.')
+        return redirect(URL_DASHBOARD_POR_ROL.get(rol_sesion, 'usuarios:login'))
 
-    id_dueno = request.session['id_usuario']
-    # SOLO las mascotas de ESTE dueño - ver _mascotas_del_dueno_en_paseo().
-    mascotas = _mascotas_del_dueno_en_paseo(paseo, id_dueno)
+    id_usuario = request.session['id_usuario']
+    es_dueno = request.session.get('rol') == 'dueño'
+    if es_dueno:
+        # SOLO las mascotas de ESTE dueño - ver _mascotas_del_dueno_en_paseo()
+        # (puede haber mascotas de OTROS dueños en el mismo paseo).
+        mascotas = _mascotas_del_dueno_en_paseo(paseo, id_usuario)
+    else:
+        # El paseador SI ve todas las mascotas del paseo, sin filtrar -
+        # mismo criterio que ya usa su propio dashboard (bienvenida_paseador):
+        # se las esta llevando a todas juntas, no hay nada que ocultarle.
+        mascotas_por_id = mascotas_repository.obtener_varias_por_id(paseo.get('id_mascotas', []))
+        mascotas = mascotas_repository.resolver_lista(paseo.get('id_mascotas'), mascotas_por_id)
+
     paseador = None
     if paseo.get('id_paseador'):
         paseador = usuarios_repository.obtener_por_id(paseo['id_paseador'])
@@ -158,20 +194,27 @@ def mapa_paseo(request, id_paseo):
         # es lo unico que decide si el banner se muestra, no
         # paseo.emergencia por si solo.
         'texto_emergencia': _texto_incidente(paseo['_id']),
+        # "Calificar" es una accion EXCLUSIVA del dueño (calificaciones:
+        # calificar_paseo ya tiene su propio @requiere_dueno - bloqueado
+        # en backend de por si) - se oculta en el template con esta
+        # bandera para no mostrarle al paseador un link que lo rebotaria.
+        'es_dueno': es_dueno,
         # Aviso "El paseo finalizó, califícalo ahora" - distinto del
         # banner de incidente de arriba (pueden convivir), ver
-        # _pendiente_calificar().
-        'pendiente_calificar': _pendiente_calificar(paseo, id_dueno),
+        # _pendiente_calificar(). False a secas para el paseador: esa
+        # pregunta ("¿calificaste TU experiencia?") no aplica a su rol.
+        'pendiente_calificar': _pendiente_calificar(paseo, id_usuario) if es_dueno else False,
     })
 
 
-@requiere_dueno
+@requiere_autenticacion
 def coordenadas_de_paseo(request, id_paseo):
-    paseo = _paseo_de_dueno_o_none(request, id_paseo)
+    paseo = _paseo_accesible_o_none(request, id_paseo)
     if not paseo:
         return JsonResponse({'error': 'No autorizado.'}, status=403)
 
-    id_dueno = request.session['id_usuario']
+    id_usuario = request.session['id_usuario']
+    es_dueno = request.session.get('rol') == 'dueño'
     puntos = repository.listar_por_paseo(id_paseo)
     return JsonResponse({
         'estado': paseo['estado'],
@@ -184,13 +227,11 @@ def coordenadas_de_paseo(request, id_paseo):
         # "en_vivo" - se aprovecha esa misma peticion para el punto de
         # notificaciones del navbar en vez de sumar una aparte (ver
         # mapa.html, que por eso deja vacio el poller generico de
-        # base.html solo mientras esta en ese estado).
-        'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, id_dueno),
-        # Misma logica que mapa_paseo() - si el dueño ya tenia esta
-        # pantalla abierta cuando el paseador finalizo, el polling es lo
-        # que hace aparecer el aviso de calificar sin que tenga que
-        # recargar (ver _pendiente_calificar()).
-        'pendiente_calificar': _pendiente_calificar(paseo, id_dueno),
+        # base.html solo mientras esta en ese estado). Sirve para los dos
+        # roles por igual - cualquier usuario puede tener notificaciones.
+        'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, id_usuario),
+        # Misma logica que mapa_paseo() - solo aplica al dueño.
+        'pendiente_calificar': _pendiente_calificar(paseo, id_usuario) if es_dueno else False,
     })
 
 

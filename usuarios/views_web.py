@@ -26,7 +26,7 @@ from notificaciones import repository as notificaciones_repository
 from paseos import repository as paseos_repository
 from paseos.forms import PublicarHorarioForm
 from usuarios import repository
-from usuarios.decorators import requiere_dueno, requiere_paseador
+from usuarios.decorators import URL_DASHBOARD_POR_ROL, requiere_dueno, requiere_paseador
 from usuarios.forms import EditarPerfilPaseadorForm, LoginForm, RegistroDuenoForm, RegistroPaseadorForm
 
 _ROLES_VALIDOS = ('dueno', 'paseador')
@@ -34,7 +34,10 @@ _ROL_MONGO = {'dueno': 'dueño', 'paseador': 'paseador'}
 
 
 def _url_dashboard(rol):
-    return 'usuarios:bienvenida_paseador' if rol == 'paseador' else 'usuarios:bienvenida'
+    # Mismo mapeo que usuarios.decorators._requiere_rol() usa para
+    # redirigir a alguien autenticado con el rol equivocado - una sola
+    # fuente de verdad en vez de dos copias de rol->URL.
+    return URL_DASHBOARD_POR_ROL.get(rol, 'usuarios:bienvenida')
 
 
 def _rango_dia_utc(fecha_bogota):

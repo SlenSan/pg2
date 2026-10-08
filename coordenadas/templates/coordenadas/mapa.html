@@ -80,7 +80,15 @@ criterio en el JS de abajo.
   id="alerta-emergencia"
 >
   <span><i class="bi bi-exclamation-triangle-fill"></i> <span id="alerta-emergencia-texto">{% if texto_emergencia %}{{ texto_emergencia }}{% endif %}</span></span>
+  {% comment %}
+  "Ver detalles" lleva a incidentes:lista, una pantalla EXCLUSIVA del
+  dueño (su propio @requiere_dueno) - el paseador ve el mismo aviso de
+  texto (es informativo, fue el o ella quien lo reporto), pero sin un
+  link que lo rebotaria a su panel con el mensaje de "sin acceso".
+  {% endcomment %}
+  {% if es_dueno %}
   <a href="{% url 'incidentes:lista' %}" class="alert-link text-nowrap">Ver detalles</a>
+  {% endif %}
 </div>
 
 {% comment %}
@@ -93,7 +101,13 @@ diferenciarlo a proposito del rojo/alerta de arriba. El id_paseo del href
 no cambia durante la vida de esta pagina (a diferencia del dashboard, que
 no sabe cual paseo hasta que llega el polling), asi que no hace falta
 armarlo en JS - solo se alterna ".d-none" segun el polling de abajo.
+
+Calificar es una accion EXCLUSIVA del dueño (calificaciones:
+calificar_paseo tiene su propio @requiere_dueno, bloqueado en backend
+de por si) - directamente no se renderiza para el paseador, en vez de
+solo ocultarla con CSS, para no exponerle un link que lo rebotaria.
 {% endcomment %}
+{% if es_dueno %}
 <a
   href="{% url 'calificaciones:calificar_paseo' id_paseo %}"
   class="banner-paseo-activo d-flex align-items-center gap-3 mb-3 {% if not pendiente_calificar %}d-none{% endif %}"
@@ -108,6 +122,7 @@ armarlo en JS - solo se alterna ".d-none" segun el polling de abajo.
     Calificar <i class="bi bi-chevron-right"></i>
   </div>
 </a>
+{% endif %}
 
 <div class="card mb-3" style="overflow: hidden;">
   <div class="card-body p-0">
@@ -209,8 +224,14 @@ armarlo en JS - solo se alterna ".d-none" segun el polling de abajo.
         // cuando el paseador finalizo el paseo (ver _pendiente_calificar
         // en coordenadas/views_web.py); si entra despues a un paseo ya
         // historico, la carga inicial del template ya lo resuelve sin
-        // necesitar el polling.
-        document.getElementById('banner-calificar').classList.toggle('d-none', !data.pendiente_calificar);
+        // necesitar el polling. El elemento ni siquiera existe en el DOM
+        // para el paseador (es una accion exclusiva del dueño, condicional
+        // mas arriba en el HTML) - por eso el chequeo de null, en vez de
+        // asumir que siempre esta presente.
+        var elBannerCalificar = document.getElementById('banner-calificar');
+        if (elBannerCalificar) {
+          elBannerCalificar.classList.toggle('d-none', !data.pendiente_calificar);
+        }
 
         // Esta pantalla ya trae "hay_notificaciones_sin_leer" en la misma
         // respuesta (ver coordenadas_de_paseo) para no sumar una peticion

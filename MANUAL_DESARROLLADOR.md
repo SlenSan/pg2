@@ -258,12 +258,24 @@ filtro por zona del lado del dueño.
 
 **Incremento 2 — Monitoreo y seguimiento (RF7–RF11)**: iniciar/finalizar el
 paseo (`paseos/views_web.py`: `iniciar_paseo`, `finalizar_paseo`), el envío
-periódico de coordenadas GPS desde el navegador del paseador y el mapa en
-vivo del dueño (`coordenadas/views_web.py`: `registrar_coordenada`,
+periódico de coordenadas GPS desde el navegador del paseador y el mapa de
+seguimiento (`coordenadas/views_web.py`: `registrar_coordenada`,
 `mapa_paseo`, `coordenadas_de_paseo`, con Leaflet.js en
 `coordenadas/templates/coordenadas/mapa.html`), y las notificaciones de
 inicio/fin de paseo con actualización en vivo en el navbar
 (`notificaciones/`, `core/context_processors.py`).
+
+`mapa_paseo`/`coordenadas_de_paseo` son compartidas por los dos roles
+(`@requiere_autenticacion`, no `@requiere_dueno` — corregido en la
+corrección de hallazgos de octubre 2026: antes un paseador no podía ver
+ni sus propios paseos ahí). El control de a quién le pertenece el paseo
+lo hace `_paseo_accesible_o_none()` dentro de la vista, no el decorador:
+un paseador solo entra si es el paseador asignado; un dueño solo si es
+uno de los `id_duenos` del paseo (puede haber varios, ver sección 6). Las
+acciones exclusivas del dueño en esa pantalla (calificar, ver detalle de
+un incidente) se ocultan en la plantilla con la bandera `es_dueno` del
+contexto — nunca se renderiza el link para el paseador, aunque de todas
+formas esas vistas de destino también tienen su propio decorador de rol.
 
 **Incremento 3 — Seguridad y evaluación (RF12–RF16)**: el botón de
 emergencia del paseador y el registro de incidentes
@@ -320,6 +332,23 @@ detalle_paseador`) como en su propio "Mi perfil"
   las de ESE dueño (`mascotas.repository.obtener_varias_por_id_y_dueno`),
   nunca la lista completa del paseo — un paseo compartido puede tener
   mascotas de otros dueños.
+- **`requiere_dueno`/`requiere_paseador` ante un rol equivocado**: si hay
+  sesión activa pero del rol que no es (p. ej. un paseador entrando a una
+  vista `@requiere_dueno`), el decorador NO manda a login — redirige al
+  panel propio de ese rol (`usuarios.decorators.URL_DASHBOARD_POR_ROL`) con
+  `messages.warning(...)`. Solo sin sesión del todo se sigue yendo a login.
+  Para una vista que de verdad deba aceptar los dos roles con reglas de
+  pertenencia distintas por rol (como `coordenadas:mapa_paseo`), no se usa
+  ninguno de los dos — se usa `@requiere_autenticacion` y la vista decide el
+  acceso ella misma según `request.session['rol']`.
+- **Nunca pongas `{% %}` de Django dentro de un comentario de JavaScript**
+  (`// ...` o `/* ... */` en un `<script>`): el motor de plantillas de
+  Django no sabe qué es un comentario de JS, parsea `{% %}` en todo el
+  archivo por igual — un `{% if %}` sin su `{% endif %}` ahí dentro (aunque
+  sea solo para "mencionar" la condición en prosa) rompe la compilación de
+  toda la plantilla con un `TemplateSyntaxError` nada obvio de ubicar. Si
+  hace falta explicar una condición de Django en un comentario de JS,
+  describila en prosa plana, sin la sintaxis de la etiqueta.
 
 ## 9. Despliegue
 
