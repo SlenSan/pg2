@@ -31,23 +31,38 @@ SECRET_KEY = os.environ.get(
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+# Por defecto False (no True): si DJANGO_DEBUG no llega a estar definida
+# en el entorno (por ejemplo, un despliegue nuevo sin .env y sin la
+# variable configurada todavia), el fallo seguro es NO mostrar tracebacks
+# con detalles internos, no al revés. En local, .env.example ya define
+# DJANGO_DEBUG=True explicitamente, asi que esto no cambia el flujo de
+# desarrollo de siempre.
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = [
     h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()
 ]
+# Cualquier subdominio de Render (el hostname exacto lo agrega
+# RENDER_EXTERNAL_HOSTNAME mas abajo, pero este wildcard cubre el caso de
+# que esa variable no este disponible en algun punto, p.ej. durante el
+# build) - Canigo nunca se sirve desde un dominio propio todavia.
+ALLOWED_HOSTS.append('.onrender.com')
+
+# Mismo criterio que ALLOWED_HOSTS: el wildcard de Render siempre
+# presente, ademas (no en vez) de cualquier origen manual que se agregue
+# por variable de entorno.
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
+]
+CSRF_TRUSTED_ORIGINS.append('https://*.onrender.com')
 
 # Render inyecta esta variable automaticamente con el hostname publico del
-# servicio (p.ej. "canigo.onrender.com") - la agregamos sola, sin que haya
-# que configurar DJANGO_ALLOWED_HOSTS a mano en cada deploy.
+# servicio (p.ej. "canigo-xxxx.onrender.com") - la agregamos sola, sin que
+# haya que configurar DJANGO_ALLOWED_HOSTS a mano en cada deploy.
 _RENDER_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if _RENDER_HOSTNAME:
     ALLOWED_HOSTS.append(_RENDER_HOSTNAME)
-    CSRF_TRUSTED_ORIGINS = [f'https://{_RENDER_HOSTNAME}']
-else:
-    CSRF_TRUSTED_ORIGINS = [
-        o.strip() for o in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
-    ]
+    CSRF_TRUSTED_ORIGINS.append(f'https://{_RENDER_HOSTNAME}')
 
 # Render sirve todo detras de un proxy TLS: sin esto, Django no reconoce
 # los requests como HTTPS (rompe CSRF y las cookies "secure").
@@ -56,6 +71,15 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    # Render ya redirige http->https en su propio proxy, pero esto es una
+    # segunda capa dentro de la propia app (warning W008 de `manage.py
+    # check --deploy`, de las que SI vale la pena corregir: no rompe nada,
+    # es la recomendacion basica de seguridad de Django). HSTS (W004) NO
+    # se activa aca a proposito - el propio warning de Django avisa que
+    # mal configurado puede causar problemas dificiles de revertir
+    # (queda "pegado" en el navegador por el tiempo que se le indique),
+    # y no fue pedido explicitamente - se reporta en vez de activarse.
+    SECURE_SSL_REDIRECT = True
 
 
 # Application definition

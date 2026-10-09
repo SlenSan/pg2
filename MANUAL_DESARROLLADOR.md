@@ -592,7 +592,46 @@ dashboard):
   separados por coma - ver sección 8, RF14).
   Render también inyecta automáticamente `RENDER_EXTERNAL_HOSTNAME`, que
   `config/settings.py` usa para completar `ALLOWED_HOSTS`/
-  `CSRF_TRUSTED_ORIGINS` sin configuración manual adicional.
+  `CSRF_TRUSTED_ORIGINS` (que además siempre incluyen un wildcard
+  `.onrender.com`/`https://*.onrender.com` fijo, sin depender de esa
+  variable - cubre el caso de que no esté disponible en algún punto,
+  p.ej. durante el build).
+- **`DEBUG` es `False` por defecto** (no `True`) si `DJANGO_DEBUG` no está
+  definida en el entorno - fallo seguro: un despliegue nuevo sin esa
+  variable configurada todavía no debe mostrar tracebacks con detalles
+  internos. En local no cambia nada (`.env.example`/`.env` ya la definen
+  explícitamente en `True`).
+- **`SECURE_SSL_REDIRECT = True`** (solo cuando `DEBUG=False`, junto a
+  `SESSION_COOKIE_SECURE`/`CSRF_COOKIE_SECURE`): Render ya redirige
+  http→https en su propio proxy, esto es una segunda capa dentro de la
+  app (recomendación básica de `manage.py check --deploy`, warning
+  `W008`). **No se activó HSTS** (warning `W004`) a propósito - el
+  propio warning de Django explica que mal configurado puede causar
+  problemas difíciles de revertir (queda "pegado" en el navegador por el
+  tiempo que se le indique) y no se pidió explícitamente; queda
+  reportado, no corregido.
+- **Gunicorn no corre en Windows nativo** (`import fcntl` falla - es un
+  módulo exclusivo de POSIX): para probar "modo producción" en una
+  máquina de desarrollo Windows, se usa `manage.py runserver` con
+  `DJANGO_DEBUG=False` en su lugar (mismo `DEBUG`/`SECURE_*`/WhiteNoise
+  real, vía `collectstatic` previo) - gunicorn en sí solo se ejecuta en
+  el contenedor Linux de Render, donde sí funciona sin problema.
+- **Probar cookies `Secure` (sesión/CSRF) en local, sin TLS real**: con
+  `DEBUG=False`, el cookie `csrftoken`/la sesión se emiten con el
+  atributo `Secure` - un cliente HTTP real (navegador, `requests`) los
+  descarta sobre `http://` aunque se simule el header
+  `X-Forwarded-Proto: https` (ese header solo cambia lo que Django CREE
+  del lado del servidor, no el comportamiento del cliente). Además, con
+  ese header puesto, el chequeo de CSRF para "requests que Django ve
+  como https" exige un `Referer` que haga match con el host de la
+  petición (o con `CSRF_TRUSTED_ORIGINS`) - sin un `Referer` así, un
+  POST autenticado da `403` aunque el token sea correcto. Para probar
+  esto desde un script (no un navegador real), hace falta mandar el
+  valor de la cookie a mano en el header `Cookie` de la siguiente
+  petición (en vez de depender del cookie-jar del cliente) Y un
+  `Referer` que coincida con el propio host de la prueba
+  (`https://127.0.0.1:<puerto>/`). La verificación real, con HTTPS
+  genuino, es la de después del despliegue (ver "pruebas de humo").
 - **Base de datos de negocio**: MongoDB Atlas, externa al servicio de
   Render (no se despliega junto con la app).
 

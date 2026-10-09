@@ -22,3 +22,5 @@ services:
         value: canigo
       - key: CLOUDINARY_URL
         sync: false
+      - key: CANIGO_ADMIN_EMAILS
+        sync: false
