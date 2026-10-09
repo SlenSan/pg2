@@ -213,7 +213,7 @@ calificación independiente POR dueño, no una sola para todo el paseo.
 {
   _id: ObjectId,
   id_usuario: ObjectId,    // referencia a usuarios (destinatario)
-  tipo: String,            // "inicio_paseo"|"fin_paseo"|"emergencia"|"calificacion"
+  tipo: String,            // "inicio_paseo"|"fin_paseo"|"emergencia"|"calificacion"|"verificacion"
   mensaje: String,
   fecha: Date
 }
