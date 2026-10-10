@@ -425,10 +425,15 @@ detalle_paseador`) como en su propio "Mi perfil"
   mismo punto): `registro()` crea la cuenta y redirige a
   `login?rol=<mismo rol>&correo=<el que acaba de escribir>` con
   `messages.success('Cuenta creada. Inicia sesión.')`, en vez de llamar
-  a `_iniciar_sesion()` y mandar directo al dashboard. `login()` usa ese
-  `?correo=` (si viene) como `initial` de `LoginForm` en el GET - nunca
-  pisa lo que alguien ya haya escrito en un POST fallido, porque
-  `initial` solo aplica a un form sin binding. No se encontró una causa
+  a `_iniciar_sesion()` y mandar directo al dashboard. El correo
+  prellenado viaja en `request.session['correo_prellenado']`, **no en
+  la URL** (`login?correo=...` quedaba en el historial del navegador en
+  texto plano - corregido después de la primera versión de este mismo
+  punto) - `login()` lo lee con `session.pop()` (lo borra apenas lo
+  lee, no sobrevive ni una recarga de la misma página) y lo usa como
+  `initial` de `LoginForm` en el GET - nunca pisa lo que alguien ya
+  haya escrito en un POST fallido, porque `initial` solo aplica a un
+  form sin binding. No se encontró una causa
   de código para el síntoma original ("se queda en el registro") -
   probado ejecutando registro válido (dueño y paseador), correo
   duplicado y contraseñas distintas: en los 3 casos el servidor ya

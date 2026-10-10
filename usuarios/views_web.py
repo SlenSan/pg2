@@ -123,11 +123,15 @@ def registro(request):
                 # manda a login con el mismo rol y el correo prellenado,
                 # en vez de autenticar directo - el usuario entra con su
                 # propia contraseña una vez, en vez de asumir que "cuenta
-                # creada" implica "ya con sesion".
+                # creada" implica "ya con sesion". El correo va en la
+                # SESION, no en la URL (ajuste posterior: una URL con el
+                # correo en texto plano queda en el historial del
+                # navegador) - login() lo lee y lo borra de ahi apenas
+                # lo usa, para que no sobreviva mas de una carga de
+                # pagina.
+                request.session['correo_prellenado'] = correo
                 messages.success(request, 'Cuenta creada. Inicia sesión.')
-                destino = '{}?{}'.format(
-                    reverse('usuarios:login'), urlencode({'rol': rol, 'correo': correo})
-                )
+                destino = '{}?{}'.format(reverse('usuarios:login'), urlencode({'rol': rol}))
                 return redirect(destino)
     else:
         form = FormClass()
@@ -180,10 +184,15 @@ def login(request):
                 return redirect(_url_dashboard(usuario['rol']))
     else:
         # Correo prellenado al llegar desde un registro recien creado
-        # (ver registro(), hallazgos del 9 oct, punto 1) - initial= solo
-        # aplica en un form sin binding (GET), nunca pisa lo que alguien
-        # ya haya escrito tras un POST fallido.
-        correo_inicial = request.GET.get('correo', '')
+        # (ver registro(), hallazgos del 9 oct, punto 1) - en la SESION,
+        # no en la URL (un correo en texto plano en la URL queda en el
+        # historial del navegador). session.pop() lo borra apenas se
+        # lee, para que no sobreviva mas de una carga de pagina (ni
+        # siquiera si esta misma vista se recarga de nuevo sin pasar por
+        # registro otra vez). initial= solo aplica en un form sin
+        # binding (GET), nunca pisa lo que alguien ya haya escrito tras
+        # un POST fallido.
+        correo_inicial = request.session.pop('correo_prellenado', '')
         form = LoginForm(initial={'correo': correo_inicial} if correo_inicial else None)
 
     return render(request, 'usuarios/login.html', {
