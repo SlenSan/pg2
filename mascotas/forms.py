@@ -36,22 +36,16 @@ class MascotaForm(forms.Form):
         label='Foto (opcional)',
         widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
     )
-
-
-class CertificadosMascotaForm(forms.Form):
-    """
-    Subida de certificado_salud/carne_vacunacion (Ley 2480 de 2025, Ley
-    Kiara) - ambos archivos son independientes y opcionales: se puede
-    subir uno, el otro, los dos, o ninguno (aunque la vista exige al
-    menos uno). El formato/tamaño del archivo se valida en
-    core/media.py::subir_certificado (backend obligatorio); aca solo se
-    valida la fecha de expedición, que es dato de formulario, no del
-    archivo.
-    """
-
+    # Certificados (Ley 2480 de 2025, Ley Kiara) - hallazgos del 9 oct,
+    # punto 2: ya no viven en una pantalla aparte (mascotas:certificados,
+    # eliminada) - se suben opcionalmente aca mismo, en el mismo
+    # formulario que ya comparten registrar_mascota() y editar_mascota().
+    # Formato/tamaño/contenido del archivo se valida en
+    # core/media.py::subir_certificado (backend obligatorio); aca solo se
+    # valida la fecha de expedición, que es dato de formulario.
     certificado_salud = forms.FileField(
         required=False,
-        label='Certificado de salud (JPG, PNG o PDF, máx. 5MB)',
+        label='Certificado de salud (opcional - JPG, PNG o PDF, máx. 5MB)',
         widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
     )
     fecha_expedicion_salud = forms.DateField(
@@ -61,7 +55,7 @@ class CertificadosMascotaForm(forms.Form):
     )
     carne_vacunacion = forms.FileField(
         required=False,
-        label='Carné de vacunación (JPG, PNG o PDF, máx. 5MB)',
+        label='Carné de vacunación (opcional - JPG, PNG o PDF, máx. 5MB)',
         widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
     )
 
@@ -76,6 +70,4 @@ class CertificadosMascotaForm(forms.Form):
             )
         elif fecha and fecha > date.today():
             self.add_error('fecha_expedicion_salud', 'La fecha de expedición no puede ser futura.')
-        if not archivo_salud and not cleaned.get('carne_vacunacion'):
-            self.add_error(None, 'Sube al menos un archivo (certificado de salud o carné de vacunación).')
         return cleaned

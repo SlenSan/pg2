@@ -462,12 +462,26 @@ detalle_paseador`) como en su propio "Mi perfil"
   esto es solo limpieza del archivo viejo. Verificado ejecutando: tras
   reemplazar la foto de una mascota, el `public_id` de la foto anterior
   ya no existe en Cloudinary (`cloudinary.api.resource()` devuelve 404).
-- **Certificados de mascota (Ley 2480 de 2025, Ley Kiara)**:
-  `mascotas:certificados` (`mascotas/views.py::certificados_mascota`,
-  dueño-only, mismo ownership check que editar) sube
-  `certificado_salud`/`carne_vacunacion` de forma independiente - se
-  puede subir uno, el otro, los dos, o ninguno (la vista exige al menos
-  uno). El estado del certificado de salud ("Sin certificado" / "Vigente
+- **Certificados de mascota (Ley 2480 de 2025, Ley Kiara)**: viven DENTRO
+  del mismo `MascotaForm` que usan `mascotas:registro`/`mascotas:editar`
+  (campos `certificado_salud`, `fecha_expedicion_salud`,
+  `carne_vacunacion`, todos opcionales) - **ya no existe una pantalla
+  aparte** (`mascotas:certificados` se eliminó, junto con su vista,
+  plantilla y `CertificadosMascotaForm`, en los hallazgos del 9 oct,
+  punto 2: la consigna original pedía una pantalla separada, pero se
+  revirtió a favor de subirlos directo en el registro/edición, para no
+  duplicar formulario). Se puede subir uno, el otro, los dos, o ninguno.
+  **Atomicidad** (decisión explícita del punto 2: "no se crea nada" en
+  vez de "se crea a medias"): en `registrar_mascota()`/`editar_mascota()`
+  (`mascotas/views.py::_subir_certificados_del_form`), los archivos se
+  suben ANTES de escribir en Mongo; si cualquier campo del formulario
+  falla (incluido un archivo), no se crea/actualiza la mascota, y
+  cualquier archivo que SÍ se hubiera llegado a subir en esa misma
+  petición se borra de Cloudinary (`eliminar_archivo`) para no dejarlo
+  huérfano - verificado ejecutando con un caso mixto real (un archivo
+  válido + uno inválido en la misma petición): la mascota no se crea y
+  Cloudinary queda sin el archivo que sí se había subido. El estado del
+  certificado de salud ("Sin certificado" / "Vigente
   (vence el DD/MM/AAAA)" / "Vencido", 6 MESES CALENDARIO desde
   `fecha_expedicion`, no días) se calcula **siempre al leer, nunca se
   guarda** - una sola función (`mascotas.repository.

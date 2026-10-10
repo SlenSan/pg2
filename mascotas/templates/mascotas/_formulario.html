@@ -17,6 +17,18 @@ los campos (ver mascotas/views.py).
     {% endif %}
     <img id="vista-previa-foto" src="" alt="Vista previa" class="mt-2 rounded d-none" style="max-height: 160px; object-fit: cover;">
     {% endif %}
+    {% if field.name == 'certificado_salud' and certificado_salud_actual.url %}
+    <div class="small text-muted mt-1">
+      Ya tienes uno subido: <a href="{{ certificado_salud_actual.url }}" target="_blank" rel="noopener">ver archivo actual</a>
+      — subí uno nuevo solo si quieres reemplazarlo.
+    </div>
+    {% endif %}
+    {% if field.name == 'carne_vacunacion' and carne_vacunacion_actual.url %}
+    <div class="small text-muted mt-1">
+      Ya tienes uno subido: <a href="{{ carne_vacunacion_actual.url }}" target="_blank" rel="noopener">ver archivo actual</a>
+      — subí uno nuevo solo si quieres reemplazarlo.
+    </div>
+    {% endif %}
     {% for error in field.errors %}
       <div class="text-danger small mt-1">{{ error }}</div>
     {% endfor %}

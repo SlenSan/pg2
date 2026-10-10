@@ -13,7 +13,18 @@ from core.mongo import get_db, mapear_por_id
 _MESES_VIGENCIA_CERTIFICADO_SALUD = 6
 
 
-def crear_mascota(*, id_dueno, nombre, raza, edad, peso, observaciones='', foto=''):
+def crear_mascota(*, id_dueno, nombre, raza, edad, peso, observaciones='', foto='',
+                   certificado_salud=None, carne_vacunacion=None):
+    """
+    certificado_salud/carne_vacunacion: dicts {url, public_id, formato,
+    [fecha_expedicion]} ya subidos a Cloudinary (ver mascotas/views.py),
+    o None si no se subio ninguno al registrar - hallazgos del 9 oct,
+    punto 2: el formulario de registro los sube opcionalmente desde el
+    principio, en vez de necesitar una pantalla aparte despues. Se les
+    agrega `subido_en` aca (mismo criterio que
+    actualizar_certificado_salud()/actualizar_carne_vacunacion(), que lo
+    agregan igual al reemplazarlos despues).
+    """
     mascota = {
         'id_dueno': ObjectId(id_dueno),
         'nombre': nombre,
@@ -24,6 +35,10 @@ def crear_mascota(*, id_dueno, nombre, raza, edad, peso, observaciones='', foto=
         'observaciones': observaciones,
         'fecha_registro': datetime.now(timezone.utc),
     }
+    if certificado_salud:
+        mascota['certificado_salud'] = {**certificado_salud, 'subido_en': datetime.now(timezone.utc)}
+    if carne_vacunacion:
+        mascota['carne_vacunacion'] = {**carne_vacunacion, 'subido_en': datetime.now(timezone.utc)}
     resultado = get_db().mascotas.insert_one(mascota)
     mascota['_id'] = resultado.inserted_id
     return mascota
