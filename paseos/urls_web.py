@@ -7,6 +7,7 @@ app_name = 'paseos'
 urlpatterns = [
     path('', views_web.lista_disponibles, name='lista_disponibles'),
     path('mios/', views_web.mis_paseos, name='mis_paseos'),
+    path('mios/estado/', views_web.estado_mis_paseos, name='estado_mis_paseos'),
     path('historial/', views_web.historial, name='historial'),
     path('paseadores/<str:id_paseador>/', views_web.detalle_paseador, name='detalle_paseador'),
     path(

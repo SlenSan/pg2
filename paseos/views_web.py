@@ -10,7 +10,9 @@ from datetime import datetime, timezone as dt_timezone
 
 from bson import ObjectId
 from django.contrib import messages
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.template.loader import render_to_string
 from django.utils import timezone as django_timezone
 from django.views.decorators.http import require_POST
 
@@ -261,15 +263,13 @@ def inscribir_en_horario(request, id_paseador, id_paseo):
     return redirect('paseos:mis_paseos')
 
 
-@requiere_dueno
-def mis_paseos(request):
+def _items_mis_paseos(id_dueno):
     """
-    "Paseos activos" (antes "Mis paseos" - ver reporte de hallazgos,
-    punto (d)): SOLO 'disponible'/'en_vivo' (repository.
-    listar_activos_por_dueno). Lo ya terminado vive en historial() - cada
-    paseo aparece en una sola de las dos pantallas, nunca en ambas.
+    Factorizado de mis_paseos() para que estado_mis_paseos() (sondeo cada
+    10s desde mis_paseos.html, ver RNF2) calcule exactamente lo mismo que
+    la carga completa - mismo patron que _paseo_activo_dueno() o
+    _horarios_disponibles_paseador().
     """
-    id_dueno = request.session['id_usuario']
     paseos = repository.listar_activos_por_dueno(id_dueno)
     paseadores_por_id = usuarios_repository.obtener_varios_por_id(
         [p['id_paseador'] for p in paseos]
@@ -283,7 +283,7 @@ def mis_paseos(request):
     # Sin "calificado"/ids_calificados aca: esta pantalla ya no muestra
     # NUNCA paseos 'historico' (los unicos que se pueden calificar), asi
     # que esa pregunta dejo de aplicar - vive en historial().
-    items = [
+    return [
         {
             'id_paseo': str(p['_id']),
             'paseo': p,
@@ -294,7 +294,34 @@ def mis_paseos(request):
         }
         for p in paseos
     ]
+
+
+@requiere_dueno
+def mis_paseos(request):
+    """
+    "Paseos activos" (antes "Mis paseos" - ver reporte de hallazgos,
+    punto (d)): SOLO 'disponible'/'en_vivo' (repository.
+    listar_activos_por_dueno). Lo ya terminado vive en historial() - cada
+    paseo aparece en una sola de las dos pantallas, nunca en ambas.
+    """
+    items = _items_mis_paseos(request.session['id_usuario'])
     return render(request, 'paseos/mis_paseos.html', {'items': items})
+
+
+@requiere_dueno
+def estado_mis_paseos(request):
+    """
+    Sondeo de "Paseos activos" cada 10s (RNF2: actualizar el estado del
+    paseo en intervalos <=10s) - devuelve el fragmento ya renderizado
+    (no JSON con los datos sueltos), mismo motivo que
+    estado_bienvenida_paseador(): la lista cambia de estructura (badge,
+    boton "Ver mapa") según el estado, no solo de texto suelto, asi que
+    es mas simple y consistente re-renderizar la misma plantilla que ya
+    usa la carga completa.
+    """
+    items = _items_mis_paseos(request.session['id_usuario'])
+    html = render_to_string('paseos/_lista_paseos_activos.html', {'items': items}, request=request)
+    return JsonResponse({'html': html})
 
 
 @requiere_dueno

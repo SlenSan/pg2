@@ -174,7 +174,37 @@
       });
   }
 
-  setInterval(actualizar, 12000);
+  // RNF2 (actualizar en intervalos <=10s) - antes eran 12000ms. Se
+  // pausa con la pestaña oculta (document.visibilityState) y refresca
+  // de inmediato al volver, para no esperar hasta 10s mas - mismo
+  // criterio que el sondeo nuevo de paseos/mis_paseos.html.
+  var intervaloId = null;
+
+  function iniciarSondeo() {
+    if (!intervaloId) {
+      intervaloId = setInterval(actualizar, 10000);
+    }
+  }
+
+  function detenerSondeo() {
+    if (intervaloId) {
+      clearInterval(intervaloId);
+      intervaloId = null;
+    }
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') {
+      actualizar();
+      iniciarSondeo();
+    } else {
+      detenerSondeo();
+    }
+  });
+
+  if (document.visibilityState === 'visible') {
+    iniciarSondeo();
+  }
 })();
 </script>
 {% endblock %}

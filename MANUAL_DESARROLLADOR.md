@@ -370,7 +370,22 @@ detalle_paseador`) como en su propio "Mi perfil"
   nuevo en una pantalla, revisa si esa pantalla ya tiene uno por otro motivo
   (por ejemplo, el envío de GPS) y aprovecha esa misma petición en vez de
   sumar una nueva — varias pantallas ya comparten una sola petición para
-  cubrir dos necesidades a la vez.
+  cubrir dos necesidades a la vez. Intervalo estándar: **10s** (RNF2), no
+  12s ni 15s — `usuarios/bienvenida.html` y `paseos/mis_paseos.html` ya lo
+  usan; el poller genérico de notificaciones (`core/templates/base.html`,
+  `polling_notificaciones`) sigue en 15s a propósito, porque no es
+  seguimiento de un paseo. Cuando lo que cambia es la ESTRUCTURA de una
+  lista (badges, botones que aparecen/desaparecen según el estado, no solo
+  texto suelto), la vista de sondeo devuelve el fragmento ya renderizado
+  (`render_to_string` sobre un parcial compartido con la carga completa,
+  como `estado_bienvenida_paseador`/`_horarios_paseador.html` o
+  `estado_mis_paseos`/`_lista_paseos_activos.html`), no JSON con los datos
+  sueltos - más simple y consistente que reconstruir ese HTML a mano en JS.
+  **Pausar con la pestaña oculta** (`document.visibilityState`,
+  `visibilitychange`): todo sondeo nuevo debe pausarse si la pestaña no
+  está visible y refrescar de inmediato al volver a ella - patrón
+  establecido en `bienvenida.html` y `mis_paseos.html`, cópialo para
+  cualquier sondeo nuevo.
 - **Privacidad en paseos con varios dueños**: cualquier pantalla que le
   muestre a un dueño específico "las mascotas de este paseo" debe filtrar a
   las de ESE dueño (`mascotas.repository.obtener_varias_por_id_y_dueno`),
