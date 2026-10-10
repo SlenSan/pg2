@@ -3,6 +3,7 @@ services:
     name: canigo
     runtime: python
     plan: free
+    region: virginia
     buildCommand: >-
       pip install -r requirements.txt &&
       python manage.py collectstatic --noinput &&
