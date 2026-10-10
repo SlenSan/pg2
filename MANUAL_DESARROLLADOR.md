@@ -337,6 +337,31 @@ detalle_paseador`) como en su propio "Mi perfil"
   desfasado 5 horas. Este bug ya se cometió y se corrigió varias veces en
   distintas pantallas; cualquier fecha nueva que se muestre en una plantilla
   necesita este mismo cuidado.
+- **`horario_desde`/`horario_hasta` se guardan naive en UTC**, igual que
+  todo el resto del esquema (nunca hora local sin zona) - se convierten
+  UNA vez, al publicar (`paseos.views_web._horario_a_utc`: combina las
+  horas elegidas con el día de HOY en hora de Bogotá, hace el datetime
+  aware, lo pasa a UTC y le quita el tzinfo). Para comparar contra "el
+  momento actual" en una consulta (por ejemplo, "¿ya pasó la hora de
+  fin?"), se usa `datetime.now(timezone.utc).replace(tzinfo=None)` -
+  mismo formato, comparación directa, sin reconversión de zona.
+- **Un horario "disponible" cuya hora de fin ya pasó sin iniciarse debe
+  dejar de ofrecerse** (hallazgos del 9 oct, punto 5 - nada lo cambiaba
+  de estado antes: se quedaba "disponible" para siempre). Opción (a)
+  elegida (filtro por fecha en cada consulta dueño-facing, sin tocar los
+  datos ni agregar un estado nuevo como "vencido" - la opción (b) queda
+  solo propuesta, no implementada, a la espera de aprobación):
+  `paseos.repository.listar_disponibles_con_cupo()` (usada por
+  "Paseadores disponibles") filtra `horario_hasta >= ahora_utc`
+  directamente en la query de Mongo. `paseos.views_web.detalle_paseador()`
+  (perfil público de un paseador que ve el dueño) agrega el MISMO filtro
+  pero como condición extra en su propio list comprehension, en vez de
+  dentro de `paseos.repository.listar_disponibles_de_paseador()` - esa
+  función también la usa el dashboard del PROPIO paseador
+  (`bienvenida_paseador`), donde SÍ debe seguir viendo un horario vencido
+  (para poder "Despublicarlo") - filtrar ahí habría escondido esa
+  tarjeta de su propio dueño. Mismo criterio, filtro en el lugar que
+  corresponde a cada caso, no una regla única para toda la colección.
 - **Actualización en vivo sin recargar, con `setInterval` + JSON**: no hay
   WebSockets ni Django Channels (fuera de alcance). El patrón establecido es
   una vista que devuelve JSON con exactamente lo que cambió, consumida por

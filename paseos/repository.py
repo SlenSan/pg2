@@ -146,15 +146,25 @@ def listar_disponibles_con_cupo(zona=None):
     porque el limite se compara contra el tamaño de un array del propio
     documento, algo que un filtro de igualdad simple no puede expresar.
 
+    `horario_hasta >= ahora` (hallazgo del 9 oct): un horario "disponible"
+    cuya hora de fin ya pasó SIN que el paseador lo haya iniciado se
+    queda en "disponible" para siempre (nada lo cambia de estado solo):
+    sin este filtro, se seguia OFRECIENDO a los dueños indefinidamente.
+    `horario_hasta` se guarda naive en UTC (ver _horario_a_utc en
+    views_web.py), igual que `ahora` aca - comparacion directa, sin
+    conversion de zona horaria.
+
     zona: si se da, solo horarios que tengan ESA zona entre las suyas
     (filtro del dueño en "Paseadores disponibles" - ver CLAUDE.md/Incremento 1
     de zonas de servicio). {'zonas': zona} matchea automaticamente si el
     array la contiene, sin sintaxis especial. El llamador (lista_disponibles())
     ya valida que `zona` sea una de ZONAS_VALIDAS antes de llegar aca.
     """
+    ahora_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     filtro = {
         'estado': 'disponible',
         'acepta_inscripciones': True,
+        'horario_hasta': {'$gte': ahora_utc},
         '$expr': {'$lt': [{'$size': '$id_mascotas'}, MAXIMO_MASCOTAS_POR_PASEO]},
     }
     if zona:

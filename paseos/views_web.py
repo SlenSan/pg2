@@ -117,6 +117,15 @@ def detalle_paseador(request, id_paseador):
         return redirect('paseos:lista_disponibles')
 
     oid_paseador = ObjectId(id_paseador)
+    # ahora_utc: mismo filtro de fecha que listar_disponibles_con_cupo()
+    # (hallazgo del 9 oct) pero aca, no dentro de listar_disponibles_de_paseador() -
+    # esa función también la usa el dashboard del PROPIO paseador
+    # (bienvenida_paseador), donde SI quiere seguir viendo (para
+    # "Despublicar") un horario vencido que nunca inicio; filtrarlo ahi
+    # habria escondido esa tarjeta de su propio dueño. Aca, del lado del
+    # dueño que esta buscando a quien contratar, un horario vencido nunca
+    # debe ofrecerse - mismo criterio, filtro en el lugar que corresponde.
+    ahora_utc = datetime.now(dt_timezone.utc).replace(tzinfo=None)
     horarios = [
         _marcar_utc(h)
         for h in repository.listar_disponibles_de_paseador(oid_paseador)
@@ -125,6 +134,7 @@ def detalle_paseador(request, id_paseador):
         # sigue apareciendo aca, mientras el paseador no lo haya cerrado y
         # no haya llegado al maximo.
         if h.get('acepta_inscripciones', True) and len(h.get('id_mascotas', [])) < MAXIMO_MASCOTAS_POR_PASEO
+        and h.get('horario_hasta') and h['horario_hasta'] >= ahora_utc
     ]
     if not horarios:
         messages.error(request, 'Este paseador no tiene horarios disponibles en este momento.')
