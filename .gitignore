@@ -7,6 +7,10 @@ ENV/
 # Variables de entorno / secretos
 .env
 
+# Respaldos locales de datos de produccion (export JSON antes de un
+# borrado - contienen datos reales de usuarios, nunca se comitean)
+respaldo_canigo_*/
+
 # Bytecode / cache de Python
 __pycache__/
 *.py[cod]
