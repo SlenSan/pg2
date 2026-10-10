@@ -520,6 +520,23 @@ detalle_paseador`) como en su propio "Mi perfil"
   `_hay_notificaciones_sin_leer`, para evitar una dependencia cruzada
   entre esas dos apps) - lo que NO está duplicado es la función de
   acceso en sí, que vive una sola vez en `paseos/repository.py`.
+- **Cloudinary SIEMPRE se configura desde una sola fuente** (confirmado al
+  investigar el hallazgo "Invalid api_key \<your_api_key\>" del 9 oct,
+  punto 3 - ese texto no aparece en ningún lugar del repositorio ni del
+  SDK; es el error que devuelve el SERVIDOR de Cloudinary cuando el
+  `api_key` enviado es literalmente esa cadena, lo que apunta a una
+  variable de entorno mal copiada - de un ejemplo de la documentación de
+  Cloudinary, no de `.env.example` - en el `.env` local o en el
+  dashboard de Render, no a un bug de código): los 6 lugares que suben
+  algo (`foto_perfil`, foto de mascota, evidencia de incidente, foto de
+  paseo, certificados de mascota, certificados de paseador) pasan
+  siempre por `core/media.py::subir_imagen()`/`subir_certificado()`,
+  que llaman a `_asegurar_configuracion()` antes de cualquier
+  `cloudinary.uploader.*` - no hay otro punto del código que llame a
+  `cloudinary.config()` ni que lea `CLOUDINARY_*` por su cuenta.
+  Verificado ejecutando los 6 tipos de subida con el `CLOUDINARY_URL`
+  real del `.env` local: los 6 funcionan igual, sin ningún error -
+  descarta una diferencia de código entre tipos de foto.
 - **Validación de archivo por contenido real, no solo por extensión**:
   `core/media.py::subir_certificado()` (usada por certificados de
   mascota y, en un commit aparte, del paseador) rechaza un archivo si
