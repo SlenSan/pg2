@@ -55,6 +55,16 @@
     {% endfor %}
   </div>
 
+  {% if form.direccion %}
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.direccion.id_for_label }}">{{ form.direccion.label }}</label>
+    {{ form.direccion }}
+    {% for error in form.direccion.errors %}
+    <div class="text-danger small mt-1">{{ error }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {% if form.descripcion %}
   <div class="mb-3">
     <label class="form-label" for="{{ form.descripcion.id_for_label }}">{{ form.descripcion.label }}</label>

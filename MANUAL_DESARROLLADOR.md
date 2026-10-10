@@ -420,6 +420,23 @@ detalle_paseador`) como en su propio "Mi perfil"
   `login()` valida `next` con `url_has_allowed_host_and_scheme` antes de
   redirigir ahí (mismo mecanismo que usa `django.contrib.auth`), para
   que no sea un open redirect.
+- **Registro exitoso YA NO inicia sesión sola** (hallazgos del 9 oct,
+  punto 1 - revierte ese detalle de la decisión original de este
+  mismo punto): `registro()` crea la cuenta y redirige a
+  `login?rol=<mismo rol>&correo=<el que acaba de escribir>` con
+  `messages.success('Cuenta creada. Inicia sesión.')`, en vez de llamar
+  a `_iniciar_sesion()` y mandar directo al dashboard. `login()` usa ese
+  `?correo=` (si viene) como `initial` de `LoginForm` en el GET - nunca
+  pisa lo que alguien ya haya escrito en un POST fallido, porque
+  `initial` solo aplica a un form sin binding. No se encontró una causa
+  de código para el síntoma original ("se queda en el registro") -
+  probado ejecutando registro válido (dueño y paseador), correo
+  duplicado y contraseñas distintas: en los 3 casos el servidor ya
+  respondía correctamente (redirect en éxito, error visible en los
+  fallos) antes de este cambio. Se agregó además el campo `direccion`
+  a `registro.html` (existía en `RegistroDuenoForm` pero nunca se
+  renderizaba - hallazgo incidental, sin relación con el síntoma
+  reportado).
 - **Editar mascota reusa el mismo formulario que registrarla**:
   `mascotas:editar` (`mascotas/views.py::editar_mascota`) usa el mismo
   `MascotaForm` que `registrar_mascota` - no hay un form de edición

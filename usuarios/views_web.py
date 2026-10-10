@@ -9,6 +9,7 @@ decorator correspondiente (ver usuarios/decorators.py).
 """
 
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 from bson import ObjectId
 from django.contrib import messages
@@ -16,6 +17,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone as django_timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -108,7 +110,7 @@ def registro(request):
             if repository.obtener_por_correo(correo):
                 form.add_error('correo', 'Ya existe una cuenta registrada con este correo.')
             else:
-                usuario = repository.crear_usuario(
+                repository.crear_usuario(
                     nombre=form.cleaned_data['nombre'],
                     correo=correo,
                     contrasena_hash=make_password(form.cleaned_data['contrasena']),
@@ -117,9 +119,16 @@ def registro(request):
                     direccion=form.cleaned_data.get('direccion', ''),
                     descripcion=form.cleaned_data.get('descripcion', ''),
                 )
-                _iniciar_sesion(request, usuario)
-                messages.success(request, f'¡Bienvenido, {usuario["nombre"]}! Tu cuenta fue creada.')
-                return redirect(_url_dashboard(rol_mongo))
+                # Ya NO inicia sesion sola (hallazgos del 9 oct, punto 1):
+                # manda a login con el mismo rol y el correo prellenado,
+                # en vez de autenticar directo - el usuario entra con su
+                # propia contraseña una vez, en vez de asumir que "cuenta
+                # creada" implica "ya con sesion".
+                messages.success(request, 'Cuenta creada. Inicia sesión.')
+                destino = '{}?{}'.format(
+                    reverse('usuarios:login'), urlencode({'rol': rol, 'correo': correo})
+                )
+                return redirect(destino)
     else:
         form = FormClass()
 
@@ -170,7 +179,12 @@ def login(request):
                     return redirect(siguiente)
                 return redirect(_url_dashboard(usuario['rol']))
     else:
-        form = LoginForm()
+        # Correo prellenado al llegar desde un registro recien creado
+        # (ver registro(), hallazgos del 9 oct, punto 1) - initial= solo
+        # aplica en un form sin binding (GET), nunca pisa lo que alguien
+        # ya haya escrito tras un POST fallido.
+        correo_inicial = request.GET.get('correo', '')
+        form = LoginForm(initial={'correo': correo_inicial} if correo_inicial else None)
 
     return render(request, 'usuarios/login.html', {
         'form': form,
