@@ -204,8 +204,16 @@ def login(request):
 
 
 def logout(request):
+    """
+    Corrección (12 oct): llevaba a login() (formulario de login, sin
+    rol) - el pedido es que, sin importar el rol con el que se entró,
+    cerrar sesión siempre lleve al selector de rol ("Eres... Paseador /
+    Cliente"), no a un login. `session.flush()` ya limpiaba TODO lo de
+    la sesión (rol recordado, correo prellenado del commit 61f1be4,
+    etc.) - no hacía falta tocar eso, solo el destino del redirect.
+    """
     request.session.flush()
-    return redirect('usuarios:login')
+    return redirect('home')
 
 
 def _paseo_activo_dueno(id_dueno, paseos_dueno=None):

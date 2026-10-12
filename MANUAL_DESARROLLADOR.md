@@ -697,6 +697,15 @@ que cerrar sesión, desde cualquier rol, lleve siempre a "Eres... Paseador
   toda la plantilla con un `TemplateSyntaxError` nada obvio de ubicar. Si
   hace falta explicar una condición de Django en un comentario de JS,
   describila en prosa plana, sin la sintaxis de la etiqueta.
+- **`core/middleware.py::NoCacheParaAutenticadosMiddleware`** (agregado el
+  12 oct): marca `Cache-Control: no-store` en cualquier respuesta servida
+  con sesión activa — sin esto, el botón "Atrás" del navegador después de
+  cerrar sesión podía mostrar una copia cacheada de una pantalla con datos
+  de la cuenta, sin siquiera volver a pedírsela al servidor. Excluye
+  explícitamente las rutas bajo `STATIC_URL` (el CSS de WhiteNoise ya tiene
+  su propio cache-busting por hash en el nombre del archivo — no hace
+  falta, y rompería ese cache para cualquiera que esté logueado). Va al
+  final de `MIDDLEWARE` en `settings.py`, después de los demás.
 
 ## 9. Despliegue
 
