@@ -22,10 +22,22 @@ from usuarios.decorators import requiere_dueno, requiere_paseador
 
 @requiere_dueno
 def lista_incidentes(request):
-    paseos = paseos_repository.listar_por_dueno(request.session['id_usuario'])
+    """
+    Corrección de privacidad (12 oct): antes mostraba TODOS los
+    incidentes de cualquier paseo donde este dueño tuviera una mascota,
+    sin filtrar por cuál mascota afectaba cada uno - en un paseo
+    multi-dueño (hasta 8 mascotas, Ley Kiara), el dueño D1 veía también
+    el incidente de la mascota del dueño D2. Ahora filtra por
+    repository.listar_visibles_para_dueno(): solo lo que afecta a una
+    mascota PROPIA, o lo que no afecta a ninguna en particular
+    ("accidente_paseador").
+    """
+    id_dueno = request.session['id_usuario']
+    paseos = paseos_repository.listar_por_dueno(id_dueno)
     paseos_por_id = {p['_id']: p for p in paseos}
 
-    incidentes = repository.listar_por_paseos(list(paseos_por_id.keys()))
+    ids_mascota_dueno = [m['_id'] for m in mascotas_repository.listar_por_dueno(id_dueno)]
+    incidentes = repository.listar_visibles_para_dueno(list(paseos_por_id.keys()), ids_mascota_dueno)
 
     paseadores_por_id = usuarios_repository.obtener_varios_por_id(
         [p['id_paseador'] for p in paseos]
@@ -116,22 +128,33 @@ def reportar_incidente(request, id_paseo):
 
     paseos_repository.marcar_emergencia(paseo['_id'])
 
-    # Un incidente durante el paseo es relevante para TODOS los dueños que
-    # tienen una mascota en ese mismo paseo (hasta 8, Ley Kiara - ver
-    # CLAUDE.md, "Corrección de alcance 2026-09-25"), afecte o no
-    # especificamente a la suya - mismo criterio que ya usa
-    # lista_incidentes() del lado del dueño, que muestra TODOS los
-    # incidentes de un paseo propio, no solo los de su propia mascota.
-    if paseo.get('id_duenos'):
-        for id_dueno in paseo['id_duenos']:
-            notificaciones_repository.crear(
-                id_usuario=id_dueno,
-                tipo='emergencia',
-                mensaje=(
-                    f'{request.session.get("nombre")} reportó un incidente '
-                    f'({form.cleaned_data["tipo"]}) durante el paseo.'
-                ),
-            )
+    # Corrección de privacidad (12 oct): antes se notificaba a TODOS los
+    # id_duenos del paseo sin importar a cual mascota afectaba el
+    # incidente - en un paseo multi-dueño (hasta 8 mascotas, Ley Kiara),
+    # el dueño de una mascota AJENA recibía la alerta de emergencia de
+    # otra. Ahora: si el incidente afecta a una mascota concreta
+    # (id_mascota_incidente no es None), SOLO se notifica al dueño de
+    # ESA mascota. Solo "accidente_paseador" (id_mascota=None, no
+    # involucra a ningun animal en particular - ver CLAUDE.md) sigue
+    # notificando a TODOS los dueños del paseo, porque los afecta a
+    # todos por igual (el paseador tuvo un accidente llevando a todas
+    # las mascotas juntas).
+    if id_mascota_incidente is None:
+        ids_duenos_a_notificar = paseo.get('id_duenos', [])
+    else:
+        mascota_afectada = mascotas_por_id.get(id_mascota_incidente)
+        ids_duenos_a_notificar = [mascota_afectada['id_dueno']] if mascota_afectada else []
+
+    for id_dueno in ids_duenos_a_notificar:
+        notificaciones_repository.crear(
+            id_usuario=id_dueno,
+            tipo='emergencia',
+            mensaje=(
+                f'{request.session.get("nombre")} reportó un incidente '
+                f'({form.cleaned_data["tipo"]}) durante el paseo.'
+            ),
+        )
+    if ids_duenos_a_notificar:
         repository.marcar_notificado(incidente['_id'])
 
     messages.success(request, 'El incidente quedó registrado. El dueño ya fue notificado.')

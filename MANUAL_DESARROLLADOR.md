@@ -305,6 +305,26 @@ tanto en el perfil público de un paseador (`paseos/views_web.py::
 detalle_paseador`) como en su propio "Mi perfil"
 (`usuarios/views_web.py::perfil_paseador`).
 
+**Privacidad de incidentes en paseos multi-dueño (corrección del 12 oct)**:
+un incidente sobre una mascota concreta (`id_mascota` no nulo) solo
+notifica y se muestra al dueño de ESA mascota, nunca a los demás dueños
+del mismo paseo (hasta 8 mascotas, Ley Kiara). Solo `"accidente_paseador"`
+(`id_mascota` nulo — el único tipo sin mascota asignada, ver
+`incidentes/forms.py::_TIPO_SIN_MASCOTA`) notifica y se muestra a TODOS
+los dueños del paseo, porque los afecta a todos por igual. Antes,
+`reportar_incidente()` notificaba a todos los `id_duenos` sin excepción, y
+`lista_incidentes()`/el banner del mapa (`_texto_incidente()`) mostraban
+el incidente más reciente del paseo entero sin filtrar — ver sección 8
+para el patrón de la corrección.
+
+**Cerrar sesión lleva al selector de rol, no a un login** (corrección del
+12 oct): `usuarios/views_web.py::logout()` sigue limpiando la sesión por
+completo con `request.session.flush()` (rol recordado, correo prellenado
+del punto 3 de la sección 8, todo), pero ahora redirige a `home`
+(`seleccionar_rol`) en vez de a `usuarios:login` — el pedido explícito es
+que cerrar sesión, desde cualquier rol, lleve siempre a "Eres... Paseador
+/ Cliente", nunca al formulario de login de un rol específico.
+
 ## 8. Convenciones del proyecto
 
 - **snake_case en todo**: nombres de campos de Mongo (`id_dueno`,
@@ -390,7 +410,22 @@ detalle_paseador`) como en su propio "Mi perfil"
   muestre a un dueño específico "las mascotas de este paseo" debe filtrar a
   las de ESE dueño (`mascotas.repository.obtener_varias_por_id_y_dueno`),
   nunca la lista completa del paseo — un paseo compartido puede tener
-  mascotas de otros dueños.
+  mascotas de otros dueños. **Mismo criterio para incidentes** (corrección
+  del 12 oct, privacidad crítica — ver sección 7): un incidente con
+  `id_mascota` concreto solo es visible/notificable al dueño de ESA
+  mascota, nunca a los demás `id_duenos` del mismo paseo — ni la
+  notificación (`incidentes.views_web.reportar_incidente`), ni el
+  historial (`incidentes.repository.listar_visibles_para_dueno()`, que
+  reemplaza a `listar_por_paseos()` del lado del dueño — esa función
+  vieja sigue existiendo, pero solo para el paseador, que SÍ ve todos los
+  incidentes de sus propios paseos sin filtrar), ni el banner de
+  emergencia del mapa compartido (`coordenadas.views_web._texto_incidente()`,
+  que ahora recibe `ids_mascota_viewer` — `None` sin restricción para el
+  paseador, la lista de sus propias mascotas para un dueño). El filtro
+  siempre va en el backend (repository o vista), nunca solo ocultando un
+  link en la plantilla — ver el hallazgo de privacidad del 12 oct como
+  el ejemplo de por qué: ocultar el link no evita notificar por error, ni
+  evita que alguien entre por la URL directa.
 - **`requiere_dueno`/`requiere_paseador` ante un rol equivocado**: si hay
   sesión activa pero del rol que no es (p. ej. un paseador entrando a una
   vista `@requiere_dueno`), el decorador NO manda a login — redirige al

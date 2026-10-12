@@ -41,7 +41,7 @@ def _hay_notificaciones_sin_leer(request, id_usuario):
 _TEXTO_INCIDENTE_GENERICO = 'Se reportó un incidente durante este paseo.'
 
 
-def _texto_incidente(id_paseo):
+def _texto_incidente(id_paseo, ids_mascota_viewer=None):
     """
     Texto del banner de emergencia del mapa, o None si no hay que
     mostrarlo. El resultado de esta funcion es la UNICA fuente de verdad
@@ -59,8 +59,24 @@ def _texto_incidente(id_paseo):
     Reusado tanto en la carga inicial de la pagina como en el polling
     (coordenadas_de_paseo), para que el texto se actualice solo si llega
     un incidente nuevo mientras el dueño ya esta mirando el mapa.
+
+    `ids_mascota_viewer`: None (paseador, ve todos los incidentes del
+    paseo sin restriccion) o una lista de ObjectId (dueño - solo SUS
+    propias mascotas). Corrección de privacidad (12 oct): antes mostraba
+    el incidente mas reciente del paseo ENTERO sin importar quien lo
+    miraba - un dueño en un paseo multi-dueño se enteraba, por el
+    nombre en el banner, de un incidente que afectaba a la mascota de
+    OTRO dueño. Ahora, para un dueño, se usa el mismo filtro que
+    incidentes.repository.listar_visibles_para_dueno() (su mascota, o
+    "accidente_paseador" que afecta a todas) - si el incidente mas
+    reciente del paseo no es visible para el, el banner no aparece en
+    absoluto (ni el texto generico): que ocurrió un incidente ajeno no
+    es un dato que deba filtrarse, ni como mensaje vago.
     """
-    incidentes = incidentes_repository.listar_por_paseo(id_paseo)
+    if ids_mascota_viewer is None:
+        incidentes = incidentes_repository.listar_por_paseo(id_paseo)
+    else:
+        incidentes = incidentes_repository.listar_visibles_para_dueno([id_paseo], ids_mascota_viewer)
     if not incidentes:
         return None
     ultimo = incidentes[0]  # ya viene ordenado por fecha_hora desc
@@ -222,8 +238,11 @@ def mapa_paseo(request, id_paseo):
         'hora_fin_iso': _fecha_iso_utc(paseo.get('hora_fin')),
         # None si no hay un incidente real (ver _texto_incidente) - esto
         # es lo unico que decide si el banner se muestra, no
-        # paseo.emergencia por si solo.
-        'texto_emergencia': _texto_incidente(paseo['_id']),
+        # paseo.emergencia por si solo. Con mascotas propias (dueño) o
+        # sin restriccion (paseador, None) - ver _texto_incidente().
+        'texto_emergencia': _texto_incidente(
+            paseo['_id'], [m['_id'] for m in mascotas] if es_dueno else None
+        ),
         # "Calificar" es una accion EXCLUSIVA del dueño (calificaciones:
         # calificar_paseo ya tiene su propio @requiere_dueno - bloqueado
         # en backend de por si) - se oculta en el template con esta
@@ -245,13 +264,20 @@ def coordenadas_de_paseo(request, id_paseo):
 
     id_usuario = request.session['id_usuario']
     es_dueno = request.session.get('rol') == 'dueño'
+    # SOLO las mascotas de ESTE dueño (ver _texto_incidente) - mismo
+    # criterio que mapa_paseo(), necesario aca tambien porque este
+    # endpoint es el que alimenta el banner durante el polling, no solo
+    # la carga inicial.
+    ids_mascota_viewer = (
+        [m['_id'] for m in _mascotas_del_dueno_en_paseo(paseo, id_usuario)] if es_dueno else None
+    )
     puntos = repository.listar_por_paseo(id_paseo)
     return JsonResponse({
         'estado': paseo['estado'],
         'emergencia': paseo.get('emergencia', False),
         # None si no hay un incidente real (ver _texto_incidente) - el JS
         # decide si mostrar el banner segun esto, no segun "emergencia".
-        'texto_emergencia': _texto_incidente(paseo['_id']),
+        'texto_emergencia': _texto_incidente(paseo['_id'], ids_mascota_viewer),
         'puntos': [repository.a_json(p) for p in puntos],
         # Esta pantalla ya hace polling cada 10s mientras el paseo esta
         # "en_vivo" - se aprovecha esa misma peticion para el punto de

@@ -51,11 +51,38 @@ def listar_por_paseo(id_paseo):
 
 
 def listar_por_paseos(ids_paseo):
-    """Incidentes de varios paseos a la vez (para armar un historial)."""
+    """
+    Incidentes de varios paseos a la vez, SIN filtrar por mascota - uso
+    exclusivo del paseador (ve todos los incidentes de sus propios
+    paseos, sin nada que ocultarle). El dueño NUNCA debe usar esta
+    función directamente - ver listar_visibles_para_dueno().
+    """
     ids_validos = [i for i in ids_paseo if isinstance(i, ObjectId)]
     if not ids_validos:
         return []
     return list(get_db().incidentes.find({'id_paseo': {'$in': ids_validos}}).sort('fecha_hora', -1))
+
+
+def listar_visibles_para_dueno(ids_paseo, ids_mascota_dueno):
+    """
+    Incidentes de esos paseos que ESTE dueño puede ver (corrección de
+    privacidad, 12 oct): solo los que afectan a una de SUS mascotas, o
+    los que no afectan a ninguna mascota en particular (tipo
+    "accidente_paseador" - ver CLAUDE.md, id_mascota=None, afecta a
+    TODAS las mascotas del paseo por igual). Nunca el incidente de la
+    mascota de OTRO dueño en un paseo multi-dueño (hasta 8 mascotas,
+    Ley Kiara) - ni el documento, ni el hecho de que existe.
+    """
+    ids_paseo_validos = [i for i in ids_paseo if isinstance(i, ObjectId)]
+    if not ids_paseo_validos:
+        return []
+    return list(get_db().incidentes.find({
+        'id_paseo': {'$in': ids_paseo_validos},
+        '$or': [
+            {'id_mascota': {'$in': list(ids_mascota_dueno)}},
+            {'id_mascota': None},
+        ],
+    }).sort('fecha_hora', -1))
 
 
 def a_json(incidente):
