@@ -20,6 +20,18 @@
       Estás paseando a <strong>{{ paseo_activo.mascota_nombre|default:"tu mascota asignada" }}</strong>
       {% if paseo_activo.dueno_nombre %}(de {{ paseo_activo.dueno_nombre }}){% endif %}.
     </p>
+    {% comment %}
+    Mitigacion de INC-04 (13 oct, ver MANUAL_DESARROLLADOR.md): el envio
+    de GPS solo funciona mientras el paseador esta en ESTA pagina (ver
+    coordenadas:registrar_coordenada) - la correccion de fondo (que
+    siga enviando desde cualquier pantalla) queda para el Incremento 4.
+    Mientras tanto, este aviso visible es la mitigacion de bajo riesgo:
+    solo texto, sin JS nuevo, estilos ya existentes (Bootstrap).
+    {% endcomment %}
+    <div class="alert alert-warning small mb-3" role="alert">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      Mantén esta página abierta durante el paseo: así el dueño puede ver tu ubicación en el mapa.
+    </div>
     <form method="post" action="{% url 'paseos:finalizar_paseo' paseo_activo.id_paseo %}">
       {% csrf_token %}
       <button type="submit" class="btn btn-primary w-100">Finalizar paseo</button>
