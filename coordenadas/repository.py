@@ -38,6 +38,27 @@ def obtener_ultimo_punto(id_paseo):
     )
 
 
+def obtener_ultima_recepcion(id_paseo):
+    """
+    `fecha_recepcion` (hora del SERVIDOR, no la del dispositivo) del
+    punto GPS mas reciente de este paseo, o None si todavia no hay
+    ninguno - usada para descartar duplicados por ventana de tiempo
+    (INC-03, ver coordenadas/views_web.py::registrar_coordenada).
+    Ordena por `fecha_recepcion`, no por `fecha_captura` (que viene del
+    dispositivo del paseador - no es confiable para esta comparacion,
+    ya que dos pestañas podrian reportar relojes de cliente distintos).
+    """
+    try:
+        oid = ObjectId(id_paseo)
+    except (InvalidId, TypeError):
+        return None
+    punto = get_db().coordenadas_detalle.find_one(
+        {'id_paseo': oid},
+        sort=[('fecha_recepcion', -1)],
+    )
+    return punto['fecha_recepcion'] if punto else None
+
+
 def listar_por_paseo(id_paseo):
     try:
         oid = ObjectId(id_paseo)

@@ -8,7 +8,7 @@ Vistas web:
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -300,6 +300,18 @@ def _parsear_fecha(valor):
         return None
 
 
+# INC-03 (13 oct): con varias pestañas del mismo paseador abiertas a la
+# vez, cada una manda su propio punto cada 10s de forma independiente,
+# sin coordinarse entre ellas - el resultado medido es una rafaga de 2+
+# puntos casi simultaneos seguida de un hueco de ~10s, no un punto cada
+# 10s real (ver MANUAL_DESARROLLADOR.md, diagnostico INC-03/INC-04). 8s
+# (no 10, el intervalo nominal) da margen para la variacion normal de
+# red/GPS de una sola pestaña legitima sin arriesgar descartar un punto
+# valido que llegue un poco antes de los 10s por latencia - a la vez,
+# suficientemente cerca de 10 para cortar las rafagas de verdad.
+_SEGUNDOS_MINIMOS_ENTRE_PUNTOS = 8
+
+
 @require_POST
 @requiere_paseador
 def registrar_coordenada(request, id_paseo):
@@ -334,6 +346,21 @@ def registrar_coordenada(request, id_paseo):
         altitud = float(altitud) if altitud is not None else None
     except (TypeError, ValueError):
         altitud = None
+
+    # Descarta en silencio un punto que llega demasiado pronto despues
+    # del ultimo (INC-03, ver _SEGUNDOS_MINIMOS_ENTRE_PUNTOS mas arriba)
+    # - MISMA respuesta que si se hubiera guardado (201, mismo cuerpo),
+    # para que el JS no reintente ni muestre un error: no es una falla,
+    # es trabajo redundante de otra pestaña del mismo paseador.
+    ultima_recepcion = repository.obtener_ultima_recepcion(paseo['_id'])
+    ahora = datetime.now(timezone.utc)
+    if ultima_recepcion:
+        ultima_recepcion_aware = ultima_recepcion.replace(tzinfo=timezone.utc)
+        if (ahora - ultima_recepcion_aware).total_seconds() < _SEGUNDOS_MINIMOS_ENTRE_PUNTOS:
+            return JsonResponse({
+                'total_puntos': paseo.get('total_puntos', 0),
+                'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, paseo['id_paseador']),
+            }, status=201)
 
     repository.registrar_punto(
         id_paseo=paseo['_id'],

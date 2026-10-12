@@ -284,6 +284,33 @@ seguimiento (`coordenadas/views_web.py`: `registrar_coordenada`,
 inicio/fin de paseo con actualización en vivo en el navbar
 (`notificaciones/`, `core/context_processors.py`).
 
+**INC-03/INC-04 (13 oct) — ráfagas de GPS y envío interrumpido**:
+diagnóstico completo en el reporte del 12 oct, resumen aquí porque ya
+hay una corrección aplicada:
+- **INC-03 (corregido)**: con varias pestañas del mismo paseador
+  abiertas a la vez, cada una manda su propio punto GPS cada 10s de
+  forma independiente - sin coordinarse entre sí, el resultado medido
+  era una ráfaga de 2+ puntos casi simultáneos seguida de un hueco de
+  ~10s (mediana de 1.08s en una prueba de 2 pestañas, contra un
+  promedio de 10.00s). `coordenadas/views_web.py::registrar_coordenada`
+  ahora descarta en silencio (misma respuesta 201 que un guardado
+  real - el JS nunca ve un error ni reintenta) un punto si el último
+  del mismo paseo llegó hace menos de
+  `_SEGUNDOS_MINIMOS_ENTRE_PUNTOS = 8` segundos, comparado contra
+  `fecha_recepcion` (hora del SERVIDOR - `coordenadas.repository.
+  obtener_ultima_recepcion()`), nunca `fecha_captura` (viene del
+  dispositivo del paseador, no es confiable para esto).
+- **INC-04 (mitigado, no corregido de fondo - queda para el Incremento
+  4)**: el envío de GPS solo funciona mientras el paseador está en
+  `bienvenida_paseador.html` - navegar a cualquier otra pantalla, o
+  enviar los formularios modales de emergencia/foto (son POST normales,
+  recargan la página), lo detiene por completo hasta volver. La
+  corrección de fondo (que el envío sobreviva a navegar a otra pantalla)
+  requeriría convertir esos formularios a AJAX y/o un `Service Worker` -
+  fuera de alcance para el 13 oct. Mitigación aplicada mientras tanto:
+  aviso visible en `bienvenida_paseador.html` ("Mantén esta página
+  abierta durante el paseo...") - solo texto, sin JS nuevo.
+
 `mapa_paseo`/`coordenadas_de_paseo` son compartidas por los dos roles
 (`@requiere_autenticacion`, no `@requiere_dueno` — corregido en la
 corrección de hallazgos de octubre 2026: antes un paseador no podía ver
