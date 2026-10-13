@@ -7,4 +7,5 @@ app_name = 'notificaciones'
 urlpatterns = [
     path('', views.lista_notificaciones, name='lista'),
     path('estado/', views.estado_no_leidas, name='estado_no_leidas'),
+    path('suscripcion-push/', views.guardar_suscripcion_push, name='guardar_suscripcion_push'),
 ]

@@ -59,7 +59,7 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
   de puntos GPS hacia `coordenadas_detalle` (cada 10-30s).
 - **historico**: el paseador finalizó el paseo; se registra `hora_fin`.
 
-## Esquema de base de datos (MongoDB — 7 colecciones en servidor)
+## Esquema de base de datos (MongoDB — 8 colecciones en servidor)
 
 ### `usuarios`
 ```
@@ -240,6 +240,27 @@ calificación independiente POR dueño, no una sola para todo el paseo.
   fecha: Date
 }
 ```
+
+### `suscripciones_push`
+```
+{
+  _id: ObjectId,
+  id_usuario: ObjectId,    // referencia a usuarios
+  endpoint: String,        // único (índice único) - lo asigna el navegador/servicio de push,
+                            // identifica un dispositivo/instalación concreto, no al usuario
+  keys: {
+    p256dh: String,
+    auth: String
+  },
+  fecha: Date              // última vez que se guardó/actualizó esta suscripción
+}
+```
+Incremento 4, fase 2 (Web Push) - un usuario puede tener varias suscripciones (varios
+dispositivos). Al crearse una notificación en `notificaciones` (cualquiera de los 7
+llamadores existentes), se intenta además un Web Push a cada suscripción de ese
+usuario (`notificaciones/repository.py::_enviar_push`) - si falla, la notificación
+interna ya quedó creada igual. Una suscripción vencida (404/410 del servicio de push)
+se borra sola.
 
 ## Requisitos funcionales (resumen — ver documento completo para el detalle)
 

@@ -551,8 +551,83 @@ else requiere_admin(_db_status)`), mismo momento en que `settings.py`
 ya arma `SECURE_SSL_REDIRECT` según `DEBUG` - este proyecto no cambia
 `DEBUG` en caliente.
 
+**Incremento 4, fase 2 — punto E (notificaciones en el dispositivo, Web
+Push)**: diagnóstico antes de empezar - el proyecto no tenía NADA de
+esto (sin manifest, sin service worker, sin colección de
+suscripciones); las notificaciones solo existían como documentos en
+`notificaciones` + el punto del navbar, visibles solo si el usuario
+tenía la pestaña abierta.
+
+- **Infraestructura**: `core/root_files/manifest.webmanifest` y
+  `core/root_files/sw.js`, servidos desde la RAÍZ del sitio
+  (`/manifest.webmanifest`, `/sw.js` - `core/views.py::manifest()`/
+  `service_worker()`, rutas en `config/urls.py`, NO bajo `/static/`
+  que sirve WhiteNoise) - el alcance (scope) por defecto de un service
+  worker es su propio directorio, así que servirlo bajo `/static/` lo
+  hubiera dejado controlando solo esa carpeta, no el sitio entero.
+  Íconos nuevos `core/static/img/icono-192.png`/`icono-512.png`
+  (cuadrados, fondo naranja de marca `#D9703A`, pata blanca - no existía
+  ningún ícono cuadrado utilizable como ícono de app; `canigo-logo.png`
+  es rectangular y de líneas muy claras, pensado para un fondo oscuro).
+- **Claves VAPID**: par nuevo por despliegue (no por usuario), generado
+  con `python manage.py generar_claves_vapid` (comando nuevo, nunca
+  guarda nada - solo imprime por stdout para copiar a mano). Se
+  almacena la clave privada en su forma "raw" de 32 bytes en base64url
+  (no el PEM completo) - una sola línea, sin saltos, más cómoda para
+  una variable de entorno; `pywebpush`/`py_vapid` la reconocen igual
+  (`Vapid.from_string` prueba RAW antes que DER). Ver
+  `VAPID_PRIVATE_KEY`/`VAPID_PUBLIC_KEY`/`VAPID_CLAIMS_EMAIL` en
+  `.env.example` y `config/settings.py`.
+- **Colección `suscripciones_push`** (ver `CLAUDE.md`): índice único
+  por `endpoint` (`core/management/commands/crear_indices.py`).
+  `notificaciones/repository.py::crear_suscripcion()` hace upsert por
+  `endpoint` (no insert a secas) - el mismo navegador puede volver a
+  suscribirse (reinstaló, cerró/abrió sesión) sin chocar contra el
+  índice único.
+- **Envío automático, un solo punto de entrada**: `notificaciones.
+  repository.crear()` es el ÚNICO lugar que inserta en `notificaciones`
+  en todo el proyecto - confirmado buscando los 7 llamadores
+  (`paseos`, `incidentes`, `calificaciones`, `administracion`,
+  `usuarios`) antes de tocar nada. En vez de agregar el envío de push a
+  cada uno de los 7 por separado (fácil de olvidar en un llamador
+  nuevo el día de mañana), `crear()` ahora también llama a
+  `_enviar_push()` al final - una excepción deliberada a "repository.py
+  = solo acceso a Mongo" del resto del proyecto, aceptada a cambio de
+  que ningún llamador pueda crear una notificación sin intentar
+  también el push. `_enviar_push()` NUNCA lanza (ver sección 8,
+  "Best effort") - si no hay `VAPID_PRIVATE_KEY` configurada, si el
+  usuario no tiene suscripciones, o si `pywebpush` falla, la
+  notificación INTERNA ya se creó de todas formas.
+- **Sin datos sensibles en el payload**: el push manda exactamente el
+  mismo `mensaje` que ya se guarda en `notificaciones.mensaje` - por
+  diseño del esquema (ver CLAUDE.md) ese campo nunca lleva direcciones
+  ni teléfonos, así que no hizo falta un mensaje "genérico" aparte.
+- **Suscripciones vencidas**: un 404/410 del servicio de push borra la
+  suscripción (`eliminar_suscripcion_por_endpoint`); cualquier otro
+  error (red, 5xx) se registra en el log pero NO borra nada - es
+  transitorio, no significa que la suscripción ya no sirva.
+- **Verificado con un Chrome real (headless) contra el servicio de
+  push real de Google (FCM)**: suscripción con la clave VAPID pública
+  del proyecto aceptada por Chrome, guardada en el backend, y
+  `pywebpush` entregó el push sin excepción - confirma que el formato
+  de las claves y el payload son compatibles de punta a punta. La
+  confirmación VISUAL (que el dispositivo MUESTRE la notificación) sólo
+  se puede hacer con un dispositivo real - ver la sección de
+  verificación del reporte.
+
 ## 8. Convenciones del proyecto
 
+- **"Best effort" para una integración externa opcional, cuando ya hay
+  un resultado principal que no depende de ella**: `core/geocoding.py`
+  (dirección aproximada de un incidente) y `notificaciones/
+  repository.py::_enviar_push()` (Web Push) siguen el mismo patrón -
+  intentan la llamada externa (Nominatim, el servicio de push), nunca
+  lanzan si falla, y el dato/acción PRINCIPAL (el incidente, la
+  notificación interna) ya quedó guardado de todas formas. Si se agrega
+  una integración externa nueva en esta misma situación (el resultado
+  principal no depende de ella), seguir este mismo criterio - nunca
+  dejar que un servicio de terceros caído rompa una operación que de
+  otra forma habría funcionado.
 - **snake_case en todo**: nombres de campos de Mongo (`id_dueno`,
   `hora_inicio`, etc.) y de variables/funciones en Python — no se traducen a
   camelCase.

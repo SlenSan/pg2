@@ -128,6 +128,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'core.context_processors.notificaciones',
+                'core.context_processors.push',
                 'core.context_processors.es_admin',
                 'core.context_processors.id_paseo_en_vivo_del_paseador',
             ],
@@ -183,6 +184,19 @@ NOMINATIM_USER_AGENT = os.environ.get(
     'NOMINATIM_USER_AGENT',
     'Canigo/1.0 (proyecto de grado UDI - sin contacto configurado)',
 )
+
+# Web Push (notificaciones en el dispositivo - Incremento 4, fase 2,
+# punto E). Par de claves VAPID generado con
+# `python manage.py generar_claves_vapid` - identifica este servidor
+# ante los servicios de push (Chrome/FCM, Apple), no cambia por
+# usuario. VAPID_CLAIMS_EMAIL es el contacto que exige la especificacion
+# VAPID (RFC 8292) - mismo criterio que NOMINATIM_USER_AGENT. Sin
+# configurar, el envio de push queda deshabilitado en silencio (ver
+# notificaciones/repository.py::_enviar_push) - la notificacion
+# INTERNA (la que ya existia) se sigue creando igual.
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', '')
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', '')
+VAPID_CLAIMS_EMAIL = os.environ.get('VAPID_CLAIMS_EMAIL', '')
 
 # Panel de administracion de Canigo (RF14 - verificacion de paseadores):
 # NO es un rol nuevo en `usuarios` (ver CLAUDE.md, solo "dueño"/"paseador").

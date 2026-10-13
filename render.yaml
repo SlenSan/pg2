@@ -27,3 +27,9 @@ services:
         sync: false
       - key: NOMINATIM_USER_AGENT
         sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_CLAIMS_EMAIL
+        sync: false

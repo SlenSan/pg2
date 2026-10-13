@@ -29,6 +29,20 @@ def notificaciones(request):
     }
 
 
+def push(request):
+    """
+    Disponibiliza "vapid_public_key" en CUALQUIER render (Incremento 4,
+    fase 2, punto E) - lo necesita el JS de activación de Web Push
+    (notificaciones/templates/notificaciones/_activar_push.html,
+    incluido en los dos dashboards) para pushManager.subscribe(). Sin
+    costo de consulta (es una constante de settings, no de Mongo) - se
+    expone global en vez de pasarlo a mano en cada vista que renderiza
+    ese parcial. Cadena vacía si VAPID_PUBLIC_KEY no está configurada -
+    el JS lo trata como "Web Push no disponible en este servidor".
+    """
+    return {'vapid_public_key': settings.VAPID_PUBLIC_KEY}
+
+
 def es_admin(request):
     """
     Disponibiliza "es_admin" en cualquier render, para que el navbar

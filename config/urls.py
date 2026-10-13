@@ -17,10 +17,16 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from core import views as core_views
 from usuarios import views_web as usuarios_views_web
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Servidos desde la RAIZ a proposito (Incremento 4, fase 2, punto E
+    # - Web Push) - ver core/views.py::manifest()/service_worker() para
+    # el motivo (alcance del service worker, start_url del manifest).
+    path('manifest.webmanifest', core_views.manifest, name='manifest'),
+    path('sw.js', core_views.service_worker, name='service_worker'),
     path('', usuarios_views_web.seleccionar_rol, name='home'),
     path('cuentas/', include('usuarios.urls_web')),
     path('mascotas/', include('mascotas.urls')),

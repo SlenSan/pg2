@@ -1,8 +1,10 @@
+import json
 from datetime import datetime, timezone
 
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
+from django.views.decorators.http import require_POST
 
 from notificaciones import repository
 from paseos import repository as paseos_repository
@@ -106,3 +108,38 @@ def estado_no_leidas(request):
     ultima_vista_str = request.session.get('notificaciones_vistas_hasta')
     ultima_vista = datetime.fromisoformat(ultima_vista_str) if ultima_vista_str else None
     return JsonResponse({'hay_notificaciones_sin_leer': repository.hay_no_leidas(id_usuario, ultima_vista)})
+
+
+@require_POST
+@requiere_autenticacion
+def guardar_suscripcion_push(request):
+    """
+    Recibe la suscripción que devuelve `pushManager.subscribe()` en el
+    navegador (Incremento 4, fase 2, punto E) y la guarda contra el
+    usuario en sesión. Validación en el backend, no solo confiar en que
+    el JS mande la forma correcta (regla del punto): `endpoint` debe ser
+    un string no vacío, `keys` debe traer `p256dh` y `auth` como
+    strings no vacíos - cualquier otra forma se rechaza con 400, nunca
+    se guarda a medias.
+    """
+    try:
+        data = json.loads(request.body or b'{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido.'}, status=400)
+
+    endpoint = data.get('endpoint')
+    keys = data.get('keys') or {}
+    p256dh = keys.get('p256dh') if isinstance(keys, dict) else None
+    auth = keys.get('auth') if isinstance(keys, dict) else None
+
+    if not isinstance(endpoint, str) or not endpoint.strip():
+        return JsonResponse({'error': 'endpoint es requerido.'}, status=400)
+    if not isinstance(p256dh, str) or not p256dh.strip() or not isinstance(auth, str) or not auth.strip():
+        return JsonResponse({'error': 'keys.p256dh y keys.auth son requeridos.'}, status=400)
+
+    repository.crear_suscripcion(
+        id_usuario=request.session['id_usuario'],
+        endpoint=endpoint.strip(),
+        keys={'p256dh': p256dh.strip(), 'auth': auth.strip()},
+    )
+    return JsonResponse({'ok': True}, status=201)

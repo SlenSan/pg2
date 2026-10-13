@@ -65,3 +65,8 @@ class Command(BaseCommand):
             'notificaciones: indice id_usuario+fecha OK (el punto del navbar la consulta en casi '
             'toda pagina autenticada - ver core/context_processors.py)'
         ))
+
+        db.suscripciones_push.create_index('endpoint', unique=True)
+        self.stdout.write(self.style.SUCCESS(
+            'suscripciones_push: indice unico endpoint OK (Incremento 4, fase 2 - Web Push)'
+        ))

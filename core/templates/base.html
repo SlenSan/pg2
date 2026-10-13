@@ -16,6 +16,20 @@
     rel="stylesheet"
   >
   <link href="{% static 'css/canigo-theme.css' %}" rel="stylesheet">
+  {% comment %}
+  PWA instalable (Incremento 4, fase 2, punto E - Web Push): el manifest
+  habilita "Agregar a inicio" en Android/escritorio; en iOS Safari
+  IGNORA el manifest para estos metadatos y exige las etiquetas
+  apple-* de abajo en su lugar (sin ellas, "Agregar a inicio" en iPhone
+  abre Safari normal, no una app standalone - y sin standalone,
+  pushManager no existe ahi, ver MANUAL_DESARROLLADOR.md).
+  {% endcomment %}
+  <link rel="manifest" href="{% url 'manifest' %}">
+  <meta name="theme-color" content="#D9703A">
+  <link rel="apple-touch-icon" href="{% static 'img/icono-192.png' %}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Canigo">
   {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-light">
@@ -125,6 +139,21 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  {% comment %}
+  Registro del service worker (Incremento 4, fase 2, punto E) - en
+  CUALQUIER pagina, con o sin sesión: el permiso/suscripción de push se
+  piden aparte (ver notificaciones/_activar_push.html, con el gesto
+  explícito del usuario), pero el worker en sí puede registrarse apenas
+  carga la página. `if ('serviceWorker' in navigator)` - no falla en un
+  navegador viejo o en iOS < 16.4 (sin soporte), simplemente no hace
+  nada ahí.
+  {% endcomment %}
+  <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register("{% url 'service_worker' %}");
+  }
+  </script>
 
   {% comment %}
   Poller GENERICO del punto de notificaciones del navbar (ver
