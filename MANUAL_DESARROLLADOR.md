@@ -1110,6 +1110,39 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   escribiendo el correo en minúscula la encuentra y entra
   correctamente.
 
+- **Punto 4 — timeout de la subida a Cloudinary (RNF3)**: diagnóstico -
+  `core/media.py::subir_imagen()`/`subir_certificado()` llamaban a
+  `cloudinary.uploader.upload()` sin pasarle `timeout`, igual que el
+  caso de Web Push de la revisión anterior (`_enviar_push()`, ya
+  corregido) - dependían del default interno de la librería (urllib3),
+  sin ningún límite propio del proyecto. Se agregó
+  `_TIEMPO_MAXIMO_SUBIDA_SEGUNDOS = 15` (una foto de celular puede pesar
+  varios MB, más que la carga de una petición normal) pasado como
+  `timeout=` en las dos llamadas a `cloudinary.uploader.upload()`.
+
+  No hizo falta agregar ningún `except` nuevo: confirmado leyendo
+  `cloudinary/uploader.py` (instalado en el proyecto) que
+  `call_api()` ya envuelve `urllib3.exceptions.HTTPError` (del que
+  `MaxRetryError`/`ReadTimeoutError`/`ConnectTimeoutError` SON
+  subclases, confirmado con `issubclass()`) en su propio
+  `cloudinary.exceptions.Error` - el `except CloudinaryError` que ya
+  existía en las dos funciones atrapa un timeout exactamente igual que
+  cualquier otro fallo de red, y lo convierte en `ErrorSubidaImagen`/
+  `ErrorArchivoInvalido` con un mensaje claro, sin dejar nada a medias
+  (ningún archivo llega a subirse si el timeout corta la conexión antes
+  de que la subida termine). La atomicidad de `a7dd1fb` (si sube un
+  certificado y falla el otro, el primero se borra de Cloudinary y la
+  mascota no se crea) sigue aplicando sin cambios - está hecha por tipo
+  de excepción, no le importa SI el fallo fue un timeout u otra cosa.
+
+  **Verificado ejecutando** (contra el Cloudinary REAL del proyecto, sin
+  simular nada): con `_TIEMPO_MAXIMO_SUBIDA_SEGUNDOS` forzado a `0.001`
+  (1 milisegundo, imposible de cumplir en una red real), `subir_imagen()`
+  lanzó `ErrorSubidaImagen` en 0.47s con el mensaje esperado
+  (`MaxRetryError` envuelto); con el valor normal de 15s, una subida real
+  de prueba terminó en 1.34s sin problema (y se borró de Cloudinary al
+  terminar la prueba).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

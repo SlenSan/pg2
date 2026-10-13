@@ -108,6 +108,21 @@ def _asegurar_configuracion():
 
 _TAMANO_MAXIMO_IMAGEN_MB = 5
 
+# Cierre de auditoría, punto 4 (RNF3) - antes ninguna de las dos subidas
+# de abajo tenía un timeout explícito: dependían del default interno de
+# la libreria (urllib3 vía cloudinary.http_client, que en la práctica
+# puede tardar mucho más que los otros dos puntos de esta misma
+# auditoría - Nominatim tiene 5s, el push 4s). Una foto de celular puede
+# pesar varios MB; 15s da margen real para eso sin dejar una subida
+# colgada indefinidamente. cloudinary.uploader ya envuelve cualquier
+# timeout de urllib3 (ReadTimeoutError/ConnectTimeoutError/MaxRetryError
+# - las tres son subclases de urllib3.exceptions.HTTPError, confirmado
+# leyendo cloudinary/uploader.py) en su propio CloudinaryError - el
+# "except CloudinaryError" que ya existía en las dos funciones de abajo
+# atrapa un timeout exactamente igual que cualquier otro fallo de red,
+# sin necesitar un except nuevo.
+_TIEMPO_MAXIMO_SUBIDA_SEGUNDOS = 15
+
 
 def subir_imagen(archivo, carpeta):
     """
@@ -140,7 +155,9 @@ def subir_imagen(archivo, carpeta):
 
     _asegurar_configuracion()
     try:
-        resultado = cloudinary.uploader.upload(archivo, folder=f'canigo/{carpeta}')
+        resultado = cloudinary.uploader.upload(
+            archivo, folder=f'canigo/{carpeta}', timeout=_TIEMPO_MAXIMO_SUBIDA_SEGUNDOS,
+        )
     except CloudinaryError as exc:
         raise ErrorSubidaImagen(f'No se pudo subir la imagen a Cloudinary: {exc}') from exc
     return resultado['secure_url']
@@ -218,7 +235,10 @@ def subir_certificado(archivo, carpeta):
 
     _asegurar_configuracion()
     try:
-        resultado = cloudinary.uploader.upload(archivo, folder=f'canigo/{carpeta}', resource_type='auto')
+        resultado = cloudinary.uploader.upload(
+            archivo, folder=f'canigo/{carpeta}', resource_type='auto',
+            timeout=_TIEMPO_MAXIMO_SUBIDA_SEGUNDOS,
+        )
     except CloudinaryError as exc:
         raise ErrorArchivoInvalido(f'No se pudo subir el archivo a Cloudinary: {exc}') from exc
     return {
