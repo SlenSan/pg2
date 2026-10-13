@@ -214,8 +214,20 @@ solo ocultarla con CSS, para no exponerle un link que lo rebotaria.
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(mapa);
 
+  // ---- ruta por puntos (Incremento 4, punto D2) ----
+  // "sin redibujar el mapa entero" en cada vuelta del polling: en vez de
+  // volver a mandarle a Leaflet la lista COMPLETA de puntos cada 10s
+  // (lo que antes hacia linea.setLatLngs(puntos) con el array entero),
+  // se recuerda cuantos puntos YA se dibujaron (puntosDibujados) y en
+  // cada vuelta solo se agregan los nuevos - la linea y los puntos
+  // viejos no se tocan. Sirve igual para el historial (sin polling: se
+  // dibuja todo de una sola vez, mismo codigo, puntosDibujados arranca
+  // en 0 igual).
   var linea = L.polyline([], { color: '#D9703A' }).addTo(mapa);
-  var marcador = null;
+  var capaPuntos = L.layerGroup().addTo(mapa);
+  var marcadorInicio = null;
+  var marcadorActual = null;
+  var puntosDibujados = 0;
   var vistaAjustada = false;
   var intervalo = null;
 
@@ -264,17 +276,52 @@ solo ocultarla con CSS, para no exponerle un link que lo rebotaria.
           el.classList.toggle('d-none', !data.hay_notificaciones_sin_leer);
         });
 
-        var puntos = data.puntos.map(function (p) { return [p.latitud, p.longitud]; });
+        var puntos = data.puntos;
         document.getElementById('sin-puntos').hidden = puntos.length > 0;
 
-        if (puntos.length > 0) {
-          linea.setLatLngs(puntos);
-          var ultima = puntos[puntos.length - 1];
-          if (!marcador) {
-            marcador = L.marker(ultima).addTo(mapa);
-          } else {
-            marcador.setLatLng(ultima);
+        // Los puntos de mala precision ya ni llegan aca - se descartan
+        // en el backend antes de guardarse (ver
+        // _PRECISION_MAXIMA_ACEPTABLE_METROS en coordenadas/views_web.py).
+        if (puntos.length > puntosDibujados) {
+          var nuevos = puntos.slice(puntosDibujados);
+          nuevos.forEach(function (p) {
+            var latlng = [p.latitud, p.longitud];
+            linea.addLatLng(latlng);
+            // Punto pequeño por cada lectura GPS (D2) - radio chico para
+            // no tapar la linea ni el mapa de fondo con cientos de ellos
+            // en un paseo largo.
+            L.circleMarker(latlng, {
+              radius: 3,
+              color: '#D9703A',
+              fillColor: '#D9703A',
+              fillOpacity: 1,
+              weight: 1,
+            }).addTo(capaPuntos);
+          });
+
+          if (!marcadorInicio) {
+            // Marcador distinto para el PRIMER punto del paseo - se crea
+            // una sola vez, nunca se mueve.
+            var primera = [puntos[0].latitud, puntos[0].longitud];
+            marcadorInicio = L.circleMarker(primera, {
+              radius: 8,
+              color: '#2E7D32',
+              fillColor: '#2E7D32',
+              fillOpacity: 1,
+              weight: 2,
+            }).addTo(mapa).bindTooltip('Inicio del paseo');
           }
+
+          var ultima = [puntos[puntos.length - 1].latitud, puntos[puntos.length - 1].longitud];
+          var etiquetaActual = data.estado === 'historico' ? 'Fin del paseo' : 'Posición actual';
+          if (!marcadorActual) {
+            marcadorActual = L.marker(ultima).addTo(mapa).bindTooltip(etiquetaActual);
+          } else {
+            marcadorActual.setLatLng(ultima).setTooltipContent(etiquetaActual);
+          }
+
+          puntosDibujados = puntos.length;
+
           if (!vistaAjustada) {
             mapa.fitBounds(linea.getBounds(), { maxZoom: 16 });
             vistaAjustada = true;

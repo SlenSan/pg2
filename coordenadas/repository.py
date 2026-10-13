@@ -11,13 +11,18 @@ from core.mongo import get_db
 _RADIO_TIERRA_KM = 6371.0
 
 
-def registrar_punto(*, id_paseo, latitud, longitud, altitud=None, fecha_captura=None):
+def registrar_punto(*, id_paseo, latitud, longitud, altitud=None, precision=None, fecha_captura=None):
     ahora = datetime.now(timezone.utc)
     punto = {
         'id_paseo': id_paseo if isinstance(id_paseo, ObjectId) else ObjectId(id_paseo),
         'latitud': latitud,
         'longitud': longitud,
         'altitud': altitud,
+        # Radio de incertidumbre en metros (position.coords.accuracy del
+        # navegador) - Incremento 4, punto D1. None para un documento
+        # viejo o un navegador que no lo reporte (.get(...) en cualquier
+        # lectura, nunca asumido presente).
+        'precision': precision,
         'fecha_captura': fecha_captura or ahora,
         'fecha_recepcion': ahora,
     }
@@ -109,5 +114,6 @@ def a_json(punto):
         'latitud': punto['latitud'],
         'longitud': punto['longitud'],
         'altitud': punto.get('altitud'),
+        'precision': punto.get('precision'),
         'fecha_captura': fecha_captura.isoformat() if isinstance(fecha_captura, datetime) else fecha_captura,
     }

@@ -129,6 +129,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'core.context_processors.notificaciones',
                 'core.context_processors.es_admin',
+                'core.context_processors.id_paseo_en_vivo_del_paseador',
             ],
         },
     },

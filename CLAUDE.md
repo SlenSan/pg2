@@ -167,6 +167,11 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
   latitud: Number,
   longitud: Number,
   altitud: Number,
+  precision: Number,       // radio de incertidumbre en metros (position.coords.accuracy
+                            // del navegador) - null en documentos de antes del Incremento 4
+                            // o si el navegador no lo reportó. Un punto con precision > 50m
+                            // se descarta ANTES de llegar aquí (ver coordenadas/views_web.py,
+                            // _PRECISION_MAXIMA_ACEPTABLE_METROS) - nunca queda guardado.
   fecha_captura: Date,     // capturado en el dispositivo
   fecha_recepcion: Date    // recibido por el servidor
 }

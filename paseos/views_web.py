@@ -471,32 +471,32 @@ def subir_foto(request, id_paseo, momento):
     bienvenida_paseador.html) en vez de adivinar el momento
     automaticamente, para que el paseador siempre sepa exactamente que
     esta subiendo.
+
+    Responde SIEMPRE en JSON (Incremento 4, punto D1): antes redirigia a
+    "usuarios:bienvenida_paseador" - una recarga completa de pagina
+    cortaria el emisor global de GPS (core/templates/base.html) a mitad
+    de un POST. El modal "Subir foto" ahora manda por fetch+FormData,
+    unico llamador real de esta vista.
     """
     if momento not in repository.MOMENTOS_FOTO_VALIDOS:
-        messages.error(request, 'Momento de foto inválido.')
-        return redirect('usuarios:bienvenida_paseador')
+        return JsonResponse({'error': 'Momento de foto inválido.'}, status=400)
 
     form = SubirFotoPaseoForm(request.POST, request.FILES)
     if not form.is_valid():
-        messages.error(request, 'No se pudo subir la foto: selecciona un archivo de imagen válido.')
-        return redirect('usuarios:bienvenida_paseador')
+        return JsonResponse({'error': 'No se pudo subir la foto: selecciona un archivo de imagen válido.'}, status=400)
 
     try:
         url = subir_imagen(form.cleaned_data['foto'], carpeta='paseos')
     except ErrorSubidaImagen as exc:
-        messages.error(request, f'No se pudo subir la foto: {exc}')
-        return redirect('usuarios:bienvenida_paseador')
+        return JsonResponse({'error': f'No se pudo subir la foto: {exc}'}, status=502)
 
     id_paseador = ObjectId(request.session['id_usuario'])
     paseo = repository.agregar_foto(id_paseo=id_paseo, id_paseador=id_paseador, momento=momento, url=url)
     if not paseo:
-        messages.error(
-            request,
-            'No se pudo registrar la foto: el paseo ya no está activo o ya subiste una foto de ese momento.',
-        )
-    else:
-        messages.success(request, f'Foto de {momento} guardada correctamente.')
-    return redirect('usuarios:bienvenida_paseador')
+        return JsonResponse({
+            'error': 'No se pudo registrar la foto: el paseo ya no está activo o ya subiste una foto de ese momento.',
+        }, status=409)
+    return JsonResponse({'ok': True, 'mensaje': f'Foto de {momento} guardada correctamente.'}, status=200)
 
 
 @requiere_paseador

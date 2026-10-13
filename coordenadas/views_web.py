@@ -311,6 +311,16 @@ def _parsear_fecha(valor):
 # suficientemente cerca de 10 para cortar las rafagas de verdad.
 _SEGUNDOS_MINIMOS_ENTRE_PUNTOS = 8
 
+# Incremento 4, punto D2: "precision" es el radio de incertidumbre en
+# metros que reporta el navegador (position.coords.accuracy) - un valor
+# ALTO significa una lectura MALA (por ejemplo, GPS sin buena señal de
+# satelite, estimada solo por torres de celular/wifi), no una distancia
+# recorrida. 50m descarta esas lecturas claramente malas (un punto con
+# ese radio de error puede caer en la cuadra equivocada) sin descartar
+# una lectura normal de celular al aire libre (tipicamente 5-20m) ni
+# siquiera una algo degradada (p.ej. entre edificios altos, ~30-40m).
+_PRECISION_MAXIMA_ACEPTABLE_METROS = 50
+
 
 @require_POST
 @requiere_paseador
@@ -347,6 +357,23 @@ def registrar_coordenada(request, id_paseo):
     except (TypeError, ValueError):
         altitud = None
 
+    precision = data.get('precision')
+    try:
+        precision = float(precision) if precision is not None else None
+    except (TypeError, ValueError):
+        precision = None
+
+    # Descarta en silencio una lectura de mala precision (D2, ver
+    # _PRECISION_MAXIMA_ACEPTABLE_METROS mas arriba) - MISMA respuesta
+    # que si se hubiera guardado, mismo criterio que el descarte de
+    # INC-03 de abajo: no es un error del paseador, es una lectura mala
+    # que no vale la pena guardar ni dibujar en el mapa.
+    if precision is not None and precision > _PRECISION_MAXIMA_ACEPTABLE_METROS:
+        return JsonResponse({
+            'total_puntos': paseo.get('total_puntos', 0),
+            'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, paseo['id_paseador']),
+        }, status=201)
+
     # Descarta en silencio un punto que llega demasiado pronto despues
     # del ultimo (INC-03, ver _SEGUNDOS_MINIMOS_ENTRE_PUNTOS mas arriba)
     # - MISMA respuesta que si se hubiera guardado (201, mismo cuerpo),
@@ -367,6 +394,7 @@ def registrar_coordenada(request, id_paseo):
         latitud=latitud,
         longitud=longitud,
         altitud=altitud,
+        precision=precision,
         fecha_captura=_parsear_fecha(data.get('fecha_captura')),
     )
     total_puntos = paseos_repository.incrementar_total_puntos(paseo['_id'])

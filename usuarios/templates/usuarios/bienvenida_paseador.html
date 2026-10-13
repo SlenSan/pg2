@@ -21,17 +21,11 @@
       {% if paseo_activo.dueno_nombre %}(de {{ paseo_activo.dueno_nombre }}){% endif %}.
     </p>
     {% comment %}
-    Mitigacion de INC-04 (13 oct, ver MANUAL_DESARROLLADOR.md): el envio
-    de GPS solo funciona mientras el paseador esta en ESTA pagina (ver
-    coordenadas:registrar_coordenada) - la correccion de fondo (que
-    siga enviando desde cualquier pantalla) queda para el Incremento 4.
-    Mientras tanto, este aviso visible es la mitigacion de bajo riesgo:
-    solo texto, sin JS nuevo, estilos ya existentes (Bootstrap).
+    Donde el JS de los modales de emergencia/foto inserta su confirmacion
+    de exito (Incremento 4, punto D1) - sin esto, mostrar "listo" sin
+    recargar la pagina no tendria donde aparecer.
     {% endcomment %}
-    <div class="alert alert-warning small mb-3" role="alert">
-      <i class="bi bi-exclamation-triangle-fill"></i>
-      Mantén esta página abierta durante el paseo: así el dueño puede ver tu ubicación en el mapa.
-    </div>
+    <div id="avisos-paseo"></div>
     <form method="post" action="{% url 'paseos:finalizar_paseo' paseo_activo.id_paseo %}">
       {% csrf_token %}
       <button type="submit" class="btn btn-primary w-100">Finalizar paseo</button>
@@ -59,7 +53,7 @@
     {% endif %}
 
     {% if paseo_activo.fotos_pendientes %}
-    <div class="d-flex flex-wrap gap-2 mb-3">
+    <div class="d-flex flex-wrap gap-2 mb-3" id="fotos-pendientes-contenedor">
       {% for momento in paseo_activo.fotos_pendientes %}
       <button
         type="button"
@@ -268,107 +262,152 @@ servidor - ver estado_bienvenida_paseador() y _horarios_paseador.html.
 
 {% block extra_js %}
 {% if paseo_activo.estado == 'en_vivo' %}
+{% comment %}
+El emisor de GPS YA NO vive aca - es global (ver core/templates/base.html,
+gated por "id_paseo_en_vivo_del_paseador") desde Incremento 4 punto D1,
+justamente para que NO se corte al abrir estos mismos modales (INC-04).
+"estado-gps" (arriba, en el bloque content) lo sigue actualizando ese
+script global - sigue existiendo en este DOM, solo que ya no lo controla
+un script de esta plantilla.
+{% endcomment %}
 <script>
 (function () {
   function leerCookie(nombre) {
     var fila = document.cookie.split('; ').find(function (c) { return c.startsWith(nombre + '='); });
     return fila ? decodeURIComponent(fila.split('=')[1]) : null;
   }
-
   var csrftoken = leerCookie('csrftoken');
-  var urlCoordenadas = "{% url 'coordenadas:registrar_coordenada' paseo_activo.id_paseo %}";
-  var estadoEl = document.getElementById('estado-gps');
 
-  function enviarPosicion(position) {
-    fetch(urlCoordenadas, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrftoken,
-      },
-      body: JSON.stringify({
-        latitud: position.coords.latitude,
-        longitud: position.coords.longitude,
-        altitud: position.coords.altitude,
-      }),
-    }).then(function (resp) {
-      estadoEl.textContent = resp.ok
-        ? 'Compartiendo tu ubicación...'
-        : 'No se pudo enviar tu ubicación. Reintentando...';
-      // Mientras el paseador esta caminando no corre el polling de
-      // "nueva solicitud" (no hay nada que mostrar en esa seccion - ver
-      // estado_bienvenida_paseador()), pero el punto de notificaciones
-      // del navbar (ver base.html) igual necesita actualizarse solo. En
-      // vez de sumar un setInterval aparte solo para eso, se aprovecha
-      // esta misma peticion de GPS que ya se manda cada 10s.
-      if (resp.ok) {
-        return resp.json();
-      }
-    }).then(function (data) {
-      if (data && typeof data.hay_notificaciones_sin_leer === 'boolean') {
-        document.querySelectorAll('.campana-punto').forEach(function (el) {
-          el.classList.toggle('d-none', !data.hay_notificaciones_sin_leer);
-        });
-      }
-    }).catch(function () {
-      estadoEl.textContent = 'No se pudo enviar tu ubicación. Reintentando...';
-    });
+  // Confirmacion de exito SIN recargar la pagina (Incremento 4, punto
+  // D1): una recarga completa reiniciaria el emisor global de GPS - ver
+  // core/templates/base.html.
+  function mostrarAviso(texto) {
+    var contenedor = document.getElementById('avisos-paseo');
+    var aviso = document.createElement('div');
+    aviso.className = 'alert alert-success small';
+    aviso.textContent = texto;
+    contenedor.appendChild(aviso);
+    setTimeout(function () { aviso.remove(); }, 6000);
   }
 
-  function capturarYEnviar() {
-    if (!navigator.geolocation) {
-      estadoEl.textContent = 'Tu navegador no soporta geolocalización.';
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(enviarPosicion, function () {
-      estadoEl.textContent = 'No se pudo acceder a tu ubicación. Revisa los permisos del navegador.';
-    });
-  }
-
-  capturarYEnviar();
-  setInterval(capturarYEnviar, 10000);
-})();
-</script>
-
-<script>
-(function () {
   var modalEl = document.getElementById('modalEmergencia');
-  if (!modalEl) return;
+  if (modalEl) {
+    var pasoConfirmar = document.getElementById('emergenciaConfirmar');
+    var pasoFormulario = document.getElementById('emergenciaFormulario');
+    var formEmergencia = pasoFormulario;
 
-  var pasoConfirmar = document.getElementById('emergenciaConfirmar');
-  var pasoFormulario = document.getElementById('emergenciaFormulario');
+    document.getElementById('btnConfirmarEmergencia').addEventListener('click', function () {
+      pasoConfirmar.hidden = true;
+      pasoFormulario.hidden = false;
+    });
 
-  document.getElementById('btnConfirmarEmergencia').addEventListener('click', function () {
-    pasoConfirmar.hidden = true;
-    pasoFormulario.hidden = false;
-  });
+    // Si cancelan y vuelven a abrir el modal, que arranque otra vez en el
+    // paso de confirmacion (no directo en el formulario).
+    modalEl.addEventListener('hidden.bs.modal', function () {
+      pasoConfirmar.hidden = false;
+      pasoFormulario.hidden = true;
+      formEmergencia.querySelectorAll('.text-danger-envio').forEach(function (el) { el.remove(); });
+    });
 
-  // Si cancelan y vuelven a abrir el modal, que arranque otra vez en el
-  // paso de confirmacion (no directo en el formulario).
-  modalEl.addEventListener('hidden.bs.modal', function () {
-    pasoConfirmar.hidden = false;
-    pasoFormulario.hidden = true;
-  });
-})();
-</script>
+    // fetch+FormData (Incremento 4, punto D1): un POST tradicional de
+    // este formulario recargaria la pagina entera, cortando el emisor
+    // global de GPS a mitad de envio - ver reportar_incidente() en
+    // incidentes/views_web.py, que ahora responde JSON en vez de
+    // redirigir. El CSRF va en un header (no en el body, que aqui es
+    // FormData binario con la foto adjunta).
+    formEmergencia.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var boton = formEmergencia.querySelector('button[type="submit"]');
+      boton.disabled = true;
+      fetch(formEmergencia.action, {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrftoken},
+        body: new FormData(formEmergencia),
+      }).then(function (resp) {
+        return resp.json().then(function (data) { return {ok: resp.ok, data: data}; });
+      }).then(function (resultado) {
+        boton.disabled = false;
+        if (resultado.ok) {
+          var modal = bootstrap.Modal.getInstance(modalEl);
+          if (modal) modal.hide();
+          formEmergencia.reset();
+          mostrarAviso(resultado.data.mensaje || 'El incidente quedó registrado.');
+        } else {
+          var aviso = document.createElement('div');
+          aviso.className = 'text-danger small mt-2 text-danger-envio';
+          aviso.textContent = resultado.data.error || 'No se pudo registrar el incidente.';
+          formEmergencia.querySelector('.modal-body').appendChild(aviso);
+        }
+      }).catch(function () {
+        boton.disabled = false;
+        var aviso = document.createElement('div');
+        aviso.className = 'text-danger small mt-2 text-danger-envio';
+        aviso.textContent = 'No se pudo enviar el reporte. Revisa tu conexión e intenta de nuevo.';
+        formEmergencia.querySelector('.modal-body').appendChild(aviso);
+      });
+    });
+  }
 
-<script>
-(function () {
   var modalFoto = document.getElementById('modalFoto');
-  if (!modalFoto) return;
+  if (modalFoto) {
+    // La URL trae un placeholder de texto en vez del momento real, porque
+    // Django arma la URL en tiempo de render con todos sus argumentos; el
+    // JS lo reemplaza segun el boton que abrio el modal.
+    var urlBase = "{% url 'paseos:subir_foto' paseo_activo.id_paseo 'MOMENTO_PLACEHOLDER' %}";
+    var formFoto = document.getElementById('formFoto');
+    var tituloFoto = document.getElementById('modalFotoTitulo');
+    var momentoActual = null;
 
-  // La URL trae un placeholder de texto en vez del momento real, porque
-  // Django arma la URL en tiempo de render con todos sus argumentos; el
-  // JS lo reemplaza segun el boton que abrio el modal.
-  var urlBase = "{% url 'paseos:subir_foto' paseo_activo.id_paseo 'MOMENTO_PLACEHOLDER' %}";
-  var formFoto = document.getElementById('formFoto');
-  var tituloFoto = document.getElementById('modalFotoTitulo');
+    modalFoto.addEventListener('show.bs.modal', function (event) {
+      momentoActual = event.relatedTarget.getAttribute('data-momento');
+      formFoto.action = urlBase.replace('MOMENTO_PLACEHOLDER', momentoActual);
+      tituloFoto.textContent = 'Foto de ' + momentoActual;
+    });
 
-  modalFoto.addEventListener('show.bs.modal', function (event) {
-    var momento = event.relatedTarget.getAttribute('data-momento');
-    formFoto.action = urlBase.replace('MOMENTO_PLACEHOLDER', momento);
-    tituloFoto.textContent = 'Foto de ' + momento;
-  });
+    modalFoto.addEventListener('hidden.bs.modal', function () {
+      formFoto.querySelectorAll('.text-danger-envio').forEach(function (el) { el.remove(); });
+    });
+
+    // Mismo motivo que el formulario de emergencia arriba: fetch en vez
+    // de un POST con recarga completa, para no cortar el emisor de GPS.
+    formFoto.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var boton = formFoto.querySelector('button[type="submit"]');
+      boton.disabled = true;
+      fetch(formFoto.action, {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrftoken},
+        body: new FormData(formFoto),
+      }).then(function (resp) {
+        return resp.json().then(function (data) { return {ok: resp.ok, data: data}; });
+      }).then(function (resultado) {
+        boton.disabled = false;
+        if (resultado.ok) {
+          var modal = bootstrap.Modal.getInstance(modalFoto);
+          if (modal) modal.hide();
+          formFoto.reset();
+          // Saca el boton de ESE momento (ya no queda pendiente) sin
+          // recargar - ver fotos-pendientes-contenedor arriba.
+          var botonMomento = document.querySelector(
+            '#fotos-pendientes-contenedor button[data-momento="' + momentoActual + '"]'
+          );
+          if (botonMomento) botonMomento.remove();
+          mostrarAviso(resultado.data.mensaje || 'Foto guardada correctamente.');
+        } else {
+          var aviso = document.createElement('div');
+          aviso.className = 'text-danger small mt-2 text-danger-envio';
+          aviso.textContent = resultado.data.error || 'No se pudo subir la foto.';
+          formFoto.querySelector('.modal-body').appendChild(aviso);
+        }
+      }).catch(function () {
+        boton.disabled = false;
+        var aviso = document.createElement('div');
+        aviso.className = 'text-danger small mt-2 text-danger-envio';
+        aviso.textContent = 'No se pudo subir la foto. Revisa tu conexión e intenta de nuevo.';
+        formFoto.querySelector('.modal-body').appendChild(aviso);
+      });
+    });
+  }
 })();
 </script>
 {% else %}
@@ -399,10 +438,11 @@ servidor - ver estado_bienvenida_paseador() y _horarios_paseador.html.
 {% endblock %}
 
 {% comment %}
-Esta pantalla ya cubre el punto de notificaciones del navbar por su propia
-cuenta en los dos casos de arriba (piggyback sobre el POST de GPS mientras
-esta "en_vivo"; el polling de horarios de arriba cuando no) - el poller
-generico de base.html se deja vacio aca para no sumar una peticion
-redundante.
+Mientras "en_vivo", base.html YA deja vacio su poller generico por su
+cuenta (ve "id_paseo_en_vivo_del_paseador" y usa el POST de GPS global
+en su lugar - ver core/context_processors.py). Esta plantilla solo
+necesita forzarlo vacio aca para el caso SIN paseo activo: el polling de
+horarios de 12s de mas arriba ya trae "hay_notificaciones_sin_leer" en
+cada vuelta, asi que sumar el generico de 15s encima seria redundante.
 {% endcomment %}
 {% block polling_notificaciones %}{% endblock %}

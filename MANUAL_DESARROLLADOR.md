@@ -300,16 +300,20 @@ hay una corrección aplicada:
   `fecha_recepcion` (hora del SERVIDOR - `coordenadas.repository.
   obtener_ultima_recepcion()`), nunca `fecha_captura` (viene del
   dispositivo del paseador, no es confiable para esto).
-- **INC-04 (mitigado, no corregido de fondo - queda para el Incremento
-  4)**: el envío de GPS solo funciona mientras el paseador está en
+- **INC-04 (corregido de fondo, Incremento 4 punto D1)**: el envío de GPS
+  solo funcionaba mientras el paseador estaba en
   `bienvenida_paseador.html` - navegar a cualquier otra pantalla, o
-  enviar los formularios modales de emergencia/foto (son POST normales,
-  recargan la página), lo detiene por completo hasta volver. La
-  corrección de fondo (que el envío sobreviva a navegar a otra pantalla)
-  requeriría convertir esos formularios a AJAX y/o un `Service Worker` -
-  fuera de alcance para el 13 oct. Mitigación aplicada mientras tanto:
-  aviso visible en `bienvenida_paseador.html` ("Mantén esta página
-  abierta durante el paseo...") - solo texto, sin JS nuevo.
+  enviar los formularios modales de emergencia/foto (eran POST normales,
+  recargaban la página), lo detenía por completo hasta volver.
+  Corrección de fondo: ver sección 8, "Emisor de GPS global" - el envío
+  ahora vive en `core/templates/base.html`, gated por
+  `id_paseo_en_vivo_del_paseador` (nuevo context processor), así que
+  sigue funcionando sin importar en qué pantalla esté el paseador. Los
+  formularios modales de emergencia/foto se convirtieron a
+  `fetch`+`FormData` (ver sección 8) precisamente para que YA NO
+  recarguen la página a mitad de un paseo. Con esto corregido, el aviso
+  "Mantén esta página abierta..." (mitigación temporal del 13 oct) se
+  quitó - ya no aplica, el envío sobrevive a cualquier navegación.
 
 `mapa_paseo`/`coordenadas_de_paseo` son compartidas por los dos roles
 (`@requiere_autenticacion`, no `@requiere_dueno` — corregido en la
@@ -351,6 +355,33 @@ del punto 3 de la sección 8, todo), pero ahora redirige a `home`
 (`seleccionar_rol`) en vez de a `usuarios:login` — el pedido explícito es
 que cerrar sesión, desde cualquier rol, lleve siempre a "Eres... Paseador
 / Cliente", nunca al formulario de login de un rol específico.
+
+**Incremento 4, fase 1 (GPS continuo y ruta por puntos) — punto D**:
+- **D1 (envío)**: el emisor de GPS pasó de vivir solo en
+  `bienvenida_paseador.html` a ser global — ver "Emisor de GPS global"
+  en la sección 8. Se agregó `position.coords.accuracy` como el nuevo
+  campo `precision` de `coordenadas_detalle` (ver sección 6 y
+  `CLAUDE.md`), con `enableHighAccuracy: true`, `timeout: 8000` y un
+  guard `enviandoAhora` contra lecturas superpuestas si el GPS tarda más
+  de un ciclo en responder.
+- **D2 (dibujo)**: `coordenadas/templates/coordenadas/mapa.html` ya no
+  llama `linea.setLatLngs(puntos)` con el array completo en cada vuelta
+  del polling (eso redibujaba toda la ruta cada 10s) — ahora recuerda
+  cuántos puntos ya dibujó (`puntosDibujados`) y solo agrega los nuevos
+  con `linea.addLatLng(...)`, más un `L.circleMarker` chico por cada
+  punto nuevo (capa `capaPuntos`). Marcador verde fijo en el primer
+  punto del paseo (`marcadorInicio`, nunca se mueve); marcador de pin
+  azul en el último punto (`marcadorActual`, con tooltip "Posición
+  actual" mientras `en_vivo` o "Fin del paseo" en `historico`). El
+  historial usa el mismo código (sin polling: todos los puntos llegan
+  de una sola vez, `puntosDibujados` arranca en 0 igual).
+  **Umbral de descarte por mala precisión: 50 metros**
+  (`_PRECISION_MAXIMA_ACEPTABLE_METROS` en `coordenadas/views_web.py`) -
+  un punto con un radio de incertidumbre mayor a eso se descarta en el
+  BACKEND antes de guardarse (misma respuesta 201 silenciosa que el
+  descarte de INC-03), así que nunca llega siquiera al endpoint que
+  alimenta el mapa — no hace falta ningún filtro adicional del lado del
+  JS.
 
 ## 8. Convenciones del proyecto
 
@@ -432,7 +463,50 @@ que cerrar sesión, desde cualquier rol, lleve siempre a "Eres... Paseador
   `visibilitychange`): todo sondeo nuevo debe pausarse si la pestaña no
   está visible y refrescar de inmediato al volver a ella - patrón
   establecido en `bienvenida.html` y `mis_paseos.html`, cópialo para
-  cualquier sondeo nuevo.
+  cualquier sondeo nuevo. **Excepción deliberada: el emisor de GPS** (ver
+  más abajo) nunca se pausa por pestaña oculta - a diferencia de un
+  sondeo de notificaciones, el GPS es la razón de ser de RNF2 (actualizar
+  la ubicación cada ≤10s MIENTRAS el paseo está en curso); un paseador
+  con la pantalla bloqueada en el bolsillo sigue caminando, y es
+  justamente cuando más importa no perder la traza. Si el navegador
+  suspende el `setInterval` de todas formas por estar en segundo plano,
+  es una limitación de la plataforma, no algo que el código deba
+  reforzar a propósito.
+- **Emisor de GPS global, no atado a una pantalla** (Incremento 4, punto
+  D1 — corrige INC-04, ver sección 7): el envío periódico de coordenadas
+  vive en `core/templates/base.html`, no en `bienvenida_paseador.html`.
+  Se habilita con `core.context_processors.id_paseo_en_vivo_del_paseador`
+  (nuevo context processor, registrado en `settings.py`): disponibiliza
+  `id_paseo_en_vivo_del_paseador` en CUALQUIER render, con una sola
+  consulta extra por página (filtrada por `id_paseador`+`estado`, mismo
+  índice compuesto que ya existía) — `{}` para cualquier caso que no sea
+  un paseador autenticado con un paseo `en_vivo` ahora mismo (la inmensa
+  mayoría de las páginas vistas), así que el costo real es insignificante.
+  El poller genérico de notificaciones de `base.html`
+  (`polling_notificaciones`) se auto-suprime cuando ese valor está
+  presente (`and not id_paseo_en_vivo_del_paseador`), porque el propio
+  POST de GPS ya devuelve `hay_notificaciones_sin_leer` en cada vuelta -
+  sumar los dos sería una petición redundante. Si una pantalla necesita
+  seguir usando su PROPIO polling en vez del genérico (p.ej. el mapa
+  mientras está `en_vivo`), sigue sobreescribiendo
+  `{% block polling_notificaciones %}` como ya hacía.
+- **Formularios que no deben interrumpir un paseo en vivo, por `fetch` +
+  `FormData`** (Incremento 4, punto D1): los modales de "Reportar
+  emergencia" y "Subir foto" en `bienvenida_paseador.html` eran POST
+  normales con recarga de página - una recarga reinicia cualquier script
+  en memoria, incluido el emisor de GPS global de arriba. Se convirtieron
+  a `fetch(form.action, {method: 'POST', headers: {'X-CSRFToken': ...},
+  body: new FormData(form)})`, con el token CSRF leído de la cookie
+  `csrftoken` y mandado en un header (no en el body, que aquí es
+  binario). Las vistas detrás (`incidentes.views_web.reportar_incidente`,
+  `paseos.views_web.subir_foto`) responden SIEMPRE `JsonResponse` en vez
+  de `redirect()` + `django.contrib.messages` — son los ÚNICOS llamadores
+  reales de esas vistas, así que no hace falta mantener una rama para un
+  POST tradicional sin JS. La confirmación de éxito se inserta en el DOM
+  sin recargar (`#avisos-paseo` en la plantilla); un error se muestra
+  dentro del propio modal. Si se agrega un formulario nuevo que el
+  paseador pueda abrir durante un paseo `en_vivo`, seguir este mismo
+  patrón — un POST con recarga ahí rompe el envío de GPS.
 - **Privacidad en paseos con varios dueños**: cualquier pantalla que le
   muestre a un dueño específico "las mascotas de este paseo" debe filtrar a
   las de ESE dueño (`mascotas.repository.obtener_varias_por_id_y_dueno`),

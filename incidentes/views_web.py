@@ -5,8 +5,8 @@ Vistas web:
 """
 
 from bson import ObjectId
-from django.contrib import messages
-from django.shortcuts import redirect, render
+from django.http import JsonResponse
+from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
 from core.media import ErrorSubidaImagen, subir_imagen
@@ -68,6 +68,14 @@ def reportar_incidente(request, id_paseo):
     diagrama de secuencia del documento de grado: valida el paseo, sube
     la evidencia, inserta el incidente, notifica al dueño, marca
     paseos.emergencia. El paseo NO se finaliza automaticamente.
+
+    Responde SIEMPRE en JSON (Incremento 4, punto D1): antes redirigia a
+    "usuarios:bienvenida_paseador" (recarga completa de pagina), pero el
+    modal ahora se manda por fetch+FormData para no cortar el emisor
+    global de GPS de core/templates/base.html a mitad de un POST - una
+    recarga completa reiniciaria ese script. Unico llamador real (el
+    modal "Reportar emergencia"), asi que no hace falta una rama aparte
+    para un POST tradicional sin JS.
     """
     paseo = paseos_repository.obtener_por_id(id_paseo)
     paseo_valido = (
@@ -76,21 +84,15 @@ def reportar_incidente(request, id_paseo):
         and paseo['estado'] == 'en_vivo'
     )
     if not paseo_valido:
-        messages.error(request, 'No se pudo registrar el incidente: el paseo no está activo.')
-        return redirect('usuarios:bienvenida_paseador')
+        return JsonResponse({'error': 'No se pudo registrar el incidente: el paseo no está activo.'}, status=409)
 
     mascotas_por_id = mascotas_repository.obtener_varias_por_id(paseo.get('id_mascotas', []))
     mascotas_paseo = mascotas_repository.resolver_lista(paseo.get('id_mascotas'), mascotas_por_id)
 
     form = ReportarIncidenteForm(request.POST, request.FILES, mascotas=mascotas_paseo)
     if not form.is_valid():
-        # El boton de emergencia abre un modal simple (ver
-        # bienvenida_paseador.html): no hay donde volver a mostrar el
-        # formulario con sus errores sin duplicar esa pantalla, asi que el
-        # primer error se muestra como mensaje y se vuelve al dashboard.
         primer_error = next(iter(form.errors.values()))[0]
-        messages.error(request, f'No se pudo registrar el incidente: {primer_error}')
-        return redirect('usuarios:bienvenida_paseador')
+        return JsonResponse({'error': f'No se pudo registrar el incidente: {primer_error}'}, status=400)
 
     # A cual mascota afecta (ver CLAUDE.md): null solo para
     # "accidente_paseador"; con una sola mascota en el paseo se asigna
@@ -105,8 +107,7 @@ def reportar_incidente(request, id_paseo):
     try:
         evidencia_url = subir_imagen(form.cleaned_data['foto'], carpeta='incidentes')
     except ErrorSubidaImagen as exc:
-        messages.error(request, f'No se pudo subir la foto de evidencia: {exc}')
-        return redirect('usuarios:bienvenida_paseador')
+        return JsonResponse({'error': f'No se pudo subir la foto de evidencia: {exc}'}, status=502)
 
     # Ubicacion: la ultima capturada por el tracking del Paso 4. Si el
     # incidente ocurre antes del primer punto GPS (muy al inicio del
@@ -157,5 +158,4 @@ def reportar_incidente(request, id_paseo):
     if ids_duenos_a_notificar:
         repository.marcar_notificado(incidente['_id'])
 
-    messages.success(request, 'El incidente quedó registrado. El dueño ya fue notificado.')
-    return redirect('usuarios:bienvenida_paseador')
+    return JsonResponse({'ok': True, 'mensaje': 'El incidente quedó registrado. El dueño ya fue notificado.'}, status=201)

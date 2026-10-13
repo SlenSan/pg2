@@ -134,9 +134,16 @@
   "en_vivo") ya traen "hay_notificaciones_sin_leer" en su propia
   respuesta y sobreescriben este bloque vacio (o condicionalmente, en el
   caso del mapa) para no duplicar la peticion - ver esas plantillas.
+
+  "and not id_paseo_en_vivo_del_paseador" (Incremento 4, punto D1): con
+  el emisor de GPS ahora global (ver {% block envio_gps %} mas abajo),
+  CUALQUIER pantalla que un paseador con un paseo "en_vivo" este viendo
+  ya recibe "hay_notificaciones_sin_leer" en la respuesta de cada POST
+  de GPS (cada 10s) - sumar tambien este poller de 15s ahi seria una
+  peticion redundante, no solo en bienvenida_paseador.html como antes.
   {% endcomment %}
   {% block polling_notificaciones %}
-  {% if request.session.id_usuario %}
+  {% if request.session.id_usuario and not id_paseo_en_vivo_del_paseador %}
   <script>
   (function () {
     var urlEstado = "{% url 'notificaciones:estado_no_leidas' %}";
@@ -154,6 +161,107 @@
   </script>
   {% endif %}
   {% endblock %}
+
+  {% comment %}
+  Emisor de GPS UNICO y GLOBAL (Incremento 4, punto D1 - corrige INC-04
+  del 12 oct): antes vivia solo en bienvenida_paseador.html, asi que
+  salir de esa pantalla (formulario de emergencia, subir una foto,
+  cualquier otra pagina) cortaba el envio por completo mientras el
+  paseo seguia "en_vivo". Puesto aca (fuera de cualquier bloque que
+  una plantilla pueda sobreescribir sin querer) se manda desde
+  CUALQUIER pantalla, mientras `id_paseo_en_vivo_del_paseador`
+  (ver core/context_processors.py) este presente - un solo
+  `setInterval` activo a la vez, sin importar donde este el paseador.
+
+  `enableHighAccuracy`+`timeout` (8s, menor a los 10s del intervalo) +
+  `enviandoAhora` (evita lanzar una lectura nueva mientras la anterior
+  sigue pendiente): los 3 pedidos explicitos de D1. `position.coords.
+  accuracy` se manda como "precision" - ver coordenadas/views_web.py,
+  que la guarda y la usa para descartar lecturas malas (punto D2).
+  {% endcomment %}
+  {% if id_paseo_en_vivo_del_paseador %}
+  <script>
+  (function () {
+    function leerCookie(nombre) {
+      var fila = document.cookie.split('; ').find(function (c) { return c.startsWith(nombre + '='); });
+      return fila ? decodeURIComponent(fila.split('=')[1]) : null;
+    }
+
+    var csrftoken = leerCookie('csrftoken');
+    var urlCoordenadas = "{% url 'coordenadas:registrar_coordenada' id_paseo_en_vivo_del_paseador %}";
+    var enviandoAhora = false;
+
+    function enviarPosicion(position) {
+      fetch(urlCoordenadas, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken,
+        },
+        body: JSON.stringify({
+          latitud: position.coords.latitude,
+          longitud: position.coords.longitude,
+          altitud: position.coords.altitude,
+          precision: position.coords.accuracy,
+        }),
+      }).then(function (resp) {
+        // "estado-gps" solo existe en bienvenida_paseador.html - en
+        // cualquier otra pantalla este elemento no esta en el DOM, de
+        // ahi el chequeo de null (mismo patron que "elBannerCalificar"
+        // en coordenadas/templates/coordenadas/mapa.html).
+        var estadoEl = document.getElementById('estado-gps');
+        if (estadoEl) {
+          estadoEl.textContent = resp.ok
+            ? 'Compartiendo tu ubicación...'
+            : 'No se pudo enviar tu ubicación. Reintentando...';
+        }
+        return resp.ok ? resp.json() : null;
+      }).then(function (data) {
+        if (data && typeof data.hay_notificaciones_sin_leer === 'boolean') {
+          document.querySelectorAll('.campana-punto').forEach(function (el) {
+            el.classList.toggle('d-none', !data.hay_notificaciones_sin_leer);
+          });
+        }
+      }).catch(function () {
+        var estadoEl = document.getElementById('estado-gps');
+        if (estadoEl) {
+          estadoEl.textContent = 'No se pudo enviar tu ubicación. Reintentando...';
+        }
+      }).finally(function () {
+        enviandoAhora = false;
+      });
+    }
+
+    function capturarYEnviar() {
+      if (enviandoAhora) {
+        return;
+      }
+      if (!navigator.geolocation) {
+        var estadoEl = document.getElementById('estado-gps');
+        if (estadoEl) {
+          estadoEl.textContent = 'Tu navegador no soporta geolocalización.';
+        }
+        return;
+      }
+      enviandoAhora = true;
+      navigator.geolocation.getCurrentPosition(
+        enviarPosicion,
+        function () {
+          enviandoAhora = false;
+          var estadoEl = document.getElementById('estado-gps');
+          if (estadoEl) {
+            estadoEl.textContent = 'No se pudo acceder a tu ubicación. Revisa los permisos del navegador.';
+          }
+        },
+        {enableHighAccuracy: true, timeout: 8000, maximumAge: 0}
+      );
+    }
+
+    capturarYEnviar();
+    setInterval(capturarYEnviar, 10000);
+  })();
+  </script>
+  {% endif %}
 
   {% block extra_js %}{% endblock %}
 </body>
