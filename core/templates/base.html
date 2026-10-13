@@ -308,6 +308,60 @@
   </script>
   {% endif %}
 
+  {% comment %}
+  Wake Lock (Incremento 4, fase 2, "pantalla encendida durante el
+  paseo") - bloque COMPLETAMENTE APARTE del emisor de GPS de arriba, a
+  propósito (pedido explícito: no modificar ese bloque). Mismo gate
+  `id_paseo_en_vivo_del_paseador` - vive en cualquier pantalla mientras
+  el paseador tiene un paseo "en_vivo", igual que el emisor.
+
+  En iPhone (y en general), Safari/las apps de pantalla de inicio
+  suspenden JavaScript cuando la pantalla se bloquea o la pestaña pasa a
+  segundo plano - en ese momento el envío de GPS se corta, sin importar
+  qué tan bien esté hecho el emisor (no hay forma de evitarlo desde JS,
+  es una decisión del sistema operativo). `navigator.wakeLock.request
+  ('screen')` pide que la pantalla NO se apague sola mientras el lock
+  esté activo - mitiga el caso más común (el celular se bloquea por
+  inactividad), aunque no lo garantiza del todo (el paseador puede
+  apagarla a mano con el botón físico, o el SO puede liberar el lock
+  igual bajo poca batería). El lock se libera automáticamente cuando la
+  página se oculta (cambiar de pestaña/app) - por eso se vuelve a pedir
+  en "visibilitychange" al volver a estar visible, no alcanza con
+  pedirlo una sola vez al cargar.
+
+  `if ('wakeLock' in navigator)` - sin soporte (navegador viejo, o
+  ninguno en absoluto), no hace nada; nunca lanza ni bloquea el resto de
+  la página.
+  {% endcomment %}
+  {% if id_paseo_en_vivo_del_paseador %}
+  <script>
+  (function () {
+    var wakeLockActual = null;
+
+    function pedirWakeLock() {
+      if (!('wakeLock' in navigator)) {
+        return;
+      }
+      navigator.wakeLock.request('screen').then(function (lock) {
+        wakeLockActual = lock;
+      }).catch(function () {
+        // Permiso denegado, pestaña no visible en este instante, o
+        // cualquier otro motivo - no es un error que deba interrumpir
+        // nada, el paseo sigue igual sin el wake lock.
+      });
+    }
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') {
+        pedirWakeLock();
+      }
+    });
+
+    pedirWakeLock();
+  })();
+  </script>
+  {% endif %}
+
   {% block extra_js %}{% endblock %}
 </body>
 </html>

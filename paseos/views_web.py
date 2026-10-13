@@ -476,6 +476,21 @@ def iniciar_paseo(request, id_paseo):
                 tipo='inicio_paseo',
                 mensaje=f'{request.session.get("nombre")} inició el paseo de tu mascota.',
             )
+        # Incremento 4, fase 2, "pantalla encendida": en iPhone (y en
+        # general, cualquier navegador) Safari/las apps de pantalla de
+        # inicio suspenden JS cuando la pantalla se bloquea o la app
+        # pasa a segundo plano - el envío de GPS se corta ahí, el
+        # wakeLock de base.html lo mitiga pero no lo garantiza (el
+        # paseador igual puede apagarla a mano, o el SO puede liberar el
+        # bloqueo). Aviso UNA vez, al momento de iniciar - no un banner
+        # persistente, que ya se probó y se quitó (commit 05af336 lo
+        # agregó, D1 lo quitó al volver el envío global - ver
+        # MANUAL_DESARROLLADOR.md).
+        messages.info(
+            request,
+            'Mantén Canigo abierto y la pantalla encendida: si bloqueas el celular, '
+            'el dueño deja de ver tu ubicación.',
+        )
     return redirect('usuarios:bienvenida_paseador')
 
 

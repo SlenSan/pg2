@@ -660,6 +660,39 @@ navegación separados a propósito de Apple), así que SIEMPRE pide
 sesión de nuevo la primera vez que se abre desde ese ícono, aunque ya
 hubiera una sesión iniciada en Safari.
 
+**Incremento 4, fase 2 — "pantalla encendida durante el paseo"**: en
+iPhone (y en general), Safari y las apps de pantalla de inicio
+suspenden JavaScript cuando la pantalla se bloquea o la app pasa a
+segundo plano - el envío de GPS se corta ahí sin importar qué tan bien
+esté hecho el emisor, es una decisión del sistema operativo, no algo
+que JS pueda evitar del todo. Mitigación: `navigator.wakeLock.request
+('screen')` en `core/templates/base.html`, en un bloque TOTALMENTE
+APARTE del emisor de GPS (pedido explícito de la tarea: no tocar ese
+bloque) - mismo gate `id_paseo_en_vivo_del_paseador`. Se vuelve a pedir
+en cada `visibilitychange` que deje la página visible, porque el lock
+se libera solo al ocultarla. `if ('wakeLock' in navigator)` - sin
+soporte, no hace nada, nunca lanza. Es una MITIGACIÓN, no una garantía
+- el paseador puede apagar la pantalla a mano con el botón físico, o el
+sistema operativo puede liberar el lock bajo poca batería; por eso
+sigue existiendo el aviso de abajo.
+
+**Aviso al iniciar el paseo**: `paseos.views_web.iniciar_paseo()` ahora
+agrega un `messages.info()` ("Mantén Canigo abierto y la pantalla
+encendida...") - UNA vez, al momento de iniciar, no un banner
+persistente. Distinto del aviso "Mantén esta página abierta..." que
+existió brevemente (commit `05af336`, 13 oct) y se quitó al volver
+global el emisor de GPS (Incremento 4, punto D1): ESE era sobre no
+CAMBIAR DE PÁGINA (ya no aplica, el emisor es global); ESTE es sobre no
+BLOQUEAR LA PANTALLA (limitación de plataforma distinta, no relacionada
+con D1).
+
+**Verificado que el cambio en `base.html` no rompió el emisor de GPS**
+(pedido explícito de la tarea, por tocar ese archivo): medido con un
+Chrome real después de agregar el bloque de wake lock - intervalos de
+7.89s/8.04s/7.96s, sin ningún hueco - igual que antes de este cambio.
+`wakeLock.request('screen')` confirmado tanto al cargar la pantalla
+como al simular un ciclo de `visibilitychange` (oculta → visible).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
