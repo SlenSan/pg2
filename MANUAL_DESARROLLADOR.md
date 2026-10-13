@@ -738,6 +738,28 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   antes de usarla, para que una actualización futura del service worker
   no tarde en propagarse por culpa de una caché vieja.
 
+**Revisión de fase 1, puntos pendientes (a)/(b)/(c), 2026-10-13**:
+
+- **Punto (a) — incidente sin foto**: diagnóstico - `ReportarIncidenteForm.foto`
+  ya era un `forms.ImageField()` (obligatorio por defecto), así que el
+  backend ya rechazaba correctamente un POST sin el campo `foto` antes
+  de esta revisión. **Verificado, sin cambios de código**: un POST
+  directo a `reportar_incidente()` sin el campo `foto` (simulando quitar
+  el atributo `required` del `<input>` con las herramientas de
+  desarrollador) responde 400 y NO crea el incidente.
+- **Punto (b)**: ver más arriba (commit aparte).
+- **Punto (c) — link "Verificación de paseadores" en el navbar**:
+  diagnóstico - el link YA estaba en `core/templates/base.html`
+  (`{% if es_admin %}`, en las dos ramas de rol) desde antes de esta
+  revisión. Lo que SÍ estaba duplicado: `core.context_processors.
+  es_admin()` y `usuarios.decorators.requiere_admin()` tenían cada uno
+  su PROPIA copia de la misma comparación (`correo.strip().lower() in
+  CANIGO_ADMIN_EMAILS`) - dos lugares decidiendo "es admin" por
+  separado, que podían desincronizarse sin que nada lo avisara si se
+  cambiaba la regla en uno y no en el otro. Se extrajo
+  `usuarios.decorators.es_correo_admin(correo)` como ÚNICA fuente de
+  verdad, reusada por los dos.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

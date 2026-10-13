@@ -69,12 +69,30 @@ requiere_paseador = _requiere_rol('paseador')
 """Protege una vista web: exige sesion activa de un usuario con rol 'paseador'."""
 
 
+def es_correo_admin(correo):
+    """
+    True si `correo` pertenece a una cuenta administradora (RF14 -
+    verificacion de paseadores). NO es un rol nuevo en `usuarios` (ver
+    CLAUDE.md): una cuenta YA EXISTENTE (de cualquier rol) es
+    administradora si su correo esta en settings.CANIGO_ADMIN_EMAILS.
+
+    UNICA fuente de verdad para "es admin" - reusada tanto por
+    requiere_admin() de aca abajo (bloquea el panel en el backend) como
+    por core.context_processors.es_admin() (decide si el navbar muestra
+    el link "Verificación de paseadores" - revision de fase 2, punto
+    (c)). Antes cada uno tenia su propia copia de la misma comparacion
+    (minuscula/strip + "in CANIGO_ADMIN_EMAILS") - con dos copias,
+    corregir una regla de admin (p.ej. normalizar el correo distinto)
+    sin tocar la otra las dejaria desincronizadas sin que nada lo avise.
+    """
+    correo_normalizado = (correo or '').strip().lower()
+    return bool(correo_normalizado) and correo_normalizado in settings.CANIGO_ADMIN_EMAILS
+
+
 def requiere_admin(view_func):
     """
     Protege el panel de administracion (RF14 - verificacion de
-    paseadores). NO es un rol nuevo en `usuarios` (ver CLAUDE.md): una
-    cuenta YA EXISTENTE (de cualquier rol) es administradora si su
-    correo esta en settings.CANIGO_ADMIN_EMAILS.
+    paseadores).
 
     Sin sesion, va a login (igual que cualquier otra vista protegida,
     con ?next= para volver aca despues). CON sesion pero sin ser admin,
@@ -85,8 +103,7 @@ def requiere_admin(view_func):
     def wrapper(request, *args, **kwargs):
         if not request.session.get('id_usuario'):
             return _redirigir_a_login(request)
-        correo_sesion = (request.session.get('correo') or '').strip().lower()
-        if correo_sesion not in settings.CANIGO_ADMIN_EMAILS:
+        if not es_correo_admin(request.session.get('correo')):
             raise Http404()
         return view_func(request, *args, **kwargs)
 

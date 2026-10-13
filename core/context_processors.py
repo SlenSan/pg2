@@ -8,6 +8,7 @@ from django.conf import settings
 
 from notificaciones import repository as notificaciones_repository
 from paseos import repository as paseos_repository
+from usuarios.decorators import es_correo_admin
 
 
 def notificaciones(request):
@@ -46,13 +47,17 @@ def push(request):
 def es_admin(request):
     """
     Disponibiliza "es_admin" en cualquier render, para que el navbar
-    (core/templates/base.html) muestre el link al panel de verificacion
-    SOLO a quienes son admin (ver usuarios.decorators.requiere_admin) -
-    sin esto, cada vista tendria que calcularlo a mano solo para el
-    navbar.
+    (core/templates/base.html) muestre el link "Verificación de
+    paseadores" SOLO a quienes son admin - sin esto, cada vista tendria
+    que calcularlo a mano solo para el navbar.
+
+    Reusa usuarios.decorators.es_correo_admin() (revisión de fase 2,
+    punto (c)): antes esta función tenía su PROPIA copia de la misma
+    comparación que ya hacía requiere_admin() - dos lugares decidiendo
+    "es admin" por separado, que podían desincronizarse sin que nada lo
+    avisara. Ahora hay una sola fuente de verdad.
     """
-    correo_sesion = (request.session.get('correo') or '').strip().lower()
-    return {'es_admin': bool(correo_sesion) and correo_sesion in settings.CANIGO_ADMIN_EMAILS}
+    return {'es_admin': es_correo_admin(request.session.get('correo'))}
 
 
 def id_paseo_en_vivo_del_paseador(request):
