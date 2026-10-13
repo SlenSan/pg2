@@ -20,7 +20,7 @@ TIPOS_VALIDOS = (
 )
 
 
-def crear(*, id_paseo, tipo, id_mascota, descripcion, evidencia_foto, latitud, longitud):
+def crear(*, id_paseo, tipo, id_mascota, descripcion, evidencia_foto, latitud, longitud, direccion_aproximada=None):
     incidente = {
         'id_paseo': id_paseo if isinstance(id_paseo, ObjectId) else ObjectId(id_paseo),
         'tipo': tipo,
@@ -30,6 +30,11 @@ def crear(*, id_paseo, tipo, id_mascota, descripcion, evidencia_foto, latitud, l
         'evidencia_foto': evidencia_foto,
         'latitud': latitud,
         'longitud': longitud,
+        # Geocodificacion inversa (Nominatim) al momento de guardar -
+        # Incremento 4, punto C. None si no hay coordenadas, si el
+        # servicio falla, o si tarda mas de 5s (ver core/geocoding.py) -
+        # el incidente se guarda igual, nunca se bloquea por esto.
+        'direccion_aproximada': direccion_aproximada,
         'fecha_hora': datetime.now(timezone.utc),
         'notificado': False,
     }
@@ -40,6 +45,14 @@ def crear(*, id_paseo, tipo, id_mascota, descripcion, evidencia_foto, latitud, l
 
 def marcar_notificado(id_incidente):
     get_db().incidentes.update_one({'_id': id_incidente}, {'$set': {'notificado': True}})
+
+
+def obtener_por_id(id_incidente):
+    try:
+        oid = id_incidente if isinstance(id_incidente, ObjectId) else ObjectId(id_incidente)
+    except (InvalidId, TypeError):
+        return None
+    return get_db().incidentes.find_one({'_id': oid})
 
 
 def listar_por_paseo(id_paseo):

@@ -192,6 +192,11 @@ Retención: ~90 días (trazabilidad y validación, no almacenamiento permanente 
   evidencia_foto: String,
   latitud: Number,
   longitud: Number,
+  direccion_aproximada: String,  // geocodificación inversa (Nominatim/OSM) al momento de
+                                   // guardar - null si no había coordenadas, si el servicio
+                                   // falló, o si tardó más de 5s (ver core/geocoding.py).
+                                   // "Aproximada" porque viene de un servicio externo, no de
+                                   // un dato que el paseador haya escrito.
   fecha_hora: Date,
   notificado: Boolean      // si el dueño ya fue notificado
 }

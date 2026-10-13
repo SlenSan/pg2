@@ -25,3 +25,5 @@ services:
         sync: false
       - key: CANIGO_ADMIN_EMAILS
         sync: false
+      - key: NOMINATIM_USER_AGENT
+        sync: false

@@ -173,6 +173,17 @@ MONGO_DB_NAME = os.environ.get('MONGO_DB_NAME', 'canigo')
 # Formato: cloudinary://<api_key>:<api_secret>@<cloud_name>
 CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL', '')
 
+# Nominatim (geocodificacion inversa de incidentes, RF12/RF16 - ver
+# core/geocoding.py). Su politica de uso exige un User-Agent genuino que
+# identifique la aplicacion y un contacto real - el default generico de
+# abajo cumple la forma, pero el contacto real (un correo) va SOLO en
+# .env/Render (nunca en el repo, es informacion personal), igual que
+# cualquier otro secreto del proyecto.
+NOMINATIM_USER_AGENT = os.environ.get(
+    'NOMINATIM_USER_AGENT',
+    'Canigo/1.0 (proyecto de grado UDI - sin contacto configurado)',
+)
+
 # Panel de administracion de Canigo (RF14 - verificacion de paseadores):
 # NO es un rol nuevo en `usuarios` (ver CLAUDE.md, solo "dueño"/"paseador").
 # Una cuenta ya existente (de cualquier rol) es administradora si su correo

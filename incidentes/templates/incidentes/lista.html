@@ -27,7 +27,8 @@
             no disponible
           {% endif %}
         </p>
-        <p class="card-text text-muted small mb-0">{{ item.incidente.fecha_hora }}</p>
+        <p class="card-text text-muted small mb-2">{{ item.incidente.fecha_hora }}</p>
+        <a href="{% url 'incidentes:detalle_incidente' item.id_incidente %}" class="btn btn-outline-danger btn-sm">Ver detalle</a>
       </div>
     </div>
   </div>

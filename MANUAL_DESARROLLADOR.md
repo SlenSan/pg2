@@ -104,6 +104,7 @@ valor real):
 | `MONGO_URI` | Cadena de conexión de MongoDB Atlas. |
 | `MONGO_DB_NAME` | Nombre de la base de datos dentro del cluster (`canigo`). |
 | `CLOUDINARY_URL` | Credenciales de Cloudinary en formato `cloudinary://<api_key>:<api_secret>@<cloud_name>`. |
+| `NOMINATIM_USER_AGENT` | User-Agent con un contacto real, exigido por la política de uso de Nominatim (dirección aproximada de un incidente - ver sección 7/9). |
 
 ## 4. Instalación y ejecución local
 
@@ -382,6 +383,48 @@ que cerrar sesión, desde cualquier rol, lleve siempre a "Eres... Paseador
   descarte de INC-03), así que nunca llega siquiera al endpoint que
   alimenta el mapa — no hace falta ningún filtro adicional del lado del
   JS.
+
+**Incremento 4, fase 1 — punto C (dirección e incidente en el mapa)**:
+al reportar un incidente (`incidentes.views_web.reportar_incidente`), si
+hay coordenadas (la última capturada por el tracking), se geocodifican
+de forma inversa con **Nominatim** (OpenStreetMap) vía
+`core/geocoding.py::direccion_aproximada()`, y el resultado se guarda en
+el nuevo campo `incidentes.direccion_aproximada`. Política de uso de
+Nominatim (leída antes de implementar, resumen completo en el reporte
+del punto C): máximo 1 solicitud/segundo, nunca "bulk"/sistemático (acá
+se respeta porque solo se llama una vez por incidente reportado, un
+evento humano, nunca por cada punto GPS), User-Agent genuino con
+contacto (`NOMINATIM_USER_AGENT`, ver sección 9 y `.env.example`), y
+atribución a OpenStreetMap (ya presente en cualquier mapa de Leaflet del
+proyecto). Si el servicio falla, no responde, o el presupuesto total
+(espera de ritmo + la llamada) supera **5 segundos**, se guarda el
+incidente igual, con `direccion_aproximada: null` - geocodificar nunca
+bloquea ni hace fallar el reporte. Limitación documentada: el límite de
+1 req/s se aplica por proceso (no hay Redis/cache compartido entre
+workers de gunicorn) - aceptable a la escala de este proyecto, donde
+RF12 es un botón de emergencia disparado por una persona, no un proceso
+en lote.
+
+Nueva vista `incidentes.views_web.detalle_incidente` (`incidentes:
+detalle_incidente`, URL `/incidentes/<id>/`): tipo, descripción, foto,
+fecha/hora, dirección aproximada (o coordenadas si no hay ninguna),
+mapa de Leaflet con un solo marcador fijo (sin polling - un incidente ya
+ocurrido no cambia), y el teléfono del paseador como link `tel:` SOLO
+si el paseo sigue `disponible`/`en_vivo` (mismo criterio del punto B,
+oculto en `historico`). Control de acceso en
+`_incidente_accesible_o_none()`: el paseador del paseo (sin
+restricción), o un dueño de ese paseo cuando el incidente afecta a UNA
+DE SUS mascotas o no afecta a ninguna en particular
+(`accidente_paseador`) - EXACTAMENTE el mismo criterio de
+`incidentes.repository.listar_visibles_para_dueno()` (corrección de
+privacidad del 12 oct), reutilizado acá para que el detalle de un
+incidente nunca se le muestre a quien no debería verlo. El banner de
+emergencia del mapa (`coordenadas/templates/coordenadas/mapa.html`,
+antes `_texto_incidente()`, ahora `_info_incidente_reciente()` porque
+devuelve también el id) enlaza "Ver detalles" directamente a ESE
+incidente para los dos roles - antes ese link solo existía para el
+dueño y llevaba a la lista genérica (`incidentes:lista`, que ni
+siquiera existe para el paseador).
 
 ## 8. Convenciones del proyecto
 
@@ -827,7 +870,11 @@ dashboard):
   el repositorio): `DJANGO_SECRET_KEY` (Render la genera sola),
   `DJANGO_DEBUG` (`False`), `MONGO_URI`, `MONGO_DB_NAME`, `CLOUDINARY_URL`,
   `CANIGO_ADMIN_EMAILS` (correos con acceso a `/administracion/verificacion/`,
-  separados por coma - ver sección 8, RF14).
+  separados por coma - ver sección 8, RF14), `NOMINATIM_USER_AGENT`
+  (identifica la app ante Nominatim con un contacto real - ver sección 7,
+  punto C del Incremento 4; sin configurar, cae a un valor genérico sin
+  contacto, que cumple la forma pero no lo que la política de Nominatim
+  en realidad pide).
   Render también inyecta automáticamente `RENDER_EXTERNAL_HOSTNAME`, que
   `config/settings.py` usa para completar `ALLOWED_HOSTS`/
   `CSRF_TRUSTED_ORIGINS` (que además siempre incluyen un wildcard

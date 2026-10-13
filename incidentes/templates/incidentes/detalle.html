@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Detalle del incidente — Canigo{% endblock %}
+
+{% block extra_head %}
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+  crossorigin=""
+>
+{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-4">Detalle del incidente</h1>
+
+<div class="card mb-3 border-danger">
+  {% if incidente.evidencia_foto %}
+  <img src="{{ incidente.evidencia_foto }}" class="card-img-top" alt="Evidencia del incidente" style="max-height: 320px; object-fit: cover;">
+  {% endif %}
+  <div class="card-body">
+    <span class="badge bg-danger mb-2">{{ incidente.tipo }}</span>
+    <p class="card-text">{{ incidente.descripcion }}</p>
+
+    {% if mascota %}
+    <p class="card-text text-muted small mb-1">Mascota afectada: {{ mascota.nombre }}</p>
+    {% endif %}
+
+    <p class="card-text text-muted small mb-1">{{ incidente.fecha_hora }}</p>
+
+    {% comment %}
+    "Dirección aproximada" (no "Dirección" a secas - Incremento 4, punto
+    C): es el resultado de una geocodificación inversa (Nominatim), no
+    un dato que el paseador haya escrito a mano, así que puede no
+    coincidir exactamente con el punto real - la etiqueta lo deja claro.
+    Si Nominatim falló o no había coordenadas, se muestran las
+    coordenadas crudas en su lugar (nunca "no disponible" sin más, salvo
+    que tampoco haya coordenadas).
+    {% endcomment %}
+    <p class="card-text text-muted small mb-1">
+      <strong>Dirección aproximada:</strong>
+      {% if incidente.direccion_aproximada %}
+        {{ incidente.direccion_aproximada }}
+      {% elif incidente.latitud and incidente.longitud %}
+        {{ incidente.latitud }}, {{ incidente.longitud }}
+      {% else %}
+        no disponible
+      {% endif %}
+    </p>
+
+    {% if paseador %}
+    <p class="card-text text-muted small mb-0">
+      Paseador: {{ paseador.nombre }}
+      {% if mostrar_telefono_paseador and paseador.telefono %}
+      · <a href="tel:{{ paseador.telefono }}">{{ paseador.telefono }}</a>
+      {% endif %}
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+{% if incidente.latitud and incidente.longitud %}
+<div class="card" style="overflow: hidden;">
+  <div class="card-body p-0">
+    <div id="mapa-incidente" style="height: 40vh; min-height: 280px;"></div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if incidente.latitud and incidente.longitud %}
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin=""
+></script>
+<script>
+(function () {
+  // Mapa estatico de un solo punto (el incidente ya ocurrió, no hay
+  // nada que actualizar con polling - a diferencia de
+  // coordenadas/templates/coordenadas/mapa.html).
+  var punto = [{{ incidente.latitud }}, {{ incidente.longitud }}];
+  var mapa = L.map('mapa-incidente').setView(punto, 16);
+  L.tileLayer('https://{s}.tile.openstreetmap.de/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    subdomains: 'abc',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(mapa);
+  L.marker(punto).addTo(mapa).bindTooltip('Punto del incidente');
+})();
+</script>
+{% endif %}
+{% endblock %}

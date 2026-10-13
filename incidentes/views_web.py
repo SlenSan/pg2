@@ -4,11 +4,16 @@ Vistas web:
 - Paseador: botón de emergencia en su dashboard (RF12).
 """
 
+from datetime import timezone
+
 from bson import ObjectId
+from bson.errors import InvalidId
+from django.contrib import messages
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
+from core.geocoding import direccion_aproximada as geocodificar_direccion
 from core.media import ErrorSubidaImagen, subir_imagen
 from coordenadas import repository as coordenadas_repository
 from incidentes import repository
@@ -17,7 +22,7 @@ from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository as paseos_repository
 from usuarios import repository as usuarios_repository
-from usuarios.decorators import requiere_dueno, requiere_paseador
+from usuarios.decorators import URL_DASHBOARD_POR_ROL, requiere_autenticacion, requiere_dueno, requiere_paseador
 
 
 @requiere_dueno
@@ -53,6 +58,10 @@ def lista_incidentes(request):
         paseo = paseos_por_id.get(incidente['id_paseo'])
         items.append({
             'incidente': incidente,
+            # Stringificado aca (no "incidente._id" en la plantilla): Django
+            # no permite acceder a atributos que empiezan con "_" desde un
+            # template.
+            'id_incidente': str(incidente['_id']),
             'paseador': paseadores_por_id.get(paseo['id_paseador']) if paseo else None,
             'mascota': mascotas_por_id.get(incidente.get('id_mascota')),
         })
@@ -117,6 +126,12 @@ def reportar_incidente(request, id_paseo):
     latitud = ultimo_punto['latitud'] if ultimo_punto else None
     longitud = ultimo_punto['longitud'] if ultimo_punto else None
 
+    # Direccion aproximada (Incremento 4, punto C) - geocodificacion
+    # inversa via Nominatim, SOLO si hay coordenadas. Nunca bloquea el
+    # reporte: None si falla, tarda mas de 5s, o no hay ubicacion (ver
+    # core/geocoding.py).
+    direccion = geocodificar_direccion(latitud, longitud) if latitud is not None and longitud is not None else None
+
     incidente = repository.crear(
         id_paseo=paseo['_id'],
         tipo=form.cleaned_data['tipo'],
@@ -125,6 +140,7 @@ def reportar_incidente(request, id_paseo):
         evidencia_foto=evidencia_url,
         latitud=latitud,
         longitud=longitud,
+        direccion_aproximada=direccion,
     )
 
     paseos_repository.marcar_emergencia(paseo['_id'])
@@ -159,3 +175,87 @@ def reportar_incidente(request, id_paseo):
         repository.marcar_notificado(incidente['_id'])
 
     return JsonResponse({'ok': True, 'mensaje': 'El incidente quedó registrado. El dueño ya fue notificado.'}, status=201)
+
+
+def _incidente_accesible_o_none(request, id_incidente):
+    """
+    El incidente y su paseo, solo si quien esta en sesion tiene un
+    motivo real para verlo (Incremento 4, punto C) - MISMO criterio de
+    privacidad que listar_visibles_para_dueno()/_texto_incidente()
+    (corrección del 12 oct, ver CLAUDE.md):
+
+    - paseador: solo si ES el paseador asignado al paseo de ese
+      incidente - ve cualquier incidente de sus propios paseos, sin
+      restricción por mascota (se los está llevando a todos juntos).
+    - dueño: solo si es uno de los id_duenos del paseo Y, ademas, el
+      incidente afecta a UNA DE SUS PROPIAS mascotas - o no afecta a
+      ninguna mascota en particular ("accidente_paseador", visible para
+      todos los dueños del paseo por igual).
+
+    (None, None) para cualquier otro caso - nunca se revela que el
+    incidente existe.
+    """
+    incidente = repository.obtener_por_id(id_incidente)
+    if not incidente:
+        return None, None
+    paseo = paseos_repository.obtener_por_id(incidente['id_paseo'])
+    if not paseo:
+        return None, None
+    try:
+        oid_usuario = ObjectId(request.session.get('id_usuario'))
+    except (InvalidId, TypeError):
+        return None, None
+
+    rol = request.session.get('rol')
+    if rol == 'paseador':
+        return (incidente, paseo) if paseo.get('id_paseador') == oid_usuario else (None, None)
+    if rol == 'dueño':
+        if oid_usuario not in paseo.get('id_duenos', []):
+            return None, None
+        if incidente.get('id_mascota') is None:
+            return incidente, paseo
+        mascota_propia = mascotas_repository.obtener_varias_por_id_y_dueno(
+            [incidente['id_mascota']], oid_usuario
+        )
+        return (incidente, paseo) if mascota_propia else (None, None)
+    return None, None
+
+
+@requiere_autenticacion
+def detalle_incidente(request, id_incidente):
+    """
+    Detalle de un incidente puntual (Incremento 4, punto C): tipo,
+    descripción, foto, fecha y hora, dirección aproximada (o
+    coordenadas si no hay), mapa de Leaflet con un marcador en el punto,
+    y el teléfono del paseador SOLO mientras el paseo sigue activo
+    (mismo criterio del punto B - oculto en historial).
+    """
+    incidente, paseo = _incidente_accesible_o_none(request, id_incidente)
+    if not incidente:
+        messages.error(request, 'No tienes acceso a ese incidente.')
+        rol_sesion = request.session.get('rol')
+        return redirect(URL_DASHBOARD_POR_ROL.get(rol_sesion, 'usuarios:login'))
+
+    mascota = None
+    if incidente.get('id_mascota'):
+        mascota = mascotas_repository.obtener_varias_por_id([incidente['id_mascota']]).get(incidente['id_mascota'])
+
+    paseador = usuarios_repository.obtener_por_id(paseo['id_paseador']) if paseo.get('id_paseador') else None
+
+    # pymongo devuelve datetimes naive en UTC - hay que marcarlos antes
+    # de que la plantilla use "|date"/"|time" (que asumen un datetime
+    # "aware" para convertir a la zona local, America/Bogota) - mismo
+    # patrón que notificaciones/views.py y usuarios/views_web.py.
+    if incidente.get('fecha_hora'):
+        incidente['fecha_hora'] = incidente['fecha_hora'].replace(tzinfo=timezone.utc)
+
+    return render(request, 'incidentes/detalle.html', {
+        'incidente': incidente,
+        'id_incidente': str(incidente['_id']),
+        'mascota': mascota,
+        'paseador': paseador,
+        # Teléfono visible solo mientras el paseo está activo (punto B,
+        # mismo criterio que el resto de la plataforma) - oculto si ya
+        # es "historico".
+        'mostrar_telefono_paseador': paseo['estado'] in ('disponible', 'en_vivo'),
+    })

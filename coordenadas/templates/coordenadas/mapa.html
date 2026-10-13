@@ -98,19 +98,23 @@ Bootstrap, asi que en un empate de !important gana ella) - mismo
 criterio en el JS de abajo.
 {% endcomment %}
 <div
-  class="alert alert-danger d-flex align-items-center justify-content-between gap-2 mb-3 {% if not texto_emergencia %}d-none{% endif %}"
+  class="alert alert-danger d-flex align-items-center justify-content-between gap-2 mb-3 {% if not info_incidente_reciente %}d-none{% endif %}"
   id="alerta-emergencia"
 >
-  <span><i class="bi bi-exclamation-triangle-fill"></i> <span id="alerta-emergencia-texto">{% if texto_emergencia %}{{ texto_emergencia }}{% endif %}</span></span>
+  <span><i class="bi bi-exclamation-triangle-fill"></i> <span id="alerta-emergencia-texto">{% if info_incidente_reciente %}{{ info_incidente_reciente.texto }}{% endif %}</span></span>
   {% comment %}
-  "Ver detalles" lleva a incidentes:lista, una pantalla EXCLUSIVA del
-  dueño (su propio @requiere_dueno) - el paseador ve el mismo aviso de
-  texto (es informativo, fue el o ella quien lo reporto), pero sin un
-  link que lo rebotaria a su panel con el mensaje de "sin acceso".
+  "Ver detalles" ahora lleva al detalle de ESE incidente puntual
+  (incidentes:detalle_incidente - Incremento 4, punto C), no a la lista
+  genérica - y ya no es exclusivo del dueño: incidentes:detalle_incidente
+  tiene su propio control de acceso (_incidente_accesible_o_none), que
+  ya cubre tanto al paseador de este paseo como al dueño correspondiente,
+  asi que mostrar el link a los dos es seguro.
   {% endcomment %}
-  {% if es_dueno %}
-  <a href="{% url 'incidentes:lista' %}" class="alert-link text-nowrap">Ver detalles</a>
-  {% endif %}
+  <a
+    href="{% if info_incidente_reciente %}{% url 'incidentes:detalle_incidente' info_incidente_reciente.id %}{% endif %}"
+    class="alert-link text-nowrap"
+    id="alerta-emergencia-link"
+  >Ver detalles</a>
 </div>
 
 {% comment %}
@@ -188,6 +192,11 @@ solo ocultarla con CSS, para no exponerle un link que lo rebotaria.
 <script>
 (function () {
   var urlDatos = "{% url 'coordenadas:datos_paseo' id_paseo %}";
+  // Placeholder reemplazado en JS (mismo patrón que formFoto en
+  // bienvenida_paseador.html) - Django arma la URL real en tiempo de
+  // render, el id del incidente recién se sabe en cada respuesta del
+  // polling.
+  var urlDetalleIncidenteBase = "{% url 'incidentes:detalle_incidente' 'ID_INCIDENTE_PLACEHOLDER' %}";
   var estadoInicial = "{{ paseo.estado }}";
   var horaInicioIso = {% if hora_inicio_iso %}"{{ hora_inicio_iso }}"{% else %}null{% endif %};
   var horaFinIso = {% if hora_fin_iso %}"{{ hora_fin_iso }}"{% else %}null{% endif %};
@@ -247,11 +256,15 @@ solo ocultarla con CSS, para no exponerle un link que lo rebotaria.
 
         // .d-none (no el atributo "hidden") - ver el comentario en el
         // HTML de mas arriba sobre por que "hidden" no alcanza junto a
-        // ".d-flex". Sin texto_emergencia (no hay un incidente real
-        // detras, sin importar lo que diga data.emergencia) el banner se
-        // mantiene oculto.
-        document.getElementById('alerta-emergencia').classList.toggle('d-none', !data.texto_emergencia);
-        document.getElementById('alerta-emergencia-texto').textContent = data.texto_emergencia || '';
+        // ".d-flex". Sin info_incidente_reciente (no hay un incidente
+        // real detras, sin importar lo que diga data.emergencia) el
+        // banner se mantiene oculto.
+        var info = data.info_incidente_reciente;
+        document.getElementById('alerta-emergencia').classList.toggle('d-none', !info);
+        document.getElementById('alerta-emergencia-texto').textContent = info ? info.texto : '';
+        if (info) {
+          document.getElementById('alerta-emergencia-link').href = urlDetalleIncidenteBase.replace('ID_INCIDENTE_PLACEHOLDER', info.id);
+        }
 
         // Aviso de calificar - independiente del de incidente de arriba.
         // Cubre el caso de que el dueño ya tuviera esta pantalla abierta
