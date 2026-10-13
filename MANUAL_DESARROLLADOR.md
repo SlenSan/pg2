@@ -482,6 +482,20 @@ resultado. Cambios:
   quitó esa línea - el teléfono ahora solo aparece donde el punto B lo
   define (ver más arriba).
 
+**Incremento 4, fase 1 — punto F (endpoint de diagnóstico)**:
+`/api/db-status/` (`core/views.py::db_status`) quedaba completamente
+abierto, en cualquier entorno, y exponía el nombre de la base de datos y
+la lista de colecciones a cualquiera. Ahora: en `DEBUG=True` (local)
+sigue sin restricción, como herramienta de humo; fuera de `DEBUG`
+(producción) exige la MISMA cuenta admin que protege
+`/administracion/verificacion/` (`usuarios.decorators.requiere_admin`,
+reusado tal cual, no una copia) - 404 para cualquier cuenta que no sea
+admin, redirección a login sin sesión. La condición se evalúa una sola
+vez al cargar el módulo (`db_status = _db_status if settings.DEBUG
+else requiere_admin(_db_status)`), mismo momento en que `settings.py`
+ya arma `SECURE_SSL_REDIRECT` según `DEBUG` - este proyecto no cambia
+`DEBUG` en caliente.
+
 ## 8. Convenciones del proyecto
 
 - **snake_case en todo**: nombres de campos de Mongo (`id_dueno`,
