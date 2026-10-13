@@ -971,6 +971,85 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   `autorizacion_datos` queda guardado y `/cuentas/bienvenida/` ya
   responde 200.
 
+- **Punto 2 — concurrencia del servidor (RNF3/RNF7)**: diagnóstico -
+  `render.yaml` arrancaba `gunicorn config.wsgi:application` sin
+  `--workers`/`--threads`, es decir con el default de gunicorn (**1
+  worker sync**): procesa una sola petición a la vez. Mientras esa
+  única petición espera los hasta 5s de Nominatim o 4s de cada
+  suscripción de push (ver la auditoría RF/RNF anterior), el proceso
+  completo queda bloqueado para TODOS los demás usuarios, sin importar
+  cuántos haya.
+
+  **Antes de fijar los valores** (pedido explícito de la tarea):
+  - **`core/mongo.py` es seguro para hilos**: confirmado leyendo
+    directamente el docstring de `pymongo.synchronous.mongo_client.
+    MongoClient.__init__` instalado en este proyecto - *"The client
+    object is thread-safe and has connection-pooling built in."* El
+    cliente ya es un singleton a nivel de módulo (`get_client()`,
+    `_client` global) - nunca se crea uno nuevo por petición en ningún
+    archivo del proyecto (confirmado con una búsqueda de `MongoClient(`
+    en todo el código: una sola aparición, en `core/mongo.py`). Con
+    varios hilos compartiendo el mismo proceso, el pool de conexiones
+    de pymongo ya resuelve la concurrencia sin configuración adicional.
+  - **Memoria por worker**: no se pudo medir con `gunicorn` real (ver
+    más abajo), así que se midió un proxy realista - un proceso Python
+    que hace `django.setup()` completo (misma carga de apps/dependencias
+    que haría un worker de gunicorn: pymongo, cloudinary, pywebpush,
+    whitenoise, etc.) y atiende una petición, medido con `Get-Process`
+    de PowerShell (`WorkingSetSize`): **~77-87 MB** por proceso
+    (reproducido 3 veces con el mismo rango). Los *threads* de un mismo
+    worker NO multiplican esta memoria (comparten el mismo proceso); los
+    *workers* sí. Con `--workers 2`: ~2×85 MB + el proceso maestro de
+    gunicorn (unos pocos MB) ≈ **180-190 MB**, dentro del límite de
+    **512 MB** del plan gratuito de Render con margen (~320 MB) para el
+    resto del sistema operativo y picos de uso. `--threads 4` no suma a
+    esta cuenta.
+
+  **Valores elegidos**: `--workers 2 --threads 4 --worker-class gthread
+  --timeout 60`. 2 workers (no 1, no 4+) por el margen de memoria de
+  arriba - un tercer worker ya dejaría menos margen del que parece
+  prudente para un plan gratuito compartido con el resto del proceso.
+  4 threads por worker (gthread) para que una petición lenta (Nominatim/
+  push/Cloudinary) no bloquee a las demás DENTRO del mismo worker - el
+  cuello de botella real es de I/O esperando una red externa, no de CPU,
+  así que hilos (no más workers) es la herramienta correcta. `--timeout
+  60` (gunicorn mata y reinicia un worker si una petición tarda más de
+  esto) da margen de sobra sobre el peor caso conocido de este proyecto
+  (~9-10s con geocoding + push, medido más abajo), sin dejarlo
+  indefinido.
+
+  **Verificación en local - limitación encontrada**: `gunicorn` **no
+  puede correr en este Windows** - confirmado intentando ejecutar
+  literalmente el comando de la tarea (`gunicorn config.wsgi:application
+  --workers 2 --threads 4 --worker-class gthread --timeout 60`):
+  `ModuleNotFoundError: No module named 'fcntl'` (gunicorn importa
+  módulos exclusivos de Unix al arrancar, antes de leer un solo
+  argumento - es un servidor "WSGI HTTP Server for UNIX", según su
+  propio `pip show gunicorn`). No hay WSL ni Docker instalados en esta
+  máquina para correrlo en un Linux real.
+
+  Como alternativa LOCAL que sí se pudo ejecutar: se usó el
+  `runserver` de Django (que por defecto ya sirve con
+  `ThreadingMixIn` - hilos reales de Python, el mismo mecanismo de
+  fondo que `--worker-class gthread`), con
+  `incidentes.views_web.geocodificar_direccion` parcheado EN MEMORIA
+  (sin tocar el archivo) para tardar 5s siempre, simulando el peor caso
+  de Nominatim sin depender de la red real. Se dispararon dos peticiones
+  en paralelo contra un paseo de prueba `en_vivo`:
+
+  | Petición | Resultado | Tiempo |
+  |---|---|---|
+  | `POST .../incidentes/.../reportar/` (geocoding parcheado a 5s + subida real a Cloudinary + Web Push real al dueño) | 201 (incidente creado) | **9.84 s** |
+  | `GET /cuentas/login/`, disparada 0.3s después de la anterior | 200 | **0.008 s** |
+
+  La petición rápida NO esperó a la lenta (0.008s, no ~9-10s) - confirma
+  que los hilos resuelven el problema de fondo (una petición de I/O
+  lenta no bloquea a las demás), aunque esto prueba el mecanismo de
+  **hilos**, no literalmente `gunicorn --worker-class gthread` (que no
+  pudo ejecutarse en esta máquina). La verificación de que gunicorn en
+  sí se comporta igual queda pendiente de confirmar en Render (Linux
+  real) tras el despliegue de este cambio.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
