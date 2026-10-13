@@ -332,22 +332,56 @@
   `if ('wakeLock' in navigator)` - sin soporte (navegador viejo, o
   ninguno en absoluto), no hace nada; nunca lanza ni bloquea el resto de
   la página.
+
+  Diagnóstico de la caminata real del 13 oct (punto 3 del hallazgo): la
+  pantalla del iPhone se apagó a los ~5s con el modo de ahorro de
+  batería activado - sin saber si `wakeLock.request()` había fallado ahí
+  (o ni se había intentado), no se podía distinguir "no se pidió" de
+  "se pidió pero el SO lo rechazó/liberó". Se agrega, SIN cambiar el
+  comportamiento de arriba: un `console.log`/`console.warn` con el
+  resultado exacto (nombre y mensaje del error si falla), y un indicador
+  visible - "estado-wakelock" (solo existe en bienvenida_paseador.html,
+  de ahí el chequeo de null, mismo patrón que "estado-gps") - para que
+  la autora lo compruebe en su iPhone con y sin ahorro de batería.
   {% endcomment %}
   {% if id_paseo_en_vivo_del_paseador %}
   <script>
   (function () {
     var wakeLockActual = null;
 
+    function actualizarIndicador(texto) {
+      var el = document.getElementById('estado-wakelock');
+      if (el) {
+        el.textContent = 'Pantalla activa: ' + texto;
+      }
+    }
+
     function pedirWakeLock() {
       if (!('wakeLock' in navigator)) {
+        console.warn('[Canigo] navigator.wakeLock no existe en este navegador.');
+        actualizarIndicador('no disponible (navegador sin soporte)');
         return;
       }
       navigator.wakeLock.request('screen').then(function (lock) {
         wakeLockActual = lock;
-      }).catch(function () {
-        // Permiso denegado, pestaña no visible en este instante, o
-        // cualquier otro motivo - no es un error que deba interrumpir
-        // nada, el paseo sigue igual sin el wake lock.
+        console.log('[Canigo] wakeLock.request("screen") -> concedido.');
+        actualizarIndicador('sí');
+        lock.addEventListener('release', function () {
+          // El SO puede liberar el lock por su cuenta (poca batería,
+          // modo de ahorro de energía, etc.) sin que el JS haga nada -
+          // el indicador tiene que reflejar ese cambio tambien, no solo
+          // el resultado del pedido inicial.
+          console.warn('[Canigo] wakeLock liberado por el sistema (release).');
+          actualizarIndicador('no (el sistema lo liberó)');
+        });
+      }).catch(function (error) {
+        // Permiso denegado, pestaña no visible en este instante, modo
+        // de ahorro de batería de iOS, o cualquier otro motivo - no es
+        // un error que deba interrumpir nada, el paseo sigue igual sin
+        // el wake lock. Se registra el nombre/mensaje real para poder
+        // distinguir la causa (p.ej. "NotAllowedError").
+        console.warn('[Canigo] wakeLock.request("screen") falló:', error.name, error.message);
+        actualizarIndicador('no (' + error.name + ')');
       });
     }
 

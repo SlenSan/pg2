@@ -828,6 +828,38 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   etiqueta legible ("Otro", "Accidente del paseador", etc.), no el valor
   crudo.
 
+- **Punto 3 — pantalla apagada a los ~5s durante la caminata (iPhone,
+  Modo de Bajo Consumo activo)**: diagnóstico solicitado explícitamente
+  SIN cambiar comportamiento todavía, solo instrumentación de
+  diagnóstico. El wake lock (`navigator.wakeLock.request('screen')`,
+  ver más arriba) ya se pedía en esa pantalla - lo que faltaba era
+  cualquier forma de que la autora viera, desde su propio iPhone, si la
+  petición tuvo éxito o no. Se agregó: `console.log`/`console.warn` con
+  `error.name`/`error.message` en cada rama (éxito, sin soporte, rechazo
+  del navegador, liberación por el sistema vía el evento `release`), y
+  un indicador visible SOLO para el paseador en
+  `usuarios/templates/usuarios/bienvenida_paseador.html`
+  (`#estado-wakelock`, mismo patrón "buscar por id y actualizar si
+  existe" que ya usa `#estado-gps`): "Pantalla activa: sí" / "no
+  disponible (navegador sin soporte)" / "no (NombreDelError)" / "no (el
+  sistema lo liberó)".
+
+  **El Modo de Bajo Consumo de iOS puede hacer que el sistema operativo
+  NO honre un Wake Lock ya concedido** (lo libere por su cuenta, sin que
+  la página haga nada) - esto es una limitación de la plataforma, no
+  algo que este código pueda forzar; el indicador existe precisamente
+  para que la autora pueda comprobar en su propio teléfono, CON y SIN
+  Modo de Bajo Consumo activado, qué rama ocurre en la práctica.
+
+  **Verificado ejecutando**: en Chrome (headless, con soporte de Wake
+  Lock API), el indicador muestra correctamente "Pantalla activa: sí"
+  al conceder el lock. **Solo leído en código / pendiente de la propia
+  autora**: qué pasa específicamente en Safari de iOS con Modo de Bajo
+  Consumo activo - ningún entorno de prueba automatizado disponible
+  reproduce esa combinación exacta de plataforma + modo de energía; la
+  autora debe revisar el indicador en su iPhone con y sin ese modo
+  activado y reportar qué rama aparece.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

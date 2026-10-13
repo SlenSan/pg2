@@ -32,7 +32,17 @@
       {% csrf_token %}
       <button type="submit" class="btn btn-primary w-100">Finalizar paseo</button>
     </form>
-    <p class="text-muted small mt-2 mb-3" id="estado-gps">Compartiendo tu ubicación...</p>
+    <p class="text-muted small mt-2 mb-1" id="estado-gps">Compartiendo tu ubicación...</p>
+    {% comment %}
+    Indicador de wake lock (hallazgo de la caminata real, 13 oct - punto
+    3): solo visible para el paseador, mientras camina - lo actualiza el
+    script de base.html (bloque de wake lock, totalmente aparte del
+    emisor de GPS), con el mismo patrón de "buscar por id y actualizar
+    si existe" que ya usa "estado-gps". Arranca vacío (el script lo
+    llena apenas carga, no hay un estado "default" razonable antes de
+    eso).
+    {% endcomment %}
+    <p class="text-muted small mb-3" id="estado-wakelock"></p>
 
     {% if paseo_activo.mascotas_certificados %}
     <div class="mb-3">
