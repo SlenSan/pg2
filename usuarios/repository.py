@@ -31,8 +31,25 @@ def obtener_varios_por_id(ids):
     return mapear_por_id('usuarios', ids)
 
 
+# RNF1 / Ley 1581 de 2012 (cierre de auditoría, punto 1) - version del
+# TEXTO de /privacidad/ que la cuenta aceptó, no de este código. Si el
+# texto de la política cambia de forma sustancial en el futuro, subir
+# este numero (y el de core/templates/core/privacidad.html, que debe
+# decir lo mismo) para que las cuentas que ya aceptaron la version
+# anterior vuelvan a pasar por la pantalla de autorizacion.
+VERSION_POLITICA_PRIVACIDAD = '1.0'
+
+
 def crear_usuario(*, nombre, correo, contrasena_hash, telefono, rol, direccion='', descripcion=''):
-    """Inserta un usuario nuevo. `rol` debe ser 'dueño' o 'paseador'."""
+    """Inserta un usuario nuevo. `rol` debe ser 'dueño' o 'paseador'.
+
+    `autorizacion_datos` (RNF1/Ley 1581, cierre de auditoría punto 1) se
+    guarda SIEMPRE aca - el registro ya exige la casilla marcada
+    (`_RegistroBaseForm.acepta_tratamiento_datos`, required=True), asi que
+    toda cuenta NUEVA la tiene desde el momento en que se crea. Las
+    cuentas que ya existian de antes de este punto NO la tienen hasta que
+    pasan por la pantalla intermedia (ver aceptar_autorizacion_datos()).
+    """
     usuario = {
         'nombre': nombre,
         'correo': correo,
@@ -42,6 +59,10 @@ def crear_usuario(*, nombre, correo, contrasena_hash, telefono, rol, direccion='
         'foto_perfil': '',
         'direccion': direccion,
         'fecha_registro': datetime.now(timezone.utc),
+        'autorizacion_datos': {
+            'fecha': datetime.now(timezone.utc),
+            'version': VERSION_POLITICA_PRIVACIDAD,
+        },
     }
     if rol == 'paseador':
         usuario.update({
@@ -58,6 +79,22 @@ def crear_usuario(*, nombre, correo, contrasena_hash, telefono, rol, direccion='
 def actualizar_calificacion_promedio(id_paseador, promedio):
     oid = id_paseador if isinstance(id_paseador, ObjectId) else ObjectId(id_paseador)
     get_db().usuarios.update_one({'_id': oid}, {'$set': {'calificacion_promedio': promedio}})
+
+
+def aceptar_autorizacion_datos(id_usuario):
+    """
+    RNF1/Ley 1581 (cierre de auditoría, punto 1) - pantalla intermedia
+    para una cuenta que ya existía de antes y todavía no tiene
+    `autorizacion_datos`. No toca ningún otro campo del usuario.
+    """
+    oid = id_usuario if isinstance(id_usuario, ObjectId) else ObjectId(id_usuario)
+    get_db().usuarios.update_one(
+        {'_id': oid},
+        {'$set': {'autorizacion_datos': {
+            'fecha': datetime.now(timezone.utc),
+            'version': VERSION_POLITICA_PRIVACIDAD,
+        }}},
+    )
 
 
 def actualizar_perfil_paseador(*, id_usuario, telefono, descripcion, foto_perfil):

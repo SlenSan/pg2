@@ -63,6 +63,20 @@ class _RegistroBaseForm(forms.Form):
         label='Confirmar contraseña',
         widget=forms.PasswordInput(attrs={'class': _INPUT_CLASS}),
     )
+    # RNF1 / Ley 1581 de 2012 (cierre de auditoría, punto 1) - BooleanField
+    # con required=True ya rechaza el envío en el BACKEND si la casilla no
+    # viene marcada (no depende del atributo HTML "required", que se puede
+    # quitar con las herramientas de desarrollador - Django valida esto del
+    # lado del servidor sin importar qué llegó del navegador). El texto
+    # real (con el link a /privacidad/) se escribe a mano en el template,
+    # no en `label`, porque `label` no permite HTML.
+    acepta_tratamiento_datos = forms.BooleanField(
+        required=True,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        error_messages={
+            'required': 'Debes aceptar la política de tratamiento de datos personales para continuar.',
+        },
+    )
 
     def clean_telefono(self):
         return _validar_telefono_colombiano(self.cleaned_data.get('telefono', ''))
@@ -180,4 +194,23 @@ class LoginForm(forms.Form):
     contrasena = forms.CharField(
         label='Contraseña',
         widget=forms.PasswordInput(attrs={'class': _INPUT_CLASS}),
+    )
+
+
+class AutorizacionDatosForm(forms.Form):
+    """
+    Pantalla intermedia para cuentas que ya existían antes de este punto
+    (cierre de auditoría, punto 1 - RNF1/Ley 1581) y que todavía no tienen
+    `usuarios.autorizacion_datos`. Mismo campo y mismo mensaje de error que
+    `_RegistroBaseForm.acepta_tratamiento_datos`, pero como formulario
+    propio: esta pantalla no vuelve a pedir nombre/correo/contraseña, solo
+    la autorización.
+    """
+
+    acepta_tratamiento_datos = forms.BooleanField(
+        required=True,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        error_messages={
+            'required': 'Debes aceptar la política de tratamiento de datos personales para continuar.',
+        },
     )

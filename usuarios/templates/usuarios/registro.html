@@ -79,11 +79,25 @@
   <div class="alert alert-danger">{{ form.non_field_errors }}</div>
   {% endif %}
 
+  {% comment %}
+  RNF1/Ley 1581 (cierre de auditoría, punto 1) - reemplaza la frase
+  decorativa que había antes aquí ("aceptas los Términos de servicio..."),
+  que no tenía ninguna casilla real ni validación de backend detrás. El
+  texto del checkbox se escribe a mano (no "{{ form.acepta_tratamiento_
+  datos.label }}") porque Django no permite HTML dentro de `label`.
+  {% endcomment %}
+  <div class="form-check mb-3">
+    {{ form.acepta_tratamiento_datos }}
+    <label class="form-check-label small" for="{{ form.acepta_tratamiento_datos.id_for_label }}">
+      Leí y acepto la <a href="{% url 'privacidad' %}" target="_blank" rel="noopener">Política de tratamiento de datos personales</a>
+      y autorizo el tratamiento de mis datos para las finalidades allí descritas.
+    </label>
+    {% for error in form.acepta_tratamiento_datos.errors %}
+    <div class="text-danger small mt-1">{{ error }}</div>
+    {% endfor %}
+  </div>
+
   <button type="submit" class="btn btn-primary w-100">Crear cuenta gratis</button>
-  <p class="text-muted small mt-3 mb-0 text-center">
-    Al crear tu cuenta aceptas los Términos de servicio y la Política de
-    privacidad de Canigo.
-  </p>
 </form>
 
 {% comment %}

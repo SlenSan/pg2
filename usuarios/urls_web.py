@@ -8,6 +8,7 @@ urlpatterns = [
     path('registro/', views_web.registro, name='registro'),
     path('login/', views_web.login, name='login'),
     path('logout/', views_web.logout, name='logout'),
+    path('autorizacion-datos/', views_web.autorizar_datos, name='autorizar_datos'),
     path('bienvenida/', views_web.bienvenida, name='bienvenida'),
     path('bienvenida/estado/', views_web.estado_bienvenida, name='estado_bienvenida'),
     path('paseador/bienvenida/', views_web.bienvenida_paseador, name='bienvenida_paseador'),

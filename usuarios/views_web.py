@@ -30,9 +30,10 @@ from notificaciones import repository as notificaciones_repository
 from paseos import repository as paseos_repository
 from paseos.forms import PublicarHorarioForm
 from usuarios import repository
-from usuarios.decorators import URL_DASHBOARD_POR_ROL, requiere_dueno, requiere_paseador
+from usuarios.decorators import URL_DASHBOARD_POR_ROL, requiere_autenticacion, requiere_dueno, requiere_paseador
 from usuarios.forms import (
     TIPO_PRIMEROS_AUXILIOS,
+    AutorizacionDatosForm,
     CertificadoPaseadorForm,
     EditarPerfilPaseadorForm,
     LoginForm,
@@ -214,6 +215,38 @@ def logout(request):
     """
     request.session.flush()
     return redirect('home')
+
+
+@requiere_autenticacion
+def autorizar_datos(request):
+    """
+    RNF1/Ley 1581 de 2012 (cierre de auditoría, punto 1) - pantalla
+    intermedia para una cuenta que ya existía ANTES de este punto y que
+    todavía no tiene `usuarios.autorizacion_datos` (una cuenta nueva ya
+    la tiene desde que se registra - ver repository.crear_usuario() - así
+    que nunca pasa por aquí).
+
+    core.middleware.ExigirAutorizacionDatosMiddleware redirige aquí a
+    cualquier sesión autenticada sin autorización, para CUALQUIER otra
+    ruta - esta vista es una de las pocas que ese middleware deja pasar
+    sin redirigir. Si por algun motivo esta cuenta YA tiene la sesión
+    marcada como autorizada (por ejemplo, abrió esta pantalla en dos
+    pestañas y ya la aceptó en la otra), no tiene sentido pedírsela de
+    nuevo - se manda directo a su dashboard.
+    """
+    if request.session.get('autorizacion_datos_ok'):
+        return redirect(_url_dashboard(request.session.get('rol')))
+
+    if request.method == 'POST':
+        form = AutorizacionDatosForm(request.POST)
+        if form.is_valid():
+            repository.aceptar_autorizacion_datos(request.session['id_usuario'])
+            request.session['autorizacion_datos_ok'] = True
+            return redirect(_url_dashboard(request.session.get('rol')))
+    else:
+        form = AutorizacionDatosForm()
+
+    return render(request, 'usuarios/autorizar_datos.html', {'form': form})
 
 
 def _paseo_activo_dueno(id_dueno, paseos_dueno=None):
@@ -691,3 +724,10 @@ def _iniciar_sesion(request, usuario):
     # login (se trata como "no admin" mientras tanto, nunca como admin
     # por error).
     request.session['correo'] = usuario['correo']
+    # RNF1/Ley 1581 (cierre de auditoría, punto 1) - mismo criterio que
+    # "correo" arriba: se guarda en sesion para que
+    # core.middleware.ExigirAutorizacionDatosMiddleware no necesite una
+    # consulta a Mongo en CADA peticion autenticada. Se actualiza a True
+    # en el momento en que la cuenta acepta (ver autorizar_datos() mas
+    # abajo), sin esperar al proximo login.
+    request.session['autorizacion_datos_ok'] = bool(usuario.get('autorizacion_datos'))

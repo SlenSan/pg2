@@ -27,6 +27,10 @@ urlpatterns = [
     # el motivo (alcance del service worker, start_url del manifest).
     path('manifest.webmanifest', core_views.manifest, name='manifest'),
     path('sw.js', core_views.service_worker, name='service_worker'),
+    # RNF1/Ley 1581 (cierre de auditoría, punto 1) - en la RAIZ (no bajo
+    # /cuentas/ ni ninguna otra app) porque se enlaza desde el pie de
+    # pagina de TODAS las pantallas, con y sin sesion.
+    path('privacidad/', core_views.privacidad, name='privacidad'),
     path('', usuarios_views_web.seleccionar_rol, name='home'),
     path('cuentas/', include('usuarios.urls_web')),
     path('mascotas/', include('mascotas.urls')),

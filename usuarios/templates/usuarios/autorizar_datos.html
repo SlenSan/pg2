@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Autorización de datos — Canigo{% endblock %}
+
+{% comment %}
+RNF1/Ley 1581 (cierre de auditoría, punto 1) - navbar propio, SIN los
+links normales del dashboard: mientras esta cuenta no acepte, lo único
+que puede hacer es ver esta pantalla o cerrar sesión (el middleware
+redirige de vuelta aquí si intenta cualquier otra ruta, pero el navbar
+tampoco le ofrece esas rutas para no generar confusión).
+{% endcomment %}
+{% block navbar %}
+<nav class="navbar navbar-dark bg-primary">
+  <div class="container d-flex justify-content-between">
+    <span class="navbar-brand mb-0">🐾 Canigo</span>
+    <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-7 col-lg-6">
+    <div class="card">
+      <div class="card-body p-4">
+        <h1 class="h4 mb-3">Antes de continuar</h1>
+        <p class="text-muted">
+          Esta cuenta se creó antes de que Canigo pidiera esta autorización.
+          Para seguir usando la plataforma, necesitamos que la aceptes.
+        </p>
+
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <div class="form-check mb-3">
+            {{ form.acepta_tratamiento_datos }}
+            <label class="form-check-label" for="{{ form.acepta_tratamiento_datos.id_for_label }}">
+              Leí y acepto la <a href="{% url 'privacidad' %}" target="_blank" rel="noopener">Política de tratamiento de datos personales</a>
+              y autorizo el tratamiento de mis datos para las finalidades allí descritas.
+            </label>
+            {% for error in form.acepta_tratamiento_datos.errors %}
+            <div class="text-danger small mt-1">{{ error }}</div>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Aceptar y continuar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

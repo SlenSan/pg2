@@ -73,6 +73,19 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
   foto_perfil: String,
   direccion: String,
   fecha_registro: Date,
+  autorizacion_datos: {           // RNF1, Ley 1581 de 2012 (cierre de auditoría, punto 1) - una
+                                    // cuenta NUEVA lo tiene desde que se registra (casilla
+                                    // obligatoria, rechazada en el backend si no viene marcada);
+                                    // una cuenta de ANTES de este punto no lo tiene hasta que pasa
+                                    // por la pantalla intermedia /cuentas/autorizacion-datos/ (ver
+                                    // usuarios.decorators - en realidad core.middleware.
+                                    // ExigirAutorizacionDatosMiddleware - que la redirige ahí para
+                                    // CUALQUIER ruta mientras falte este campo)
+    fecha: Date,                   // UTC, momento en que se aceptó (el de la cuenta nueva o el de
+                                    // la pantalla intermedia, lo que haya pasado)
+    version: String                // versión del TEXTO de /privacidad/ que se aceptó (ver
+                                    // usuarios.repository.VERSION_POLITICA_PRIVACIDAD) - "1.0"
+  },
   calificacion_promedio: Number,  // solo rol=paseador
   verificado: Boolean,             // solo rol=paseador
   descripcion: String              // solo rol=paseador

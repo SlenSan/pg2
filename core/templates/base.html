@@ -134,6 +134,13 @@
         <div>Slendy Sireth Rojas Sandoval</div>
         <div>Trabajo presentado como requisito para optar al título de Ingeniera de Sistemas</div>
         <div>Universidad de Investigación y Desarrollo (UDI) &middot; {% now "Y" %}</div>
+        {% comment %}
+        RNF1/Ley 1581 (cierre de auditoría, punto 1) - en el mismo footer
+        de arriba (fuera de {% block body %}, ver el comentario de
+        arriba) para que aparezca en TODAS las pantallas, con y sin
+        sesión, sin tocar cada plantilla por separado.
+        {% endcomment %}
+        <div><a href="{% url 'privacidad' %}">Política de tratamiento de datos personales</a></div>
       </div>
     </div>
   </footer>

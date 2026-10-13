@@ -2,6 +2,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render
 
 from pymongo.errors import PyMongoError
 
@@ -49,6 +50,18 @@ def service_worker(request):
         content_type='application/javascript',
         headers={'Cache-Control': 'no-cache'},
     )
+
+
+def privacidad(request):
+    """
+    RNF1/Ley 1581 de 2012 (cierre de auditoría, punto 1) - página pública
+    (sin sesión requerida: hay que poder leerla ANTES de aceptarla, tanto
+    desde el registro como desde la pantalla intermedia de
+    usuarios.views_web.autorizar_datos). El texto vive entero en el
+    template (core/templates/core/privacidad.html) - esta vista no agrega
+    ni calcula nada, solo lo renderiza.
+    """
+    return render(request, 'core/privacidad.html')
 
 
 def _db_status(request):

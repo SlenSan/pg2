@@ -900,6 +900,77 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   oculta, confirmando el `zoomend`. Puntos de prueba borrados de
   `canigo_dev` al terminar.
 
+**Cierre de auditoría antes del enlace a usuarios (14 de octubre)**:
+
+- **Punto 1 — autorización de tratamiento de datos (RNF1, Ley 1581 de
+  2012)**: diagnóstico - la auditoría anterior confirmó 0 resultados
+  para "1581"/"tratamiento de datos"/"política de privacidad" en todo el
+  proyecto; el único texto relacionado era una frase decorativa sin
+  casilla ni validación real en `registro.html` ("aceptas los Términos
+  de servicio..."). Se reemplazó por una casilla real:
+  `usuarios.forms._RegistroBaseForm.acepta_tratamiento_datos`
+  (`BooleanField(required=True)`) - Django rechaza el `POST` en el
+  BACKEND si no viene marcada, sin importar el atributo `required` del
+  HTML (que se puede quitar con las herramientas de desarrollador). El
+  texto con el link a `/privacidad/` se escribe a mano en el template
+  (no en `label`, que no admite HTML).
+
+  `usuarios.repository.crear_usuario()` guarda
+  `autorizacion_datos: {fecha, version}` en TODA cuenta nueva (la
+  casilla ya es obligatoria, así que esto nunca queda sin valor para un
+  registro nuevo). `VERSION_POLITICA_PRIVACIDAD = '1.0'` vive en
+  `usuarios/repository.py` - si el texto de `/privacidad/` cambia de
+  forma sustancial en el futuro, subir ese número (y el mismo número en
+  el `<h1>` de `core/templates/core/privacidad.html`) hace que las
+  cuentas que ya aceptaron la versión anterior vuelvan a pasar por la
+  pantalla de autorización.
+
+  **Cuentas que ya existían de antes de este punto** (sin
+  `autorizacion_datos`): `core.middleware.ExigirAutorizacionDatosMiddleware`
+  (nuevo, al final de `MIDDLEWARE`, junto a
+  `NoCacheParaAutenticadosMiddleware`) redirige CUALQUIER request
+  autenticado sin `request.session['autorizacion_datos_ok']` a
+  `usuarios:autorizar_datos`, sin importar qué ruta pedía - lista blanca
+  de solo 5 rutas (la propia pantalla, logout, `/privacidad/`, manifest
+  y service worker). `autorizacion_datos_ok` se guarda en sesión en
+  `_iniciar_sesion()` (mismo patrón que `correo` para
+  `requiere_admin()`) para no consultar Mongo en cada request - se
+  actualiza a `True` en el momento en que la cuenta acepta, sin esperar
+  al próximo login. La vista `usuarios.views_web.autorizar_datos()` NO
+  borra ni modifica ningún otro dato de la cuenta, solo agrega el campo.
+
+  **`/privacidad/`** (`core.views.privacidad`, pública, sin sesión
+  requerida - hay que poder leerla antes de aceptar): usa el texto
+  EXACTO de la tarea, sin agregar afirmaciones legales propias.
+  Discrepancias encontradas y reportadas, sin cambiar el texto pedido:
+  (a) "contraseña (guardada cifrada)" - técnicamente el sistema la
+  guarda con **hash** (PBKDF2-SHA256, irreversible), no con cifrado
+  reversible; es una imprecisión del texto dado, no del código. (b) el
+  placeholder `[FECHA DE ELIMINACIÓN QUE DEFINA LA AUTORA]` se dejó
+  **literal**, tal como pidió la tarea - falta que la autora defina esa
+  fecha. El resto del texto (datos recogidos, finalidades, 90 días de
+  retención de `coordenadas_detalle` - confirmado que el índice TTL real
+  de `crear_indices.py` usa exactamente ese valor -, terceros
+  MongoDB/Cloudinary/Render, derechos, edad) coincide con el sistema
+  real.
+
+  Link a `/privacidad/` agregado al pie de página de `base.html`, FUERA
+  de `{% block body %}` (mismo lugar que el resto del footer) - aparece
+  en toda pantalla, con y sin sesión, sin tocar cada plantilla por
+  separado.
+
+  **Verificado ejecutando** (`canigo_dev`, cuentas `@canigo.test`
+  creadas y borradas en la misma prueba): registro sin marcar la casilla
+  → 400 renderizado de nuevo con el mensaje de error, cuenta NO creada;
+  registro marcándola → cuenta creada con `autorizacion_datos` guardado
+  en Mongo. Cuenta sembrada manualmente SIN `autorizacion_datos`
+  (simulando una cuenta de antes de este punto): login → redirige a
+  `/cuentas/autorizacion-datos/`; intento de ir directo a
+  `/cuentas/bienvenida/` → rebotado de vuelta a la misma pantalla;
+  "Cerrar sesión" → funciona (302); tras aceptar la casilla →
+  `autorizacion_datos` queda guardado y `/cuentas/bienvenida/` ya
+  responde 200.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

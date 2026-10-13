@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Política de tratamiento de datos personales — Canigo{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+    <h1 class="h4 mb-4">Política de tratamiento de datos personales de Canigo (versión 1.0)</h1>
+
+    {% comment %}
+    Texto EXACTO pedido por la tarea (cierre de auditoría, punto 1) - no
+    se agregó ninguna afirmación legal propia. El placeholder de
+    "Vigencia" se deja literal a proposito (ver MANUAL_DESARROLLADOR.md,
+    punto 1: la autora todavia no definio esa fecha).
+    {% endcomment %}
+
+    <h2 class="h6 fw-bold mt-4">Responsable.</h2>
+    <p>
+      Canigo es un prototipo desarrollado como proyecto de grado del programa de
+      Ingeniería de Sistemas de la Universidad de Investigación y Desarrollo (UDI), en
+      Bucaramanga. La responsable del tratamiento es Slendy Sireth Rojas Sandoval.
+      Contacto: <a href="mailto:srojas13@udi.edu.co">srojas13@udi.edu.co</a>.
+    </p>
+
+    <h2 class="h6 fw-bold mt-4">Datos que se recogen.</h2>
+    <ul>
+      <li>De tu cuenta: nombre, correo electrónico, teléfono, contraseña (guardada cifrada) y, si la indicas, tu dirección.</li>
+      <li>De tus mascotas: sus datos, fotos y certificados.</li>
+      <li>Si eres paseador: tus certificados.</li>
+      <li>Durante un paseo: la ubicación del paseador mientras el paseo está en curso, las fotos del paseo, los incidentes reportados y las calificaciones.</li>
+    </ul>
+
+    <h2 class="h6 fw-bold mt-4">Finalidades.</h2>
+    <ul>
+      <li>Prestar las funciones de la plataforma: registro, búsqueda de paseadores, inscripción y seguimiento de paseos, notificaciones, reporte de incidentes y calificaciones.</li>
+      <li>Evaluar el prototipo con fines académicos. Los resultados del proyecto se presentan de forma agregada, sin identificar a las personas.</li>
+    </ul>
+
+    <h2 class="h6 fw-bold mt-4">Almacenamiento.</h2>
+    <p>
+      Los datos se almacenan en servicios de terceros (MongoDB Atlas, Cloudinary y
+      Render), cuyos servidores pueden estar fuera de Colombia. Al aceptar esta
+      política autorizas esa transferencia. Los puntos de ubicación de los paseos se
+      eliminan automáticamente después de unos 90 días.
+    </p>
+
+    <h2 class="h6 fw-bold mt-4">Tus derechos.</h2>
+    <p>
+      De acuerdo con la Ley 1581 de 2012, puedes conocer, actualizar y rectificar tus
+      datos, solicitar que se eliminen y revocar esta autorización. Para hacerlo,
+      escribe a <a href="mailto:srojas13@udi.edu.co">srojas13@udi.edu.co</a>.
+    </p>
+
+    <h2 class="h6 fw-bold mt-4">Edad.</h2>
+    <p>La plataforma es solo para mayores de 18 años.</p>
+
+    <h2 class="h6 fw-bold mt-4">Vigencia.</h2>
+    <p>
+      Los datos se conservan mientras dure la evaluación del prototipo y, como
+      máximo, hasta [FECHA DE ELIMINACIÓN QUE DEFINA LA AUTORA].
+    </p>
+  </div>
+</div>
+{% endblock %}
