@@ -36,6 +36,18 @@ def _validar_telefono_colombiano(telefono):
     return telefono
 
 
+def _normalizar_correo(correo):
+    """
+    Cierre de auditoría, punto 3 (RF1) - "Test@x.com" y "test@x.com" ya
+    no deben poder quedar como dos cuentas distintas. Única función que
+    hace esta normalización (reusada por RegistroBaseForm y LoginForm,
+    los dos lugares donde un correo escrito a mano entra al sistema) -
+    mismo criterio que usuarios.decorators.es_correo_admin(), que ya
+    normalizaba así desde antes de este punto.
+    """
+    return (correo or '').strip().lower()
+
+
 class _RegistroBaseForm(forms.Form):
     """Campos comunes a los dos roles. dueño y paseador comparten la misma
     plataforma web (ver CLAUDE.md) — solo cambia si se pide `descripcion`."""
@@ -77,6 +89,9 @@ class _RegistroBaseForm(forms.Form):
             'required': 'Debes aceptar la política de tratamiento de datos personales para continuar.',
         },
     )
+
+    def clean_correo(self):
+        return _normalizar_correo(self.cleaned_data.get('correo'))
 
     def clean_telefono(self):
         return _validar_telefono_colombiano(self.cleaned_data.get('telefono', ''))
@@ -195,6 +210,9 @@ class LoginForm(forms.Form):
         label='Contraseña',
         widget=forms.PasswordInput(attrs={'class': _INPUT_CLASS}),
     )
+
+    def clean_correo(self):
+        return _normalizar_correo(self.cleaned_data.get('correo'))
 
 
 class AutorizacionDatosForm(forms.Form):

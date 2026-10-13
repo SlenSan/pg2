@@ -6,6 +6,7 @@ solo lee y escribe documentos en la coleccion `usuarios`, siguiendo el
 esquema definido en el documento de grado.
 """
 
+import re
 from datetime import datetime, timezone
 
 from bson import ObjectId
@@ -15,7 +16,30 @@ from core.mongo import get_db, mapear_por_id
 
 
 def obtener_por_correo(correo):
-    return get_db().usuarios.find_one({'correo': correo})
+    """
+    Cierre de auditoría, punto 3 (RF1) - `correo` ya llega normalizado
+    (`.strip().lower()`) desde `usuarios.forms` (RegistroBaseForm/
+    LoginForm), y toda cuenta NUEVA se guarda así (ver crear_usuario) -
+    el match exacto de abajo alcanza para esos casos y usa el índice
+    único `correo_1` sin problema.
+
+    El `find_one` de respaldo (solo si el primero no encontró nada) es
+    para una cuenta que ya existía ANTES de este punto, guardada con
+    mayúsculas - no se migraron esos documentos (la tarea pidió
+    reportar la lectura, no ejecutar el `update_many` - ver
+    MANUAL_DESARROLLADOR.md), así que el login de una cuenta así
+    necesita encontrarla igual. `re.escape()` evita que un correo con
+    caracteres especiales de regex (poco probable, pero technically
+    valido en un EmailField) rompa el patrón. Este segundo intento NO
+    usa el índice (un regex case-insensitive no puede), pero solo se
+    ejecuta cuando el primero falla - no en el camino común.
+    """
+    correo_normalizado = (correo or '').strip().lower()
+    usuario = get_db().usuarios.find_one({'correo': correo_normalizado})
+    if usuario:
+        return usuario
+    patron = f'^{re.escape(correo_normalizado)}$'
+    return get_db().usuarios.find_one({'correo': {'$regex': patron, '$options': 'i'}})
 
 
 def obtener_por_id(id_usuario):

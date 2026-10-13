@@ -1050,6 +1050,66 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   sí se comporta igual queda pendiente de confirmar en Render (Linux
   real) tras el despliegue de este cambio.
 
+- **Punto 3 — correo sin distinguir mayúsculas (RF1)**: diagnóstico -
+  la auditoría anterior ya había confirmado que `obtener_por_correo()`
+  hacía un match exacto (sensible a mayúsculas) y que el índice único
+  `correo_1` no tiene collation (comparación binaria de Mongo, también
+  sensible a mayúsculas). `usuarios.decorators.es_correo_admin()` y
+  `settings.CANIGO_ADMIN_EMAILS` **ya normalizaban** con
+  `.strip().lower()` desde antes de este punto - no necesitaron cambio.
+
+  Se agregó `usuarios.forms._normalizar_correo()` (única función que
+  hace `.strip().lower()`, reusada por los dos formularios donde un
+  correo escrito a mano entra al sistema) y `clean_correo()` en
+  `_RegistroBaseForm` (cubre registro Y el "prellenado" de
+  `request.session['correo_prellenado']`, que sale de
+  `form.cleaned_data['correo']` ya normalizado) y en `LoginForm`.
+
+  **Cuentas existentes guardadas con mayúsculas**: la tarea pidió
+  **solo lectura** - reportar sin modificar. Resultado contra
+  `canigo` (producción, `find`/`count_documents` únicamente, ninguna
+  escritura): de **8 usuarios totales**, **0 correos con alguna
+  mayúscula** y **0 grupos de correos duplicados que solo difieran en
+  mayúsculas**. No hace falta ningún `update_many` en la práctica - la
+  base de producción ya está limpia en este aspecto. Si en el futuro
+  apareciera alguno, el `update_many` propuesto (NO ejecutado) sería:
+  ```python
+  for doc in db.usuarios.find({'correo': {'$regex': '[A-Z]'}}):
+      db.usuarios.update_one(
+          {'_id': doc['_id']},
+          {'$set': {'correo': doc['correo'].strip().lower()}},
+      )
+  ```
+  uno por uno (no un `update_many` con pipeline a secas) porque primero
+  habría que resolver a mano cualquier grupo que quedara duplicado al
+  normalizar (dos cuentas reales con el mismo correo en distinta
+  mayúscula) - el índice único `correo_1` rechazaría el segundo
+  `update_one` de un grupo así, lo cual es la señal correcta de que esa
+  cuenta necesita revisión manual antes de normalizarla.
+
+  Como la base de datos actual no tiene ningún caso, **y** el login ya
+  funciona para una cuenta vieja con mayúsculas gracias al fallback de
+  `obtener_por_correo()` (ver abajo), no hay urgencia de ejecutar esto -
+  queda documentado para el día en que sí aparezca alguno.
+
+  **`obtener_por_correo()` ahora intenta primero un match exacto sobre
+  el correo normalizado** (usa el índice, cubre toda cuenta nueva y
+  cualquier cuenta vieja que ya esté en minúscula) **y, solo si ese
+  falla, un `$regex` case-insensitive** (`^correo_escapado$`, con
+  `re.escape()` para evitar inyección de regex) - cubre una cuenta vieja
+  guardada con mayúsculas sin necesitar la migración de arriba. El
+  segundo intento no usa el índice, pero solo corre cuando el primero no
+  encontró nada - no afecta el camino común (cuenta ya en minúscula).
+
+  **Verificado ejecutando** (`canigo_dev`, cuentas `@canigo.test`
+  creadas y borradas en la misma prueba): registro con el correo en
+  MAYÚSCULAS → se guarda en minúscula; un segundo registro con OTRA
+  variante de mayúsculas del mismo correo → rechazado como duplicado;
+  una cuenta sembrada manualmente con el correo en mayúsculas
+  (simulando una cuenta vieja, sin pasar por el formulario) → el login
+  escribiendo el correo en minúscula la encuentra y entra
+  correctamente.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
