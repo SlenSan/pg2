@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load l10n %}
 
 {% block title %}Detalle del incidente — Canigo{% endblock %}
 
@@ -42,7 +43,7 @@
       {% if incidente.direccion_aproximada %}
         {{ incidente.direccion_aproximada }}
       {% elif incidente.latitud and incidente.longitud %}
-        {{ incidente.latitud }}, {{ incidente.longitud }}
+        {{ incidente.latitud|unlocalize }}, {{ incidente.longitud|unlocalize }}
       {% else %}
         no disponible
       {% endif %}
@@ -80,7 +81,20 @@
   // Mapa estatico de un solo punto (el incidente ya ocurrió, no hay
   // nada que actualizar con polling - a diferencia de
   // coordenadas/templates/coordenadas/mapa.html).
-  var punto = [{{ incidente.latitud }}, {{ incidente.longitud }}];
+  //
+  // INC-05 (13 oct, hallazgo de la caminata real): sin "|unlocalize",
+  // Django renderiza un decimal con COMA en locale es-co (LANGUAGE_CODE
+  // de este proyecto) - "7.1201" salía como "7,1201", así que esta
+  // línea quedaba literalmente "var punto = [7,1201, -73,1235];": un
+  // array de 4 números (7, 1201, -73, 1235), no de 2. L.map().setView()
+  // con eso arma una vista inválida, que nunca llega a pedir tiles
+  // reales - de ahí el mapa gris con solo la atribución por defecto de
+  // Leaflet (sin "OpenStreetMap", porque el tileLayer nunca se terminó
+  // de agregar bien). mapa.html no tenía este bug porque sus
+  // coordenadas llegan por un fetch a JSON (coordenadas_de_paseo), que
+  // nunca pasa por el localizador de plantillas de Django - este
+  // archivo es el ÚNICO que interpola un número crudo directo en JS.
+  var punto = [{{ incidente.latitud|unlocalize }}, {{ incidente.longitud|unlocalize }}];
   var mapa = L.map('mapa-incidente').setView(punto, 16);
   L.tileLayer('https://{s}.tile.openstreetmap.de/{z}/{x}/{y}.png', {
     maxZoom: 19,

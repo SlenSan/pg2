@@ -760,6 +760,44 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   `usuarios.decorators.es_correo_admin(correo)` como ÚNICA fuente de
   verdad, reusada por los dos.
 
+**Hallazgos de la caminata real del 13 de octubre (iPhone como paseadora)**:
+
+- **INC-05 — mapa gris en el detalle de un incidente**: diagnóstico -
+  `incidentes/templates/incidentes/detalle.html` interpola
+  `{{ incidente.latitud }}`/`{{ incidente.longitud }}` directo dentro de
+  un `<script>` para armar `var punto = [lat, lon];`. Con
+  `LANGUAGE_CODE = 'es-co'` y `USE_I18N = True` (`config/settings.py`),
+  Django renderiza un decimal con **coma**, no punto (`7.1201` sale como
+  `7,1201`) - confirmado aislado con
+  `Template('{{ v }}').render(Context({'v': 7.1201}))` antes de tocar
+  ningún archivo del proyecto. Eso deja la línea como `var punto =
+  [7,1201, -73,1235];`: un array de **4** números, no de 2 -
+  `L.map().setView()` arma una vista inválida que nunca llega a pedir
+  tiles reales, de ahí el mapa gris con la atribución por defecto de
+  Leaflet sola (sin "© OpenStreetMap", porque el `tileLayer` nunca
+  terminó de agregarse bien). `coordenadas/templates/coordenadas/
+  mapa.html` NO tiene este bug porque sus coordenadas llegan por un
+  `fetch` a JSON (`coordenadas_de_paseo`), que nunca pasa por el
+  localizador de plantillas de Django - `detalle.html` es el único
+  archivo del proyecto que interpola un número crudo directo dentro de
+  un `<script>`. Fix: `{% load l10n %}` + el filtro `|unlocalize` en las
+  dos coordenadas de esa línea (y en el texto de respaldo "Dirección
+  aproximada" cuando no hay geocodificación, por consistencia, aunque
+  ese caso no rompía nada por no estar dentro de un `<script>`). Si se
+  interpola cualquier número de Mongo directo dentro de un `<script>` en
+  cualquier plantilla nueva, necesita el mismo cuidado - mismo tipo de
+  bug que el de zonas horarias (ver más abajo), otra forma en la que
+  Django "ayuda" de más y rompe algo que no era texto para humanos.
+
+  **Verificado ejecutando**: antes del fix (reproducido con `git stash`
+  sobre el archivo, re-probado y revertido) - 0 tiles cargados
+  (`leaflet-tile-loaded`), atribución solo `"Leaflet"` (sin
+  OpenStreetMap), 0 marcadores. Después del fix - 6 tiles cargados,
+  atribución `"Leaflet | © OpenStreetMap contributors"`, 1 marcador.
+  Confirmado también contra el incidente real de producción
+  `6ace7d2ae08c8c415ba12dc1` en modo lectura (sin escribir nada), una
+  vez desplegado el fix.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
