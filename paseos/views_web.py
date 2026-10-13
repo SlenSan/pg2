@@ -23,7 +23,7 @@ from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository
 from paseos.forms import InscribirMascotaForm, PublicarHorarioForm, SubirFotoPaseoForm
-from paseos.repository import MAXIMO_MASCOTAS_POR_PASEO, ZONAS_VALIDAS
+from paseos.repository import MAXIMO_MASCOTAS_POR_PASEO, ZONAS_VALIDAS, ZONAS_VALIDAS_CON_NUMERO, etiqueta_zona
 from usuarios import repository as usuarios_repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
 from usuarios.forms import TIPO_PRIMEROS_AUXILIOS
@@ -69,19 +69,45 @@ def lista_disponibles(request):
     repetido) - se agrupa por paseador, y el detalle de cada horario se
     ve al entrar a su perfil.
 
-    Filtro por zona (?zona=...): un paseador con VARIOS horarios (algunos
-    en la zona elegida, otros no, o sin zona) sigue apareciendo en la
-    lista filtrada - "aparece si tiene al menos un horario que califica",
-    confirmado explicitamente antes de programar esto. Se valida contra
-    ZONAS_VALIDAS y se ignora (sin filtrar, sin error) cualquier valor que
-    no sea una de las 17 comunas - una URL manipulada a mano no rompe la
-    pantalla, simplemente no filtra nada.
+    Filtro por zona (?zona=...) - Incremento 4, punto G: un paseador con
+    VARIOS horarios (algunos en la zona elegida, otros no, o sin zona)
+    sigue apareciendo en la lista filtrada - "aparece si tiene al menos
+    un horario que califica", confirmado explicitamente antes de
+    programar esto. Se valida contra ZONAS_VALIDAS y se ignora (sin
+    filtrar, sin error) cualquier valor que no sea una de las 17 comunas
+    - una URL manipulada a mano no rompe la pantalla, simplemente no
+    filtra nada.
+
+    Una sola consulta sin filtrar (`zona=None`) para TODO: la lista que
+    se muestra (filtrada en Python si hay zona_seleccionada) Y el conteo
+    de paseadores por comuna del <select> (que necesita el total de las
+    17, no solo la seleccionada) - evita repetir la misma consulta dos
+    veces contra Mongo.
     """
     zona_seleccionada = request.GET.get('zona') or ''
     if zona_seleccionada not in ZONAS_VALIDAS:
         zona_seleccionada = ''
 
-    paseos = repository.listar_disponibles_con_cupo(zona=zona_seleccionada or None)
+    todos_vigentes = repository.listar_disponibles_con_cupo(zona=None)
+
+    ids_paseador_por_zona = {}
+    for p in todos_vigentes:
+        for z in p.get('zonas', []):
+            ids_paseador_por_zona.setdefault(z, set()).add(p['id_paseador'])
+
+    opciones_zona = [
+        {
+            'valor': nombre,
+            'etiqueta': etiqueta_zona(nombre),
+            'conteo': len(ids_paseador_por_zona.get(nombre, ())),
+        }
+        for _, nombre in ZONAS_VALIDAS_CON_NUMERO
+    ]
+
+    paseos = (
+        [p for p in todos_vigentes if zona_seleccionada in p.get('zonas', [])]
+        if zona_seleccionada else todos_vigentes
+    )
     paseadores_por_id = usuarios_repository.obtener_varios_por_id(
         [p['id_paseador'] for p in paseos]
     )
@@ -98,6 +124,14 @@ def lista_disponibles(request):
             # califican para esa zona, no el total del paseador - es lo
             # relevante para quien esta filtrando por zona.
             'cantidad_horarios': len(horarios),
+            # Zonas de TODOS los horarios vigentes de este paseador (los
+            # que estan en `horarios`, no el perfil entero) - union sin
+            # duplicados, ordenada por numero de comuna, para mostrar
+            # como tags en la tarjeta (punto G).
+            'zonas': sorted(
+                {z for h in horarios for z in h.get('zonas', [])},
+                key=lambda z: repository.numero_de_zona(z) or 0,
+            ),
         }
         # El orden de horarios_por_paseador sigue el de `paseos` (mas
         # reciente primero), asi que esto ya queda ordenado por el
@@ -106,8 +140,10 @@ def lista_disponibles(request):
     ]
     return render(request, 'paseos/lista_disponibles.html', {
         'items': items,
-        'zonas_validas': ZONAS_VALIDAS,
+        'opciones_zona': opciones_zona,
         'zona_seleccionada': zona_seleccionada,
+        'zona_seleccionada_etiqueta': etiqueta_zona(zona_seleccionada) if zona_seleccionada else '',
+        'cantidad_resultado': len(items),
     })
 
 

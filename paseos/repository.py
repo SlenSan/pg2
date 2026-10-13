@@ -24,19 +24,53 @@ MOMENTOS_FOTO_VALIDOS = ('inicio', 'mitad', 'fin')
 # 2026-09-25".
 MAXIMO_MASCOTAS_POR_PASEO = 8
 
-# Las 17 comunas oficiales de Bucaramanga (division politico-urbana de la
-# Alcaldia, bucaramanga.gov.co/division-politico-urbana), en este orden
-# exacto - se eligio la division oficial completa (no una lista curada de
-# sectores populares) para que ningun sector de la ciudad quede sin
-# cobertura posible. Fuente unica de verdad reusada por el formulario de
-# publicar horario (choices) y por el filtro del dueño (validacion) -
-# ninguna otra lista de zonas en el proyecto.
-ZONAS_VALIDAS = (
-    'Norte', 'Nororiental', 'San Francisco', 'Occidental', 'García Rovira',
-    'La Concordia', 'La Ciudadela', 'Sur Occidente', 'La Pedregosa', 'Provenza',
-    'Sur', 'Cabecera del Llano', 'Oriental', 'Morrorico', 'Centro',
-    'Lagos del Cacique', 'Mutis',
+# Las 17 comunas oficiales de Bucaramanga, CON su numero oficial
+# (bucaramanga.gov.co/el-mapa/division-politico-urbana - confirmado ahi
+# antes de escribir esto, Incremento 4 punto G: el numero de cada una
+# coincide exactamente con el orden en que ya estaban listadas aca desde
+# el Incremento 1, asi que no fue necesario reordenar nada, solo hacer
+# explicito lo que antes era implicito en la posicion). Se eligio la
+# division oficial completa (no una lista curada de sectores populares)
+# para que ningun sector de la ciudad quede sin cobertura posible.
+# Fuente unica de verdad: el numero y el nombre de una comuna SIEMPRE
+# salen de aca, nunca hardcodeados en una plantilla - ver etiqueta_zona().
+ZONAS_VALIDAS_CON_NUMERO = (
+    (1, 'Norte'), (2, 'Nororiental'), (3, 'San Francisco'), (4, 'Occidental'),
+    (5, 'García Rovira'), (6, 'La Concordia'), (7, 'La Ciudadela'), (8, 'Sur Occidente'),
+    (9, 'La Pedregosa'), (10, 'Provenza'), (11, 'Sur'), (12, 'Cabecera del Llano'),
+    (13, 'Oriental'), (14, 'Morrorico'), (15, 'Centro'), (16, 'Lagos del Cacique'),
+    (17, 'Mutis'),
 )
+
+# Derivada de ZONAS_VALIDAS_CON_NUMERO (no una segunda fuente de verdad):
+# el valor que se guarda en `paseos.zonas` SIGUE siendo solo el nombre -
+# el numero es puramente de presentación (ver etiqueta_zona()), nunca se
+# migra lo ya guardado en Mongo. Reusada por el formulario de publicar
+# horario (choices) y por el filtro del dueño (validacion) - ninguna
+# otra lista de zonas en el proyecto.
+ZONAS_VALIDAS = tuple(nombre for _, nombre in ZONAS_VALIDAS_CON_NUMERO)
+
+_NUMERO_POR_ZONA = {nombre: numero for numero, nombre in ZONAS_VALIDAS_CON_NUMERO}
+
+
+def numero_de_zona(nombre_zona):
+    """El numero oficial de comuna para un valor de ZONAS_VALIDAS, o None
+    si no es uno de ellos (nunca se inventa un numero)."""
+    return _NUMERO_POR_ZONA.get(nombre_zona)
+
+
+def etiqueta_zona(nombre_zona):
+    """
+    Formato UNICO para mostrar una zona en cualquier pantalla (publicar
+    horario, tarjetas de "Paseadores disponibles", perfil público de un
+    paseador, detalle de un horario, filtro) - Incremento 4, punto G.
+    Una sola función de la que sale el texto, para que nunca se vea un
+    número desincronizado entre dos pantallas. "Comuna 15. Centro" - si
+    `nombre_zona` no es una de las 17 válidas, se devuelve tal cual (no
+    se inventa "Comuna None").
+    """
+    numero = numero_de_zona(nombre_zona)
+    return f'Comuna {numero}. {nombre_zona}' if numero else nombre_zona
 
 
 def crear_disponibilidad(*, id_paseador, horario_desde, horario_hasta, zonas=None):

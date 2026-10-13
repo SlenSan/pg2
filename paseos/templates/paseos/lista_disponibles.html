@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load paseos_tags %}
 
 {% block title %}Paseadores disponibles — Canigo{% endblock %}
 
@@ -13,27 +14,45 @@
 <h1 class="h4 mb-3">Paseadores disponibles ahora</h1>
 
 {% comment %}
-Filtro por zona (Incremento 1, RF5/RF6): enlaces normales (no un form ni
-JS) - cada chip es un link a "?zona=X", asi que el filtro queda en la URL
-(se puede compartir/recargar) y el chip activo se marca comparando
-zona_seleccionada en el servidor. Un paseador con horarios mixtos (unos
-en la zona elegida, otros no) sigue apareciendo en la lista filtrada -
-aparece porque TIENE al menos un horario que califica, confirmado antes
-de programar esto.
+Filtro por zona (Incremento 4, punto G - reemplaza la fila de chips-link
+del Incremento 1): un <select> con las 17 comunas oficiales de
+Bucaramanga, ordenadas por número, con la cantidad de paseadores con
+horarios vigentes en cada una ("Comuna N. Nombre (cantidad)" - formato
+único de etiqueta_zona(), nunca hardcodeado aca). Una comuna sin
+paseadores aparece DESHABILITADA (nunca oculta). Formulario GET simple,
+sin JavaScript: el filtro queda en la URL (?zona=...), compartible y
+compatible con el botón "Atrás" del navegador - el único submit es el
+botón "Filtrar".
 {% endcomment %}
-<div class="zona-chips-contenedor mb-4">
-  <a href="{% url 'paseos:lista_disponibles' %}" class="zona-chip {% if not zona_seleccionada %}zona-chip-activa{% endif %}">
-    Todas las zonas
-  </a>
-  {% for zona in zonas_validas %}
-  <a
-    href="?zona={{ zona|urlencode }}"
-    class="zona-chip {% if zona_seleccionada == zona %}zona-chip-activa{% endif %}"
-  >
-    {{ zona }}
-  </a>
-  {% endfor %}
+<form method="get" class="row row-cols-auto g-2 align-items-center mb-3">
+  <div class="col">
+    <select name="zona" class="form-select" aria-label="Filtrar por comuna">
+      <option value="" {% if not zona_seleccionada %}selected{% endif %}>Todas las zonas</option>
+      {% for opcion in opciones_zona %}
+      <option
+        value="{{ opcion.valor }}"
+        {% if opcion.valor == zona_seleccionada %}selected{% endif %}
+        {% if not opcion.conteo %}disabled{% endif %}
+      >
+        {{ opcion.etiqueta }} ({{ opcion.conteo }})
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col">
+    <button type="submit" class="btn btn-primary">Filtrar</button>
+  </div>
+</form>
+
+{% if zona_seleccionada %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <p class="mb-0">
+    <strong>{{ cantidad_resultado }}</strong> paseador{{ cantidad_resultado|pluralize }}
+    en {{ zona_seleccionada_etiqueta }}
+  </p>
+  <a href="{% url 'paseos:lista_disponibles' %}" class="btn btn-outline-secondary btn-sm">Quitar filtro</a>
 </div>
+{% endif %}
 
 {% if items %}
 <div class="row row-cols-1 row-cols-md-2 g-3">
@@ -66,6 +85,21 @@ de programar esto.
         {% if item.paseador.descripcion %}
         <p class="card-text text-muted">{{ item.paseador.descripcion }}</p>
         {% endif %}
+        {% comment %}
+        Zonas de este paseador (sus horarios vigentes, no su perfil
+        entero) como tags, ordenadas por número - la comuna que se está
+        filtrando se resalta con ".zona-chip-activa" para que sea obvio
+        POR QUÉ este paseador aparece en el resultado filtrado.
+        {% endcomment %}
+        {% if item.zonas %}
+        <div class="zona-chips-contenedor mb-2">
+          {% for zona in item.zonas %}
+          <span class="zona-chip zona-chip-solo-lectura {% if zona == zona_seleccionada %}zona-chip-activa{% endif %}">
+            {{ zona|etiqueta_zona }}
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
         <p class="card-text text-muted small mb-2">
           {{ item.cantidad_horarios }} horario{{ item.cantidad_horarios|pluralize }} disponible{{ item.cantidad_horarios|pluralize }}
         </p>
@@ -78,8 +112,8 @@ de programar esto.
 {% else %}
 <p class="text-muted">
   {% if zona_seleccionada %}
-  No hay paseadores disponibles en {{ zona_seleccionada }} en este momento.
-  <a href="{% url 'paseos:lista_disponibles' %}">Ver todas las zonas</a>.
+  No hay paseadores disponibles en {{ zona_seleccionada_etiqueta }} en este momento.
+  <a href="{% url 'paseos:lista_disponibles' %}">Quitar filtro</a>.
   {% else %}
   No hay paseadores disponibles en este momento. Vuelve más tarde.
   {% endif %}

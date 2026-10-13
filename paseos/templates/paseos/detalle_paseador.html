@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load paseos_tags %}
 
 {% block title %}{{ paseador.nombre }} — Canigo{% endblock %}
 
@@ -41,8 +42,17 @@
           <i class="bi bi-star-fill" style="color: var(--color-quick-yellow-fg);"></i>
           {% if paseador.calificacion_promedio %}{{ paseador.calificacion_promedio }} / 5{% else %}Sin calificaciones aún{% endif %}
         </p>
-        {% if paseador.descripcion %}<p>{{ paseador.descripcion }}</p>{% endif %}
-        <p class="text-muted small mb-0">Teléfono: {{ paseador.telefono }}</p>
+        {% if paseador.descripcion %}<p class="mb-0">{{ paseador.descripcion }}</p>{% endif %}
+        {% comment %}
+        El teléfono YA NO se muestra aca (hallazgo del diagnóstico del
+        punto B, Incremento 4): esta pantalla es el perfil PÚBLICO,
+        antes de que el dueño haya inscrito ninguna mascota con este
+        paseador - la regla explícita del punto B es "dueños CON
+        mascotas EN ESE paseo lo ven", que todavía no aplica aca. Se
+        muestra recién en "Paseos activos"/el mapa de seguimiento/el
+        detalle de un incidente, una vez que existe una inscripción real
+        - ver MANUAL_DESARROLLADOR.md, sección 7.
+        {% endcomment %}
       </div>
     </div>
 
@@ -119,7 +129,7 @@
           <div class="zona-chips-contenedor mb-3">
             {% if item.horario.zonas %}
             {% for zona in item.horario.zonas %}
-            <span class="zona-chip zona-chip-activa zona-chip-solo-lectura">{{ zona }}</span>
+            <span class="zona-chip zona-chip-activa zona-chip-solo-lectura">{{ zona|etiqueta_zona }}</span>
             {% endfor %}
             {% else %}
             <span class="text-muted small">Sin zona especificada</span>

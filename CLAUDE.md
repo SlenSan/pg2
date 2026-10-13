@@ -158,6 +158,18 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
 > filtrada, otros no - sigue apareciendo, porque tiene al menos un
 > horario que califica) y ve las zonas de cada horario en el perfil del
 > paseador.
+>
+> **Corrección de alcance (2026-10-12, Incremento 4 punto G):** el ORDEN
+> de arriba coincide exactamente con el número oficial de cada comuna
+> (1=Norte, 2=Nororiental, ..., 17=Mutis - confirmado contra
+> bucaramanga.gov.co/el-mapa/division-politico-urbana antes de usarlo).
+> `paseos/repository.py` ahora lo hace explícito con
+> `ZONAS_VALIDAS_CON_NUMERO` (tuplas `(numero, nombre)`), de la que
+> `ZONAS_VALIDAS` se deriva - lo que se GUARDA en `paseos.zonas` sigue
+> siendo solo el nombre, sin migración. `etiqueta_zona(valor)` (reusada
+> como filtro de plantilla, `paseos/templatetags/paseos_tags.py`) es la
+> ÚNICA función que da el formato "Comuna N. Nombre" - ninguna plantilla
+> lo arma a mano.
 
 ### `coordenadas_detalle`
 ```

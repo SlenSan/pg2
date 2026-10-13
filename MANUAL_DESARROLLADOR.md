@@ -451,6 +451,37 @@ público de un paseador (`detalle_paseador` - ahí el dueño todavía no
 tiene ninguna mascota inscrita con él, mostrar el teléfono ahí sería
 exponerlo sin que exista una relación real todavía).
 
+**Incremento 4, fase 1 — punto G (filtro de zonas en "Paseadores
+disponibles")**: diagnóstico antes de cambiar nada - el filtro YA
+existía desde el Incremento 1 (`?zona=`, validado contra `ZONAS_VALIDAS`
+en el backend, ignorado sin error si no es una de las 17 comunas), pero
+como una fila de chips-link (`<a href="?zona=X">`), sin conteo de
+paseadores, sin número de comuna, y sin tags de zona en las tarjetas de
+resultado. Cambios:
+- `paseos/repository.py::ZONAS_VALIDAS_CON_NUMERO` (nueva, ver sección 6
+  y `CLAUDE.md`) y `etiqueta_zona(valor)` - formato único "Comuna N.
+  Nombre" reusado en CUATRO plantillas (filtro, tarjetas de "Paseadores
+  disponibles", perfil público del paseador, modal "Publicar horario"),
+  vía `paseos/templatetags/paseos_tags.py` (`{{ zona|etiqueta_zona }}`)
+  para las que no arman el choices de un form.
+- El filtro pasó de chips a un `<select>` real (sin JavaScript - un
+  `<form method="get">` con un botón "Filtrar"), con el conteo de
+  paseadores con horario VIGENTE por comuna entre paréntesis - mismo
+  criterio de "vigente" que `c4d119c` (horario_hasta todavía no pasó).
+  Una comuna sin paseadores aparece `disabled` en el `<select>` (nunca
+  oculta). Arriba de los resultados: "N paseadores en Comuna X. Nombre"
+  + botón "Quitar filtro".
+- Cada tarjeta de paseador muestra sus zonas (de sus horarios vigentes,
+  no de todo su historial) como tags ordenadas por número, con la
+  comuna filtrada resaltada (`.zona-chip-activa`).
+- **Hallazgo del diagnóstico, corregido aparte**: el perfil público de
+  un paseador (`detalle_paseador.html`) mostraba su teléfono SIN
+  ninguna condición, desde antes de este incremento - contradice la
+  regla explícita del punto B ("dueños CON mascotas EN ESE paseo lo
+  ven"), porque en esta pantalla el dueño todavía no inscribió nada. Se
+  quitó esa línea - el teléfono ahora solo aparece donde el punto B lo
+  define (ver más arriba).
+
 ## 8. Convenciones del proyecto
 
 - **snake_case en todo**: nombres de campos de Mongo (`id_dueno`,

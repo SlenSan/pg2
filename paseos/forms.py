@@ -1,6 +1,6 @@
 from django import forms
 
-from paseos.repository import ZONAS_VALIDAS
+from paseos.repository import ZONAS_VALIDAS, etiqueta_zona
 
 
 class PublicarHorarioForm(forms.Form):
@@ -38,7 +38,11 @@ class PublicarHorarioForm(forms.Form):
         label='Zonas de servicio',
         required=False,
         widget=forms.CheckboxSelectMultiple(attrs={'class': 'zona-chip-input'}),
-        choices=[(z, z) for z in ZONAS_VALIDAS],
+        # El VALOR sigue siendo el nombre a secas (lo que se guarda en
+        # Mongo, sin cambios - Incremento 4, punto G) - solo la ETIQUETA
+        # visible cambia a "Comuna N. Nombre", vía la misma
+        # etiqueta_zona() que usa cualquier otra pantalla.
+        choices=[(z, etiqueta_zona(z)) for z in ZONAS_VALIDAS],
     )
 
     def clean(self):
