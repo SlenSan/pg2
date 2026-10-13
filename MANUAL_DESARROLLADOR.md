@@ -860,6 +860,46 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   autora debe revisar el indicador en su iPhone con y sin ese modo
   activado y reportar qué rama aparece.
 
+- **Punto 4 — demasiados puntos dibujados cuando el paseador está
+  detenido**: con un punto GPS cada 8s, media hora detenido (ej.
+  esperando en un parque) deja ~225 lecturas casi en el mismo lugar - no
+  es un problema de los DATOS (todos son válidos y se guardan igual,
+  sirven para el punto 5 de abajo y cualquier análisis futuro), es un
+  problema de DIBUJO: tantos `circleMarker` superpuestos no aportan
+  nada, solo tapan el mapa. Cambio solo en
+  `coordenadas/templates/coordenadas/mapa.html`, capa de dibujo: la
+  polilínea sigue recibiendo TODOS los puntos válidos sin excepción
+  (`linea.addLatLng(latlng)`, sin tocar); un `circleMarker` nuevo solo
+  se agrega si quedó a `UMBRAL_DISTANCIA_DIBUJO_M` (10m, constante
+  nombrada) o más del ÚLTIMO punto que SÍ se dibujó (no del último
+  punto recibido - si el paseador está parado, todos los puntos nuevos
+  se comparan contra ese mismo punto ancla hasta que alguno se aleje lo
+  suficiente). Además, la capa completa de puntos (`capaPuntos`, un
+  `L.layerGroup`) se oculta del mapa por debajo de
+  `ZOOM_MINIMO_CIRCULOS` (16, constante nombrada) mediante el evento
+  `zoomend` de Leaflet - a ese nivel de zoom o menos, los puntos
+  quedarían tan juntos en pantalla que no aportan nada, solo ruido
+  visual; vuelve a mostrarse en cuanto se hace zoom a 16 o más. El
+  marcador de inicio (`marcadorInicio`) y el círculo de incertidumbre de
+  la posición actual NO se tocaron - no son parte del problema reportado
+  (no se acumulan, cada uno existe una sola vez o se reposiciona).
+
+  **Verificado ejecutando**: sembrados 9 puntos de prueba en
+  `canigo_dev` (6 agrupados en un radio de ~3m simulando una parada, un
+  salto real de ~16.7m, y 3 más agrupados ~1m entre sí en el nuevo
+  punto) contra un paseo de prueba `en_vivo`. Con `L.circleMarker`
+  interceptado para contar llamadas y conteo directo de elementos
+  `<path>` en el mapa: con zoom inicial (ajustado automáticamente a 16
+  por lo pequeño del área), solo 2 de los 9 puntos generaron un
+  `circleMarker` nuevo (los otros 7 cayeron dentro del umbral de 10m del
+  último punto dibujado) - 5 paths totales en el DOM (línea + 2 puntos +
+  marcador de inicio + círculo de incertidumbre), igual a lo esperado
+  por el cálculo manual de distancias. Al bajar el zoom 6 niveles (por
+  debajo de 16), los paths se redujeron a 3 (línea + marcador de inicio
+  + círculo de incertidumbre) - la capa de puntos quedó completamente
+  oculta, confirmando el `zoomend`. Puntos de prueba borrados de
+  `canigo_dev` al terminar.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

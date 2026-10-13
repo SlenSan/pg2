@@ -274,6 +274,31 @@ alarma).
   var vistaAjustada = false;
   var intervalo = null;
 
+  // Hallazgo de la caminata real del 13 de octubre, punto 4: con un
+  // punto GPS cada 8s, media hora detenido (ej. en un parque) deja
+  // ~225 circleMarker amontonados en el mismo lugar - la polilinea y
+  // los datos en si no cambian (siguen entrando TODOS los puntos
+  // validos), esto es solo una restriccion de DIBUJO: un circleMarker
+  // nuevo solo se agrega si esta a UMBRAL_DISTANCIA_DIBUJO_M o mas del
+  // ultimo punto que SI se dibujo (no del ultimo punto recibido), y
+  // nunca por debajo de ZOOM_MINIMO_CIRCULOS (en ese nivel de zoom los
+  // puntos quedarian tan juntos que no aportan nada, solo tapan el
+  // mapa de fondo).
+  var UMBRAL_DISTANCIA_DIBUJO_M = 10;
+  var ZOOM_MINIMO_CIRCULOS = 16;
+  var ultimoLatLngDibujado = null;
+
+  function actualizarVisibilidadCapaPuntos() {
+    var mostrar = mapa.getZoom() >= ZOOM_MINIMO_CIRCULOS;
+    if (mostrar && !mapa.hasLayer(capaPuntos)) {
+      mapa.addLayer(capaPuntos);
+    } else if (!mostrar && mapa.hasLayer(capaPuntos)) {
+      mapa.removeLayer(capaPuntos);
+    }
+  }
+  mapa.on('zoomend', actualizarVisibilidadCapaPuntos);
+  actualizarVisibilidadCapaPuntos();
+
   // Punto 1 del reporte de revision de fase 1: el backend YA NO
   // descarta por precision al guardar (una precision de prueba fija no
   // representa un celular real en la calle, y descartar en silencio
@@ -367,15 +392,25 @@ alarma).
             var latlng = [p.latitud, p.longitud];
             linea.addLatLng(latlng);
             // Punto pequeño por cada lectura GPS (D2) - radio chico para
-            // no tapar la linea ni el mapa de fondo con cientos de ellos
-            // en un paseo largo.
-            L.circleMarker(latlng, {
-              radius: 3,
-              color: '#D9703A',
-              fillColor: '#D9703A',
-              fillOpacity: 1,
-              weight: 1,
-            }).addTo(capaPuntos);
+            // no tapar la linea ni el mapa de fondo. Ajuste del punto 4
+            // (caminata del 13 de octubre): solo se dibuja si quedo a
+            // UMBRAL_DISTANCIA_DIBUJO_M o mas del ultimo punto DIBUJADO
+            // (no del ultimo recibido) - el primero siempre se dibuja
+            // (ultimoLatLngDibujado arranca en null). La linea de arriba
+            // ya metio este punto a la ruta sin importar esta distancia.
+            var distanciaDesdeUltimoDibujado = ultimoLatLngDibujado
+              ? mapa.distance(latlng, ultimoLatLngDibujado)
+              : null;
+            if (distanciaDesdeUltimoDibujado === null || distanciaDesdeUltimoDibujado >= UMBRAL_DISTANCIA_DIBUJO_M) {
+              L.circleMarker(latlng, {
+                radius: 3,
+                color: '#D9703A',
+                fillColor: '#D9703A',
+                fillOpacity: 1,
+                weight: 1,
+              }).addTo(capaPuntos);
+              ultimoLatLngDibujado = latlng;
+            }
 
             if (!marcadorInicio) {
               // Marcador distinto para el PRIMER punto BUENO del paseo -
