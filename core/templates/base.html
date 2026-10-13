@@ -173,11 +173,24 @@
   (ver core/context_processors.py) este presente - un solo
   `setInterval` activo a la vez, sin importar donde este el paseador.
 
-  `enableHighAccuracy`+`timeout` (8s, menor a los 10s del intervalo) +
-  `enviandoAhora` (evita lanzar una lectura nueva mientras la anterior
-  sigue pendiente): los 3 pedidos explicitos de D1. `position.coords.
-  accuracy` se manda como "precision" - ver coordenadas/views_web.py,
-  que la guarda y la usa para descartar lecturas malas (punto D2).
+  `enableHighAccuracy`+`timeout` (menor al intervalo) + `enviandoAhora`
+  (evita lanzar una lectura nueva mientras la anterior sigue pendiente):
+  los 3 pedidos explicitos de D1. `position.coords.accuracy` se manda
+  como "precision" - ver coordenadas/views_web.py, que la guarda (ya NO
+  descarta por precision al guardar desde la revision de fase 1, ver
+  MANUAL_DESARROLLADOR.md - el filtro ahora es solo al dibujar el mapa).
+
+  Incremento 4, fase 1, ajuste (punto 2 del reporte de revision):
+  INTERVALO_ENVIO_MS bajo de 10s a 8s (RNF2 pide ≤10s; con 10s nominales
+  la latencia normal dejaba la mayoria de los intervalos reales en
+  10,0xs o mas, y en un cambio de pantalla llegaban a 13-14s - 8s deja
+  margen real). TIMEOUT_GEOLOCALIZACION_MS bajo de 8000 a 6000:
+  con el intervalo tambien en 8000ms, un timeout IGUAL a 8000ms podia
+  coincidir con el siguiente tick del setInterval mientras
+  `enviandoAhora` seguia true, haciendo que ESE tick se saltara entero
+  por el guard de arriba - dos ciclos perdidos seguidos = un hueco de
+  ~16s, justo lo que este cambio busca evitar. 6000ms deja el mismo
+  margen de ~2s que tenia la version anterior (10000/8000).
   {% endcomment %}
   {% if id_paseo_en_vivo_del_paseador %}
   <script>
@@ -186,6 +199,9 @@
       var fila = document.cookie.split('; ').find(function (c) { return c.startsWith(nombre + '='); });
       return fila ? decodeURIComponent(fila.split('=')[1]) : null;
     }
+
+    var INTERVALO_ENVIO_MS = 8000;
+    var TIMEOUT_GEOLOCALIZACION_MS = 6000;
 
     var csrftoken = leerCookie('csrftoken');
     var urlCoordenadas = "{% url 'coordenadas:registrar_coordenada' id_paseo_en_vivo_del_paseador %}";
@@ -253,12 +269,12 @@
             estadoEl.textContent = 'No se pudo acceder a tu ubicación. Revisa los permisos del navegador.';
           }
         },
-        {enableHighAccuracy: true, timeout: 8000, maximumAge: 0}
+        {enableHighAccuracy: true, timeout: TIMEOUT_GEOLOCALIZACION_MS, maximumAge: 0}
       );
     }
 
     capturarYEnviar();
-    setInterval(capturarYEnviar, 10000);
+    setInterval(capturarYEnviar, INTERVALO_ENVIO_MS);
   })();
   </script>
   {% endif %}

@@ -362,27 +362,82 @@ que cerrar sesión, desde cualquier rol, lleve siempre a "Eres... Paseador
   `bienvenida_paseador.html` a ser global — ver "Emisor de GPS global"
   en la sección 8. Se agregó `position.coords.accuracy` como el nuevo
   campo `precision` de `coordenadas_detalle` (ver sección 6 y
-  `CLAUDE.md`), con `enableHighAccuracy: true`, `timeout: 8000` y un
-  guard `enviandoAhora` contra lecturas superpuestas si el GPS tarda más
-  de un ciclo en responder.
+  `CLAUDE.md`), con `enableHighAccuracy: true`, un `timeout` menor al
+  intervalo de envío (valores exactos ajustados en la revisión de
+  fase 1, ver más abajo) y un guard `enviandoAhora` contra lecturas
+  superpuestas si el GPS tarda más de un ciclo en responder.
 - **D2 (dibujo)**: `coordenadas/templates/coordenadas/mapa.html` ya no
   llama `linea.setLatLngs(puntos)` con el array completo en cada vuelta
   del polling (eso redibujaba toda la ruta cada 10s) — ahora recuerda
-  cuántos puntos ya dibujó (`puntosDibujados`) y solo agrega los nuevos
-  con `linea.addLatLng(...)`, más un `L.circleMarker` chico por cada
-  punto nuevo (capa `capaPuntos`). Marcador verde fijo en el primer
-  punto del paseo (`marcadorInicio`, nunca se mueve); marcador de pin
-  azul en el último punto (`marcadorActual`, con tooltip "Posición
-  actual" mientras `en_vivo` o "Fin del paseo" en `historico`). El
-  historial usa el mismo código (sin polling: todos los puntos llegan
-  de una sola vez, `puntosDibujados` arranca en 0 igual).
-  **Umbral de descarte por mala precisión: 50 metros**
-  (`_PRECISION_MAXIMA_ACEPTABLE_METROS` en `coordenadas/views_web.py`) -
-  un punto con un radio de incertidumbre mayor a eso se descarta en el
-  BACKEND antes de guardarse (misma respuesta 201 silenciosa que el
-  descarte de INC-03), así que nunca llega siquiera al endpoint que
-  alimenta el mapa — no hace falta ningún filtro adicional del lado del
-  JS.
+  cuántos puntos ya procesó (`puntosProcesados`) y solo evalúa los
+  nuevos con `linea.addLatLng(...)`, más un `L.circleMarker` chico por
+  cada punto nuevo de buena precisión (capa `capaPuntos`). Marcador
+  verde fijo en el primer punto BUENO del paseo (`marcadorInicio`,
+  nunca se mueve); marcador de pin en la posición actual
+  (`marcadorActual`). El historial usa el mismo código (sin polling:
+  todos los puntos llegan de una sola vez, `puntosProcesados` arranca
+  en 0 igual).
+
+**Incremento 4, fase 1 — revisión (puntos 1 y 2 del reporte de
+revisión, 2026-10-12)**: tres ajustes sobre el punto D original, antes
+de seguir con la fase 2.
+
+- **Punto 1 — ya NO se descarta por precisión al guardar**: la versión
+  original descartaba en el backend un punto con `precision` > 50m
+  (`_PRECISION_MAXIMA_ACEPTABLE_METROS` en `coordenadas/views_web.py`).
+  Problema real: una precisión de PRUEBA fija (p.ej. 11m en el
+  emulador/CDP) no representa un celular real en la calle, y descartar
+  en silencio podía perder puntos válidos sin que nadie se enterara —
+  el mapa del dueño se quedaba quieto sin ningún aviso. Ahora
+  `registrar_coordenada` guarda TODOS los puntos con lat/lon válidos,
+  con su `precision` tal cual (incluida `None`); el filtro se movió
+  ENTERO al dibujo, en `mapa.html`:
+  - la polilínea y los `circleMarker` de la ruta (más el marcador de
+    inicio, que también es un `circleMarker`) usan solo los puntos con
+    `precision <= UMBRAL_PRECISION_DIBUJO` (50m, constante en el JS) o
+    `precision == null` (puntos antiguos, de antes de este campo);
+  - la posición actual (`marcadorActual`) usa SIEMPRE el último punto,
+    sin importar su precisión — ocultarla por mala precisión dejaría al
+    dueño sin saber dónde está el paseador AHORA mismo, que es
+    justamente para lo que existe ese marcador. Un `L.circle` (radio en
+    METROS, no en píxeles como `circleMarker`) dibuja el margen de error
+    real sobre el mapa; si la precisión supera el umbral, el tooltip
+    pasa a "Ubicación aproximada (±N m)" en vez de "Posición actual"/
+    "Fin del paseo";
+  - nuevo campo `hay_punto_reciente` en la respuesta de
+    `mapa_paseo`/`coordenadas_de_paseo` (`_hay_punto_reciente()`,
+    constante `_SEGUNDOS_PUNTO_RECIENTE = 30`, calculado con la hora del
+    SERVIDOR vía `fecha_recepcion`, no el reloj del navegador del
+    dueño): si el último punto tiene más de 30s y el paseo sigue
+    `en_vivo`, se muestra «Esperando la ubicación del paseador…»
+    (`#esperando-ubicacion`) — correcto tanto en la carga inicial como
+    en el polling de 8s.
+- **Punto 2 — intervalos con más margen para RNF2**: con el periodo
+  nominal de 10s, la latencia normal dejaba la mayoría de los
+  intervalos reales en 10,0xs o más, y un cambio de pantalla los subía
+  a 13-14s. Ajustes, todos con constante nombrada:
+  - emisor de GPS (`core/templates/base.html`): `INTERVALO_ENVIO_MS =
+    8000` (antes 10000);
+  - descarte de duplicados (`coordenadas/views_web.py`):
+    `_SEGUNDOS_MINIMOS_ENTRE_PUNTOS = 6` (antes 8) - mismo margen de
+    ~2s que la versión anterior (10000/8000 → 8000/6000), proporcional
+    al nuevo intervalo;
+  - polling del mapa del dueño (`mapa.html`): cada 8s (antes 10s), para
+    no quedar sistemáticamente un ciclo entero atrás del envío real.
+  - **Revisión del `timeout` de geolocalización**: con el intervalo
+    también en 8000ms, un `timeout` IGUAL a 8000ms podía coincidir con
+    el siguiente tick del `setInterval` mientras `enviandoAhora` seguía
+    `true` — ese tick se saltaba ENTERO por el guard, y dos ciclos
+    perdidos seguidos dejaban un hueco de ~16s. Se confirmó el riesgo
+    (es exactamente el mecanismo: el guard existe para evitar lecturas
+    superpuestas, pero con intervalo == timeout el peor caso de latencia
+    agota el ciclo completo antes de liberar el guard). Se bajó
+    `TIMEOUT_GEOLOCALIZACION_MS` a 6000 — mismo margen de ~2s de antes.
+  - **Medición real, 3 minutos, una sola pestaña** (bienvenida_paseador
+    → perfil_paseador → bienvenida_paseador → reportar una emergencia →
+    subir una foto): 22 puntos, intervalos entre 7.75s y 12.68s, **90%
+    de los intervalos ≤10s** (19/21), sin ningún hueco de 16s — ver el
+    reporte de revisión para la tabla completa.
 
 **Incremento 4, fase 1 — punto C (dirección e incidente en el mapa)**:
 al reportar un incidente (`incidentes.views_web.reportar_incidente`), si

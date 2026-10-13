@@ -3,7 +3,7 @@ Vistas web:
 - Dueño: pagina del mapa en vivo/historico y el endpoint JSON que
   consume el JavaScript de Leaflet para pintar la ruta.
 - Paseador: endpoint que su navegador llama (via navigator.geolocation)
-  cada 10s mientras el paseo esta "en_vivo", autenticado por sesion (no
+  cada 8s mientras el paseo esta "en_vivo", autenticado por sesion (no
   por token - la app Android ya no existe, ver CLAUDE.md).
 """
 
@@ -91,6 +91,29 @@ def _info_incidente_reciente(id_paseo, ids_mascota_viewer=None):
         if mascota:
             texto = f'Se reportó un incidente que afecta a {mascota["nombre"]}.'
     return {'texto': texto, 'id': str(ultimo['_id'])}
+
+
+# Incremento 4, fase 1, punto 1: "si no hay ningun punto en los ultimos
+# 30s del paseo en vivo" - 30s da margen a varios ciclos perdidos del
+# emisor (que ahora manda cada 8s, ver base.html) antes de alarmar al
+# dueño con "esperando ubicacion", sin tardar tanto que el aviso llegue
+# demasiado tarde para ser util.
+_SEGUNDOS_PUNTO_RECIENTE = 30
+
+
+def _hay_punto_reciente(id_paseo):
+    """
+    True si el ULTIMO punto GPS de este paseo llego hace <= 30s (hora del
+    SERVIDOR - fecha_recepcion, igual criterio que el descarte de
+    duplicados de registrar_coordenada, nunca fecha_captura del
+    dispositivo). Calculado en el backend (no con el reloj del navegador
+    del dueño) para no depender de que su reloj este bien puesto.
+    """
+    ultima_recepcion = repository.obtener_ultima_recepcion(id_paseo)
+    if not ultima_recepcion:
+        return False
+    ultima_aware = ultima_recepcion.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - ultima_aware).total_seconds() <= _SEGUNDOS_PUNTO_RECIENTE
 
 
 def _pendiente_calificar(paseo, id_dueno):
@@ -259,6 +282,11 @@ def mapa_paseo(request, id_paseo):
         # _pendiente_calificar(). False a secas para el paseador: esa
         # pregunta ("¿calificaste TU experiencia?") no aplica a su rol.
         'pendiente_calificar': _pendiente_calificar(paseo, id_usuario) if es_dueno else False,
+        # "Esperando la ubicación del paseador…" (punto 1) - solo tiene
+        # sentido mientras esta "en_vivo" (un paseo "historico" siempre
+        # tiene un ultimo punto "viejo", eso no es una alarma); el
+        # template/JS igual solo lo muestra condicionado a ese estado.
+        'hay_punto_reciente': _hay_punto_reciente(paseo['_id']),
     })
 
 
@@ -286,7 +314,7 @@ def coordenadas_de_paseo(request, id_paseo):
         # "emergencia".
         'info_incidente_reciente': _info_incidente_reciente(paseo['_id'], ids_mascota_viewer),
         'puntos': [repository.a_json(p) for p in puntos],
-        # Esta pantalla ya hace polling cada 10s mientras el paseo esta
+        # Esta pantalla ya hace polling cada 8s mientras el paseo esta
         # "en_vivo" - se aprovecha esa misma peticion para el punto de
         # notificaciones del navbar en vez de sumar una aparte (ver
         # mapa.html, que por eso deja vacio el poller generico de
@@ -295,6 +323,8 @@ def coordenadas_de_paseo(request, id_paseo):
         'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, id_usuario),
         # Misma logica que mapa_paseo() - solo aplica al dueño.
         'pendiente_calificar': _pendiente_calificar(paseo, id_usuario) if es_dueno else False,
+        # Idem mapa_paseo() - punto 1 del reporte de revision.
+        'hay_punto_reciente': _hay_punto_reciente(paseo['_id']),
     })
 
 
@@ -308,25 +338,19 @@ def _parsear_fecha(valor):
 
 
 # INC-03 (13 oct): con varias pestañas del mismo paseador abiertas a la
-# vez, cada una manda su propio punto cada 10s de forma independiente,
-# sin coordinarse entre ellas - el resultado medido es una rafaga de 2+
-# puntos casi simultaneos seguida de un hueco de ~10s, no un punto cada
-# 10s real (ver MANUAL_DESARROLLADOR.md, diagnostico INC-03/INC-04). 8s
-# (no 10, el intervalo nominal) da margen para la variacion normal de
+# vez, cada una manda su propio punto de forma independiente, sin
+# coordinarse entre ellas - el resultado medido es una rafaga de 2+
+# puntos casi simultaneos seguida de un hueco, no un punto por intervalo
+# real (ver MANUAL_DESARROLLADOR.md, diagnostico INC-03/INC-04).
+#
+# Incremento 4, fase 1, ajuste (ver punto 2 del reporte de revision): el
+# emisor de core/templates/base.html ahora manda cada 8s (antes 10s), asi
+# que este umbral baja a 6s (antes 8s) para mantener el mismo margen de
+# ~2s de la version anterior - suficiente para la variacion normal de
 # red/GPS de una sola pestaña legitima sin arriesgar descartar un punto
-# valido que llegue un poco antes de los 10s por latencia - a la vez,
-# suficientemente cerca de 10 para cortar las rafagas de verdad.
-_SEGUNDOS_MINIMOS_ENTRE_PUNTOS = 8
-
-# Incremento 4, punto D2: "precision" es el radio de incertidumbre en
-# metros que reporta el navegador (position.coords.accuracy) - un valor
-# ALTO significa una lectura MALA (por ejemplo, GPS sin buena señal de
-# satelite, estimada solo por torres de celular/wifi), no una distancia
-# recorrida. 50m descarta esas lecturas claramente malas (un punto con
-# ese radio de error puede caer en la cuadra equivocada) sin descartar
-# una lectura normal de celular al aire libre (tipicamente 5-20m) ni
-# siquiera una algo degradada (p.ej. entre edificios altos, ~30-40m).
-_PRECISION_MAXIMA_ACEPTABLE_METROS = 50
+# valido que llegue un poco antes por latencia, y lo bastante cerca de 8
+# para seguir cortando las rafagas de verdad.
+_SEGUNDOS_MINIMOS_ENTRE_PUNTOS = 6
 
 
 @require_POST
@@ -370,16 +394,15 @@ def registrar_coordenada(request, id_paseo):
     except (TypeError, ValueError):
         precision = None
 
-    # Descarta en silencio una lectura de mala precision (D2, ver
-    # _PRECISION_MAXIMA_ACEPTABLE_METROS mas arriba) - MISMA respuesta
-    # que si se hubiera guardado, mismo criterio que el descarte de
-    # INC-03 de abajo: no es un error del paseador, es una lectura mala
-    # que no vale la pena guardar ni dibujar en el mapa.
-    if precision is not None and precision > _PRECISION_MAXIMA_ACEPTABLE_METROS:
-        return JsonResponse({
-            'total_puntos': paseo.get('total_puntos', 0),
-            'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, paseo['id_paseador']),
-        }, status=201)
+    # Incremento 4, fase 1, ajuste (punto 1 del reporte de revision): ya
+    # NO se descarta un punto por mala precision aca - una precision de
+    # prueba fija (p.ej. 11m en el emulador) no representa un celular
+    # real en la calle, y descartar en el backend podia perder puntos
+    # validos sin que nadie se enterara (el mapa del dueño se quedaba
+    # quieto en silencio). TODOS los puntos con lat/lon validos se
+    # guardan, con su "precision" tal cual llego (incluida None) - el
+    # filtro por precision ahora es SOLO del lado del dibujo
+    # (coordenadas/templates/coordenadas/mapa.html, UMBRAL_PRECISION_DIBUJO).
 
     # Descarta en silencio un punto que llega demasiado pronto despues
     # del ultimo (INC-03, ver _SEGUNDOS_MINIMOS_ENTRE_PUNTOS mas arriba)

@@ -174,6 +174,23 @@ solo ocultarla con CSS, para no exponerle un link que lo rebotaria.
 <p class="text-muted small mt-2" id="sin-puntos" hidden>
   Todavía no hay puntos GPS registrados para este paseo.
 </p>
+{% comment %}
+"Esperando la ubicación del paseador…" (punto 1 del reporte de revisión
+de fase 1): distinto de "sin-puntos" de arriba - este es para cuando YA
+hubo tracking pero el ÚLTIMO punto quedó viejo (más de 30s, ver
+_hay_punto_reciente en coordenadas/views_web.py) mientras el paseo sigue
+"en_vivo" - p.ej. el paseador perdió señal o cerró la pestaña sin
+finalizar. Oculto por defecto - el JS lo muestra solo si corresponde,
+nunca en "historico" (ahi un último punto "viejo" es normal, no una
+alarma).
+{% endcomment %}
+<p
+  class="text-muted small mt-2"
+  id="esperando-ubicacion"
+  {% if paseo.estado != 'en_vivo' or hay_punto_reciente %}hidden{% endif %}
+>
+  Esperando la ubicación del paseador…
+</p>
 
 {% if paseo.fotos %}
 <div class="mt-4">
@@ -239,22 +256,38 @@ solo ocultarla con CSS, para no exponerle un link que lo rebotaria.
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(mapa);
 
-  // ---- ruta por puntos (Incremento 4, punto D2) ----
+  // ---- ruta por puntos (Incremento 4, punto D2; ajustado en fase 1 punto 1) ----
   // "sin redibujar el mapa entero" en cada vuelta del polling: en vez de
-  // volver a mandarle a Leaflet la lista COMPLETA de puntos cada 10s
+  // volver a mandarle a Leaflet la lista COMPLETA de puntos cada vuelta
   // (lo que antes hacia linea.setLatLngs(puntos) con el array entero),
-  // se recuerda cuantos puntos YA se dibujaron (puntosDibujados) y en
-  // cada vuelta solo se agregan los nuevos - la linea y los puntos
-  // viejos no se tocan. Sirve igual para el historial (sin polling: se
-  // dibuja todo de una sola vez, mismo codigo, puntosDibujados arranca
-  // en 0 igual).
+  // se recuerda cuantos puntos YA se PROCESARON (puntosProcesados,
+  // buenos o malos) y en cada vuelta solo se evaluan los nuevos - la
+  // linea y los puntos viejos no se tocan. Sirve igual para el
+  // historial (sin polling: se procesa todo de una sola vez, mismo
+  // codigo, puntosProcesados arranca en 0 igual).
   var linea = L.polyline([], { color: '#D9703A' }).addTo(mapa);
   var capaPuntos = L.layerGroup().addTo(mapa);
   var marcadorInicio = null;
   var marcadorActual = null;
-  var puntosDibujados = 0;
+  var circuloIncertidumbre = null;
+  var puntosProcesados = 0;
   var vistaAjustada = false;
   var intervalo = null;
+
+  // Punto 1 del reporte de revision de fase 1: el backend YA NO
+  // descarta por precision al guardar (una precision de prueba fija no
+  // representa un celular real en la calle, y descartar en silencio
+  // podia dejar el mapa del dueño quieto sin que nadie se enterara) -
+  // el filtro ahora vive SOLO aca, al dibujar la RUTA (polilinea +
+  // circleMarker de cada punto + el marcador de inicio). La posicion
+  // ACTUAL (mas abajo) es la excepcion: esa SIEMPRE usa el ultimo punto
+  // sin importar su precision, con un circulo que muestra el margen de
+  // error en vez de ocultar el dato.
+  var UMBRAL_PRECISION_DIBUJO = 50;
+
+  function precisionAceptable(punto) {
+    return punto.precision == null || punto.precision <= UMBRAL_PRECISION_DIBUJO;
+  }
 
   var claseBadgePorEstado = {
     en_vivo: 'bg-success',
@@ -316,12 +349,21 @@ solo ocultarla con CSS, para no exponerle un link que lo rebotaria.
         var puntos = data.puntos;
         document.getElementById('sin-puntos').hidden = puntos.length > 0;
 
-        // Los puntos de mala precision ya ni llegan aca - se descartan
-        // en el backend antes de guardarse (ver
-        // _PRECISION_MAXIMA_ACEPTABLE_METROS en coordenadas/views_web.py).
-        if (puntos.length > puntosDibujados) {
-          var nuevos = puntos.slice(puntosDibujados);
+        // "Esperando la ubicación del paseador…" (punto 1) - calculado
+        // en el BACKEND (hora del servidor, no el reloj del navegador
+        // del dueño - ver _hay_punto_reciente) y solo mientras sigue
+        // "en_vivo": en "historico" el ultimo punto siempre es "viejo",
+        // eso es normal, no una alarma.
+        var elEsperando = document.getElementById('esperando-ubicacion');
+        elEsperando.hidden = !(puntos.length > 0 && data.estado === 'en_vivo' && !data.hay_punto_reciente);
+
+        if (puntos.length > puntosProcesados) {
+          var vistaYaAjustadaAntes = vistaAjustada;
+          var nuevos = puntos.slice(puntosProcesados);
           nuevos.forEach(function (p) {
+            if (!precisionAceptable(p)) {
+              return; // mala precision: no entra a la ruta (si al marcador de posicion actual, mas abajo)
+            }
             var latlng = [p.latitud, p.longitud];
             linea.addLatLng(latlng);
             // Punto pequeño por cada lectura GPS (D2) - radio chico para
@@ -334,36 +376,70 @@ solo ocultarla con CSS, para no exponerle un link que lo rebotaria.
               fillOpacity: 1,
               weight: 1,
             }).addTo(capaPuntos);
+
+            if (!marcadorInicio) {
+              // Marcador distinto para el PRIMER punto BUENO del paseo -
+              // se crea una sola vez, nunca se mueve.
+              marcadorInicio = L.circleMarker(latlng, {
+                radius: 8,
+                color: '#2E7D32',
+                fillColor: '#2E7D32',
+                fillOpacity: 1,
+                weight: 2,
+              }).addTo(mapa).bindTooltip('Inicio del paseo');
+            }
           });
 
-          if (!marcadorInicio) {
-            // Marcador distinto para el PRIMER punto del paseo - se crea
-            // una sola vez, nunca se mueve.
-            var primera = [puntos[0].latitud, puntos[0].longitud];
-            marcadorInicio = L.circleMarker(primera, {
-              radius: 8,
-              color: '#2E7D32',
-              fillColor: '#2E7D32',
-              fillOpacity: 1,
-              weight: 2,
-            }).addTo(mapa).bindTooltip('Inicio del paseo');
-          }
+          // Posición actual (punto 1): SIEMPRE el ÚLTIMO punto del
+          // paseo, sin importar su precisión - a diferencia de la ruta
+          // de arriba, ocultar la posición actual por mala precisión
+          // dejaría al dueño sin saber dónde está el paseador AHORA, que
+          // es justo lo que este marcador existe para mostrar. Un
+          // L.circle (radio en METROS, no en pixeles como circleMarker)
+          // visualiza el margen de error real sobre el mapa.
+          var ultimoCrudo = puntos[puntos.length - 1];
+          var latlngActual = [ultimoCrudo.latitud, ultimoCrudo.longitud];
+          var precisionMala = ultimoCrudo.precision != null && ultimoCrudo.precision > UMBRAL_PRECISION_DIBUJO;
+          var etiquetaActual = precisionMala
+            ? ('Ubicación aproximada (±' + Math.round(ultimoCrudo.precision) + ' m)')
+            : (data.estado === 'historico' ? 'Fin del paseo' : 'Posición actual');
 
-          var ultima = [puntos[puntos.length - 1].latitud, puntos[puntos.length - 1].longitud];
-          var etiquetaActual = data.estado === 'historico' ? 'Fin del paseo' : 'Posición actual';
           if (!marcadorActual) {
-            marcadorActual = L.marker(ultima).addTo(mapa).bindTooltip(etiquetaActual);
+            marcadorActual = L.marker(latlngActual).addTo(mapa).bindTooltip(etiquetaActual);
           } else {
-            marcadorActual.setLatLng(ultima).setTooltipContent(etiquetaActual);
+            marcadorActual.setLatLng(latlngActual).setTooltipContent(etiquetaActual);
           }
 
-          puntosDibujados = puntos.length;
+          if (circuloIncertidumbre) {
+            mapa.removeLayer(circuloIncertidumbre);
+            circuloIncertidumbre = null;
+          }
+          if (ultimoCrudo.precision != null) {
+            circuloIncertidumbre = L.circle(latlngActual, {
+              radius: ultimoCrudo.precision,
+              color: precisionMala ? '#B00020' : '#D9703A',
+              fillColor: precisionMala ? '#B00020' : '#D9703A',
+              fillOpacity: 0.1,
+              weight: 1,
+            }).addTo(mapa);
+          }
 
-          if (!vistaAjustada) {
-            mapa.fitBounds(linea.getBounds(), { maxZoom: 16 });
+          puntosProcesados = puntos.length;
+
+          if (!vistaYaAjustadaAntes) {
+            // linea.getBounds() solo es valido si ya tiene al menos un
+            // punto "bueno" adentro - si el paseo recien empezo con mala
+            // señal (todos los puntos descartados de la ruta), se centra
+            // igual en la posicion actual cruda, para no dejar el mapa
+            // en el valor por defecto de Bucaramanga sin motivo.
+            if (linea.getLatLngs().length > 0) {
+              mapa.fitBounds(linea.getBounds(), { maxZoom: 16 });
+            } else {
+              mapa.setView(latlngActual, 16);
+            }
             vistaAjustada = true;
           } else if (data.estado === 'en_vivo') {
-            mapa.panTo(ultima);
+            mapa.panTo(latlngActual);
           }
         }
 
@@ -376,7 +452,11 @@ solo ocultarla con CSS, para no exponerle un link que lo rebotaria.
 
   actualizar();
   if (estadoInicial === 'en_vivo') {
-    intervalo = setInterval(actualizar, 10000);
+    // 8s (antes 10s) - mismo intervalo que el emisor de GPS global de
+    // base.html (punto 2 del reporte de revision de fase 1): asi el
+    // dueño ve una posicion actualizada unos segundos despues de cada
+    // punto real, sin quedar sistematicamente un ciclo entero atras.
+    intervalo = setInterval(actualizar, 8000);
   }
 
   // ---- tiempo transcurrido ----
