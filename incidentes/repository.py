@@ -11,13 +11,37 @@ from bson.errors import InvalidId
 
 from core.mongo import get_db
 
-TIPOS_VALIDOS = (
-    'fuga_animal',
-    'mordedura_agresion',
-    'accidente_animal',
-    'accidente_paseador',
-    'otro',
+# INC-06 (13 oct, hallazgo de la caminata real) + limpieza: antes esta
+# tupla (TIPOS_VALIDOS) y las choices de ReportarIncidenteForm
+# (incidentes/forms.py) eran DOS listas independientes con el mismo
+# contenido escrito dos veces - y esta de aca ni siquiera se usaba en
+# ningún lado (confirmado con una búsqueda en todo el proyecto antes de
+# tocarla), así que ya se habían desincronizado en los hechos: forms.py
+# tenía las etiquetas legibles, esta no tenía ninguna. Ahora es la
+# ÚNICA fuente de verdad (valor + etiqueta legible), igual que
+# ZONAS_VALIDAS_CON_NUMERO en paseos/repository.py - forms.py importa
+# de aca, no al revés.
+TIPOS_VALIDOS_CON_ETIQUETA = (
+    ('fuga_animal', 'Fuga del animal'),
+    ('mordedura_agresion', 'Mordedura o agresión'),
+    ('accidente_animal', 'Accidente del animal'),
+    ('accidente_paseador', 'Accidente del paseador'),
+    ('otro', 'Otro'),
 )
+TIPOS_VALIDOS = tuple(valor for valor, _ in TIPOS_VALIDOS_CON_ETIQUETA)
+_ETIQUETA_POR_TIPO = dict(TIPOS_VALIDOS_CON_ETIQUETA)
+
+
+def etiqueta_tipo_incidente(tipo):
+    """
+    Formato legible de un `tipo` de incidente ("mordedura_agresion" ->
+    "Mordedura o agresión") - ÚNICA función de la que sale el texto,
+    reusada en el detalle, la lista, y el mensaje de notificación (ver
+    incidentes/templatetags/incidentes_tags.py para el filtro de
+    plantilla). Si `tipo` no es uno de los válidos (no debería pasar,
+    pero nunca se asume), devuelve el valor tal cual en vez de fallar.
+    """
+    return _ETIQUETA_POR_TIPO.get(tipo, tipo)
 
 
 def crear(*, id_paseo, tipo, id_mascota, descripcion, evidencia_foto, latitud, longitud, direccion_aproximada=None):

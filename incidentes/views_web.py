@@ -189,7 +189,7 @@ def reportar_incidente(request, id_paseo):
             tipo='emergencia',
             mensaje=(
                 f'{request.session.get("nombre")} reportó un incidente '
-                f'({form.cleaned_data["tipo"]}) durante el paseo.'
+                f'({repository.etiqueta_tipo_incidente(form.cleaned_data["tipo"])}) durante el paseo.'
             ),
         )
     if ids_duenos_a_notificar:

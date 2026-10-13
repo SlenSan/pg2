@@ -798,6 +798,36 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   `6ace7d2ae08c8c415ba12dc1` en modo lectura (sin escribir nada), una
   vez desplegado el fix.
 
+- **INC-06 — el tipo de incidente se mostraba con su valor interno**
+  (`mordedura_agresion` en vez de "Mordedura o agresión"): diagnóstico -
+  `incidentes/repository.py` ya tenía una constante `TIPOS_VALIDOS`,
+  pero una búsqueda en todo el proyecto confirmó que **nunca se usaba en
+  ningún lado** - la lista real de opciones vivía duplicada, sin
+  documentar, dentro de `incidentes/forms.py` (`_OPCIONES_TIPO`, con las
+  etiquetas legibles). Se consolidó en una sola fuente de verdad,
+  siguiendo el mismo patrón que `paseos.repository.
+  ZONAS_VALIDAS_CON_NUMERO`/`etiqueta_zona()` y
+  `usuarios.decorators.es_correo_admin()`:
+  `incidentes.repository.TIPOS_VALIDOS_CON_ETIQUETA` (tuplas
+  `(valor, etiqueta)`) + `etiqueta_tipo_incidente(tipo)`, expuesta a las
+  plantillas vía el filtro `incidentes.templatetags.incidentes_tags.
+  etiqueta_tipo_incidente` (nuevo). `incidentes/forms.py` ahora importa
+  `TIPOS_VALIDOS_CON_ETIQUETA` en vez de duplicar la lista. Se aplicó el
+  filtro en el detalle del incidente, el listado y el mensaje de
+  notificación (`incidentes/views_web.py`) - las tres pantallas que
+  mostraban el tipo. El "aviso del mapa" (banner de emergencia en
+  `coordenadas/templates/coordenadas/mapa.html`,
+  `_info_incidente_reciente()`) se revisó también por pedido de la
+  tarea, pero NO mostraba el tipo crudo (solo el nombre de la mascota o
+  un mensaje genérico) - no había nada que corregir ahí, se deja
+  documentado para que quede claro que se revisó.
+
+  **Verificado ejecutando**: `ReportarIncidenteForm().fields['tipo']
+  .choices` sigue devolviendo los mismos 5 pares `(valor, etiqueta)` de
+  antes. Carga real de `/incidentes/<id>/` y `/incidentes/` muestran la
+  etiqueta legible ("Otro", "Accidente del paseador", etc.), no el valor
+  crudo.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

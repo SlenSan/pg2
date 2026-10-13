@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% load l10n %}
+{% load incidentes_tags %}
 
 {% block title %}Incidentes — Canigo{% endblock %}
 
@@ -14,7 +16,7 @@
       <img src="{{ item.incidente.evidencia_foto }}" class="card-img-top" alt="Evidencia del incidente" style="max-height: 220px; object-fit: cover;">
       {% endif %}
       <div class="card-body">
-        <span class="badge bg-danger mb-2">{{ item.incidente.tipo }}</span>
+        <span class="badge bg-danger mb-2">{{ item.incidente.tipo|etiqueta_tipo_incidente }}</span>
         <p class="card-text">{{ item.incidente.descripcion }}</p>
         <p class="card-text text-muted small mb-1">
           {% if item.mascota %}Mascota: {{ item.mascota.nombre }} · {% endif %}Paseador: {{ item.paseador.nombre|default:"—" }}
@@ -22,7 +24,7 @@
         <p class="card-text text-muted small mb-1">
           Ubicación:
           {% if item.incidente.latitud and item.incidente.longitud %}
-            {{ item.incidente.latitud }}, {{ item.incidente.longitud }}
+            {{ item.incidente.latitud|unlocalize }}, {{ item.incidente.longitud|unlocalize }}
           {% else %}
             no disponible
           {% endif %}

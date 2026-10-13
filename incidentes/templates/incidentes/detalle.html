@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load l10n %}
+{% load incidentes_tags %}
 
 {% block title %}Detalle del incidente — Canigo{% endblock %}
 
@@ -20,7 +21,7 @@
   <img src="{{ incidente.evidencia_foto }}" class="card-img-top" alt="Evidencia del incidente" style="max-height: 320px; object-fit: cover;">
   {% endif %}
   <div class="card-body">
-    <span class="badge bg-danger mb-2">{{ incidente.tipo }}</span>
+    <span class="badge bg-danger mb-2">{{ incidente.tipo|etiqueta_tipo_incidente }}</span>
     <p class="card-text">{{ incidente.descripcion }}</p>
 
     {% if mascota %}

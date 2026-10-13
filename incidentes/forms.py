@@ -1,14 +1,8 @@
 from django import forms
 
-_INPUT_CLASS = 'form-control'
+from incidentes.repository import TIPOS_VALIDOS_CON_ETIQUETA as _OPCIONES_TIPO
 
-_OPCIONES_TIPO = [
-    ('fuga_animal', 'Fuga del animal'),
-    ('mordedura_agresion', 'Mordedura o agresión'),
-    ('accidente_animal', 'Accidente del animal'),
-    ('accidente_paseador', 'Accidente del paseador'),
-    ('otro', 'Otro'),
-]
+_INPUT_CLASS = 'form-control'
 
 
 _TIPO_SIN_MASCOTA = 'accidente_paseador'
