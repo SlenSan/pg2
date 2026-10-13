@@ -18,7 +18,7 @@ from django.views.decorators.http import require_POST
 
 from calificaciones import repository as calificaciones_repository
 from coordenadas import repository as coordenadas_repository
-from core.media import ErrorSubidaImagen, subir_imagen
+from core.media import ErrorSubidaImagen, ErrorValidacionImagen, subir_imagen
 from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository
@@ -523,6 +523,11 @@ def subir_foto(request, id_paseo, momento):
 
     try:
         url = subir_imagen(form.cleaned_data['foto'], carpeta='paseos')
+    except ErrorValidacionImagen as exc:
+        # El archivo no pasa la validación (tamaño/formato/firma) - error
+        # del usuario, no de Cloudinary (punto 3 del reporte de revisión
+        # de fase 1).
+        return JsonResponse({'error': f'No se pudo subir la foto: {exc}'}, status=400)
     except ErrorSubidaImagen as exc:
         return JsonResponse({'error': f'No se pudo subir la foto: {exc}'}, status=502)
 

@@ -4,7 +4,7 @@ diferenciador del proyecto). A diferencia de coordenadas_detalle, un
 incidente "queda permanente": no tiene indice TTL ni se borra nunca.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -45,6 +45,30 @@ def crear(*, id_paseo, tipo, id_mascota, descripcion, evidencia_foto, latitud, l
 
 def marcar_notificado(id_incidente):
     get_db().incidentes.update_one({'_id': id_incidente}, {'$set': {'notificado': True}})
+
+
+_SEGUNDOS_DUPLICADO_INCIDENTE = 10
+
+
+def obtener_duplicado_reciente(*, id_paseo, tipo, id_mascota, descripcion):
+    """
+    Busca un incidente IDENTICO (mismo paseo, tipo, mascota afectada y
+    descripción) creado hace menos de `_SEGUNDOS_DUPLICADO_INCIDENTE` -
+    Incremento 4, fase 1, punto 3: el botón "Enviar reporte" se
+    deshabilita mientras se envía (ver bienvenida_paseador.html), pero
+    esto es la defensa de fondo en el BACKEND para un doble toque que
+    igual llegue a mandar dos POST (red lenta, dos pestañas, etc.) - sin
+    esto, un doble toque creaba dos incidentes idénticos y notificaba al
+    dueño dos veces por el mismo hecho.
+    """
+    limite = datetime.now(timezone.utc) - timedelta(seconds=_SEGUNDOS_DUPLICADO_INCIDENTE)
+    return get_db().incidentes.find_one({
+        'id_paseo': id_paseo,
+        'tipo': tipo,
+        'id_mascota': id_mascota,
+        'descripcion': descripcion,
+        'fecha_hora': {'$gte': limite},
+    }, sort=[('fecha_hora', -1)])
 
 
 def obtener_por_id(id_incidente):

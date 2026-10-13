@@ -14,7 +14,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
 from core.geocoding import direccion_aproximada as geocodificar_direccion
-from core.media import ErrorSubidaImagen, subir_imagen
+from core.media import ErrorSubidaImagen, ErrorValidacionImagen, subir_imagen
 from coordenadas import repository as coordenadas_repository
 from incidentes import repository
 from incidentes.forms import ReportarIncidenteForm
@@ -113,8 +113,29 @@ def reportar_incidente(request, id_paseo):
     else:
         id_mascota_incidente = ObjectId(form.cleaned_data['id_mascota'])
 
+    # Doble toque en "Enviar reporte" (punto 3) - el boton ya se
+    # deshabilita del lado del JS mientras se envia, pero esto es la
+    # defensa de fondo en el backend: si de todas formas llegan dos POST
+    # identicos (red lenta, una segunda pestaña), el segundo NO crea un
+    # incidente nuevo ni sube una segunda foto - responde como si hubiera
+    # tenido exito, idéntico a lo que ya le respondió al primero, en vez
+    # de un error confuso.
+    duplicado = repository.obtener_duplicado_reciente(
+        id_paseo=paseo['_id'],
+        tipo=form.cleaned_data['tipo'],
+        id_mascota=id_mascota_incidente,
+        descripcion=form.cleaned_data['descripcion'],
+    )
+    if duplicado:
+        return JsonResponse({'ok': True, 'mensaje': 'El incidente quedó registrado. El dueño ya fue notificado.'}, status=201)
+
     try:
         evidencia_url = subir_imagen(form.cleaned_data['foto'], carpeta='incidentes')
+    except ErrorValidacionImagen as exc:
+        # El archivo no pasa la validación (tamaño/formato/firma) - error
+        # del usuario, no de Cloudinary (punto 3 del reporte de revisión
+        # de fase 1).
+        return JsonResponse({'error': f'No se pudo subir la foto de evidencia: {exc}'}, status=400)
     except ErrorSubidaImagen as exc:
         return JsonResponse({'error': f'No se pudo subir la foto de evidencia: {exc}'}, status=502)
 

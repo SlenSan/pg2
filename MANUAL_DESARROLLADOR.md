@@ -675,6 +675,28 @@ ya arma `SECURE_SSL_REDIRECT` según `DEBUG` - este proyecto no cambia
   dentro del propio modal. Si se agrega un formulario nuevo que el
   paseador pueda abrir durante un paseo `en_vivo`, seguir este mismo
   patrón — un POST con recarga ahí rompe el envío de GPS.
+  **Robustez (revisión de fase 1, punto 3, 2026-10-12)**: el botón
+  `submit` se deshabilita de forma SÍNCRONA al entrar al listener (con
+  un guard `if (boton.disabled) return;` antes de deshabilitarlo de
+  nuevo) y se re-habilita en un único `.finally()` — así queda
+  protegido sin importar si termina en éxito, error de validación o
+  error de red, y un segundo toque mientras el primero sigue en vuelo
+  no dispara un segundo `fetch`. Como defensa de fondo en el backend
+  (por si de todas formas llegan dos POST, p.ej. con red muy lenta o
+  dos pestañas), `incidentes.repository.obtener_duplicado_reciente()`
+  evita crear dos incidentes IDÉNTICOS (mismo paseo, tipo, mascota y
+  descripción) en menos de 10s — el segundo responde como si hubiera
+  tenido éxito, en vez de un error confuso o un documento duplicado.
+  `core/media.py::subir_imagen()` ahora también valida tamaño (máx.
+  5MB) y que el contenido real coincida con la extensión declarada
+  (mismo criterio que `subir_certificado()`, nueva excepción
+  `ErrorValidacionImagen` para distinguir "archivo inválido" de "falló
+  Cloudinary" y responder 400 en vez de 502) - antes solo dependía de
+  `forms.ImageField` (Pillow), que valida que el contenido sea una
+  imagen cargable pero NO limita el tamaño, y que además NO detecta un
+  archivo de un formato real pero renombrado a otra extensión (Pillow
+  identifica el formato por contenido, no por nombre - un PNG real
+  guardado como `.jpg` pasa su validación igual).
 - **Privacidad en paseos con varios dueños**: cualquier pantalla que le
   muestre a un dueño específico "las mascotas de este paseo" debe filtrar a
   las de ESE dueño (`mascotas.repository.obtener_varias_por_id_y_dueno`),

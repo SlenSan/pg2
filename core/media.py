@@ -34,6 +34,19 @@ class ErrorSubidaImagen(Exception):
     """Error al configurar Cloudinary o al subir una imagen."""
 
 
+class ErrorValidacionImagen(ErrorSubidaImagen):
+    """
+    Subclase de ErrorSubidaImagen para el caso especifico de que el
+    ARCHIVO no pasa la validacion (tamaño, formato, firma) - a
+    diferencia del resto de ErrorSubidaImagen (Cloudinary no configurado,
+    la subida fallo por red/credenciales), esto es un error del archivo
+    que mandó el usuario, no de la infraestructura. Los llamadores
+    pueden distinguir los dos casos (p.ej. para devolver 400 en vez de
+    502) con un `except ErrorValidacionImagen` antes del `except
+    ErrorSubidaImagen` mas general.
+    """
+
+
 class ErrorArchivoInvalido(Exception):
     """Un certificado (mascota o paseador) no cumple formato/tamaño/contenido esperado."""
 
@@ -93,14 +106,35 @@ def _asegurar_configuracion():
     _configurado = True
 
 
+_TAMANO_MAXIMO_IMAGEN_MB = 5
+
+
 def subir_imagen(archivo, carpeta):
     """
     Sube `archivo` (un UploadedFile de Django, p.ej. request.FILES['foto'])
     a Cloudinary y devuelve su URL segura (https) como string.
 
-    Lanza ErrorSubidaImagen si Cloudinary no esta configurado o si la
-    subida falla (red, credenciales, archivo invalido, etc.).
+    Incremento 4, fase 1, punto 3: antes solo confiaba en
+    `forms.ImageField` (que valida que el contenido sea una imagen
+    cargable con Pillow, pero NO limita el tamaño) - un archivo de más
+    de 5MB se subía igual. Mismo criterio que `subir_certificado()`:
+    tamaño máximo y firma real del contenido (jpg/png, nunca PDF aquí -
+    esta función es solo para fotos, el certificado usa
+    `subir_certificado`). Lanza ErrorSubidaImagen si Cloudinary no esta
+    configurado, si el archivo no pasa esta validación, o si la subida
+    falla (red, credenciales, etc.) - en cualquier caso, ANTES de
+    gastar una subida real a Cloudinary.
     """
+    if archivo.size > _TAMANO_MAXIMO_IMAGEN_MB * 1024 * 1024:
+        raise ErrorValidacionImagen(f'El archivo supera el tamaño máximo permitido ({_TAMANO_MAXIMO_IMAGEN_MB} MB).')
+    tipo_declarado = _tipo_por_extension(archivo.name)
+    if tipo_declarado not in ('jpg', 'png'):
+        raise ErrorValidacionImagen('Formato no permitido. Solo se aceptan JPG o PNG.')
+    if _tipo_por_contenido(archivo) != tipo_declarado:
+        raise ErrorValidacionImagen(
+            'El contenido del archivo no coincide con su extensión. Verifica que no esté dañado o renombrado.'
+        )
+
     _asegurar_configuracion()
     try:
         resultado = cloudinary.uploader.upload(archivo, folder=f'canigo/{carpeta}')

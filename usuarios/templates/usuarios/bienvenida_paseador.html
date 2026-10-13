@@ -318,6 +318,16 @@ un script de esta plantilla.
     formEmergencia.addEventListener('submit', function (event) {
       event.preventDefault();
       var boton = formEmergencia.querySelector('button[type="submit"]');
+      // Punto 3 del reporte de revisión de fase 1: deshabilitado
+      // MIENTRAS se envía, re-habilitado en un solo lugar (.finally),
+      // sin importar si termina en éxito, error de validación o error
+      // de red - evita un doble toque que mande dos POST idénticos
+      // (el backend igual lo descarta, ver
+      // incidentes.repository.obtener_duplicado_reciente, pero esto
+      // evita gastar una subida de foto y una segunda espera de red).
+      if (boton.disabled) {
+        return;
+      }
       boton.disabled = true;
       fetch(formEmergencia.action, {
         method: 'POST',
@@ -326,7 +336,6 @@ un script de esta plantilla.
       }).then(function (resp) {
         return resp.json().then(function (data) { return {ok: resp.ok, data: data}; });
       }).then(function (resultado) {
-        boton.disabled = false;
         if (resultado.ok) {
           var modal = bootstrap.Modal.getInstance(modalEl);
           if (modal) modal.hide();
@@ -339,11 +348,12 @@ un script de esta plantilla.
           formEmergencia.querySelector('.modal-body').appendChild(aviso);
         }
       }).catch(function () {
-        boton.disabled = false;
         var aviso = document.createElement('div');
         aviso.className = 'text-danger small mt-2 text-danger-envio';
         aviso.textContent = 'No se pudo enviar el reporte. Revisa tu conexión e intenta de nuevo.';
         formEmergencia.querySelector('.modal-body').appendChild(aviso);
+      }).finally(function () {
+        boton.disabled = false;
       });
     });
   }
@@ -373,6 +383,10 @@ un script de esta plantilla.
     formFoto.addEventListener('submit', function (event) {
       event.preventDefault();
       var boton = formFoto.querySelector('button[type="submit"]');
+      // Mismo motivo que el formulario de emergencia arriba (punto 3).
+      if (boton.disabled) {
+        return;
+      }
       boton.disabled = true;
       fetch(formFoto.action, {
         method: 'POST',
@@ -381,7 +395,6 @@ un script de esta plantilla.
       }).then(function (resp) {
         return resp.json().then(function (data) { return {ok: resp.ok, data: data}; });
       }).then(function (resultado) {
-        boton.disabled = false;
         if (resultado.ok) {
           var modal = bootstrap.Modal.getInstance(modalFoto);
           if (modal) modal.hide();
@@ -400,11 +413,12 @@ un script de esta plantilla.
           formFoto.querySelector('.modal-body').appendChild(aviso);
         }
       }).catch(function () {
-        boton.disabled = false;
         var aviso = document.createElement('div');
         aviso.className = 'text-danger small mt-2 text-danger-envio';
         aviso.textContent = 'No se pudo subir la foto. Revisa tu conexión e intenta de nuevo.';
         formFoto.querySelector('.modal-body').appendChild(aviso);
+      }).finally(function () {
+        boton.disabled = false;
       });
     });
   }
