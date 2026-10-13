@@ -55,6 +55,14 @@ def lista_incidentes(request):
 
     items = []
     for incidente in incidentes:
+        # pymongo devuelve fecha_hora naive en UTC (ver core/mongo.py) -
+        # mismo cuidado de siempre (ver CLAUDE.md) que ya aplicaba
+        # detalle_incidente() para esta misma fecha, en la pantalla
+        # individual - esta vista (el historial GLOBAL del dueño) se
+        # había quedado sin marcarla, mostrando la hora 5 horas adelantada
+        # (UTC interpretado como si ya fuera hora de Bogotá).
+        if incidente.get('fecha_hora'):
+            incidente['fecha_hora'] = incidente['fecha_hora'].replace(tzinfo=timezone.utc)
         paseo = paseos_por_id.get(incidente['id_paseo'])
         items.append({
             'incidente': incidente,
@@ -92,6 +100,13 @@ def lista_incidentes_paseador(request):
     mascotas_por_id = mascotas_repository.obtener_varias_por_id(
         [i['id_mascota'] for i in incidentes if i.get('id_mascota')]
     )
+
+    # Mismo cuidado que lista_incidentes() (ver ese comentario) - esta
+    # vista se escribió reusando esa misma lógica y se le había quedado
+    # el mismo descuido.
+    for incidente in incidentes:
+        if incidente.get('fecha_hora'):
+            incidente['fecha_hora'] = incidente['fecha_hora'].replace(tzinfo=timezone.utc)
 
     items = [
         {

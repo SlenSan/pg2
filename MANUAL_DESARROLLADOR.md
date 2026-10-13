@@ -1203,6 +1203,28 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   cierre de auditoría que habían quedado sin borrar en `canigo_dev`
   (`"Medicion de timeout de push..."`, de la revisión de fase 2).
 
+- **Punto 5, corrección posterior (14 de octubre) — `fecha_hora` sin
+  marcar como UTC en los dos historiales de incidentes**: el hallazgo
+  aparte reportado junto con el punto 5 (`lista_incidentes()`, el
+  historial global del dueño, mostraba la hora cruda de Mongo sin
+  convertir - 5 horas adelantada respecto a Bogotá) se corrigió:
+  `incidente['fecha_hora'] = incidente['fecha_hora'].replace(tzinfo=
+  timezone.utc)` antes de armar cada `item`, igual que ya hacía
+  `detalle_incidente()`. Se aplicó el MISMO fix en
+  `lista_incidentes_paseador()` (la vista nueva de ese mismo punto 5,
+  agregada reusando `lista_incidentes()` como base - heredó el mismo
+  descuido sin que se hubiera notado hasta ahora, porque las dos
+  comparten plantilla pero no código).
+
+  **Verificado ejecutando** (`canigo_dev`, con `git stash` para
+  reproducir el antes/después sobre el mismo incidente de prueba,
+  sembrado con `fecha_hora = 2026-10-14 01:00:00` UTC = 2026-10-13
+  20:00 Bogotá): ANTES del fix, `/incidentes/` mostraba "14 de Octubre
+  de 2026 a las 01" (la hora UTC cruda, sin convertir); DESPUÉS,
+  "13 de Octubre de 2026 a las 20" (correcto). Confirmado también en
+  `/incidentes/paseador/` con el mismo incidente de prueba. Incidente
+  de prueba borrado al terminar.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
