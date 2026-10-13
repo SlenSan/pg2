@@ -81,6 +81,12 @@
             Notificaciones
             <span class="navbar-campana-punto campana-punto {% if not hay_notificaciones_sin_leer %}d-none{% endif %}"></span>
           </a>
+          {% comment %}
+          RF16 (cierre de auditoría, punto 5) - antes el paseador no
+          tenía ningún link a su propio historial de incidentes (el de
+          abajo, "Incidentes", solo existía en la rama del dueño).
+          {% endcomment %}
+          <a class="nav-link text-white" href="{% url 'incidentes:lista_paseador' %}">Incidentes</a>
           {% if es_admin %}
           <a class="nav-link text-white" href="{% url 'administracion:verificacion' %}">Verificación</a>
           {% endif %}

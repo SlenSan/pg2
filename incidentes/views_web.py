@@ -69,6 +69,43 @@ def lista_incidentes(request):
     return render(request, 'incidentes/lista.html', {'items': items})
 
 
+@requiere_paseador
+def lista_incidentes_paseador(request):
+    """
+    RF16 (cierre de auditoría, punto 5) - equivalente de lista_incidentes()
+    para el paseador: antes no existía ninguna pantalla para que el
+    paseador consultara sus propios incidentes (ni link en el navbar, ni
+    vista - RF16 pide "dueño Y paseador"). Reusa lista.html (mismo
+    template, mismo shape de `items`) - a diferencia del dueño, el
+    paseador ve TODOS los incidentes de sus paseos sin filtrar por
+    mascota (repository.listar_por_paseos(), uso exclusivo del
+    paseador - ver su propio docstring), porque se los llevó a todos él
+    mismo.
+    """
+    id_paseador = request.session['id_usuario']
+    paseos = paseos_repository.listar_por_paseador(ObjectId(id_paseador))
+    paseos_por_id = {p['_id']: p for p in paseos}
+
+    incidentes = repository.listar_por_paseos(list(paseos_por_id.keys()))
+
+    paseador = usuarios_repository.obtener_por_id(id_paseador)
+    mascotas_por_id = mascotas_repository.obtener_varias_por_id(
+        [i['id_mascota'] for i in incidentes if i.get('id_mascota')]
+    )
+
+    items = [
+        {
+            'incidente': incidente,
+            'id_incidente': str(incidente['_id']),
+            'paseador': paseador,
+            'mascota': mascotas_por_id.get(incidente.get('id_mascota')),
+        }
+        for incidente in incidentes
+    ]
+
+    return render(request, 'incidentes/lista.html', {'items': items})
+
+
 @require_POST
 @requiere_paseador
 def reportar_incidente(request, id_paseo):

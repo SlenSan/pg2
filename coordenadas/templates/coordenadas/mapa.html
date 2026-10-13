@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load incidentes_tags %}
 
 {% block title %}Seguimiento del paseo — Canigo{% endblock %}
 
@@ -207,6 +208,44 @@ alarma).
         >
         <div class="card-body py-2">
           <span class="badge bg-secondary text-capitalize">{{ foto.momento }}</span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% comment %}
+RF16 (cierre de auditoría, punto 5) - "Incidentes de este paseo": vive
+tanto en vivo como en historico (coordenadas.views_web.mapa_paseo() ya
+calcula items_incidentes con el filtro correcto segun el rol - ver ese
+archivo). Mismo patron de tarjeta que incidentes/templates/incidentes/
+lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
+{% endcomment %}
+{% if items_incidentes %}
+<div class="mt-4">
+  <h2 class="h5 mb-3">Incidentes de este paseo</h2>
+  <div class="row row-cols-1 row-cols-md-2 g-3">
+    {% for item in items_incidentes %}
+    <div class="col">
+      <div class="card h-100 border-danger">
+        {% if item.incidente.evidencia_foto %}
+        <img
+          src="{{ item.incidente.evidencia_foto }}"
+          class="card-img-top"
+          alt="Evidencia del incidente"
+          style="height: 160px; object-fit: cover;"
+        >
+        {% endif %}
+        <div class="card-body py-2">
+          <span class="badge bg-danger mb-2">{{ item.incidente.tipo|etiqueta_tipo_incidente }}</span>
+          <p class="card-text small mb-1">{{ item.incidente.descripcion }}</p>
+          {% if item.mascota %}
+          <p class="card-text text-muted small mb-1">Mascota afectada: {{ item.mascota.nombre }}</p>
+          {% endif %}
+          <p class="card-text text-muted small mb-2">{{ item.incidente.fecha_hora }}</p>
+          <a href="{% url 'incidentes:detalle_incidente' item.id_incidente %}" class="small">Ver detalle</a>
         </div>
       </div>
     </div>

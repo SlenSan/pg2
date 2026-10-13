@@ -257,9 +257,42 @@ def mapa_paseo(request, id_paseo):
     if paseo.get('id_paseador'):
         paseador = usuarios_repository.obtener_por_id(paseo['id_paseador'])
 
+    # RF16 (cierre de auditoría, punto 5) - "Incidentes de este paseo":
+    # el paseador ve TODOS los de este paseo (listar_por_paseos(), sin
+    # filtrar - uso exclusivo del paseador, ver su propio docstring); el
+    # dueño ve solo los que afectan a SUS mascotas (ya resueltas en
+    # `mascotas` arriba) o "accidente_paseador" (afecta a todas por
+    # igual) - mismo filtro de privacidad de incidentes.views_web.
+    # lista_incidentes(). Esta sección vive tanto en "en_vivo" como en
+    # "historico" (mismo _paseo_accesible_o_none de arriba cubre los
+    # dos), no solo en el historial ya finalizado.
+    if es_dueno:
+        incidentes_paseo = incidentes_repository.listar_visibles_para_dueno(
+            [paseo['_id']], [m['_id'] for m in mascotas],
+        )
+    else:
+        incidentes_paseo = incidentes_repository.listar_por_paseos([paseo['_id']])
+
+    mascotas_por_id_mapa = {m['_id']: m for m in mascotas}
+    items_incidentes = []
+    for i in incidentes_paseo:
+        # pymongo devuelve fecha_hora naive en UTC (ver core/mongo.py) -
+        # hay que marcarla explicitamente antes de pasarla a la plantilla,
+        # mismo cuidado de siempre (ver CLAUDE.md e
+        # incidentes.views_web.detalle_incidente(), que ya lo hacía para
+        # esta misma pantalla individual).
+        if i.get('fecha_hora'):
+            i['fecha_hora'] = i['fecha_hora'].replace(tzinfo=timezone.utc)
+        items_incidentes.append({
+            'incidente': i,
+            'id_incidente': str(i['_id']),
+            'mascota': mascotas_por_id_mapa.get(i.get('id_mascota')),
+        })
+
     return render(request, 'coordenadas/mapa.html', {
         'paseo': paseo,
         'id_paseo': str(paseo['_id']),
+        'items_incidentes': items_incidentes,
         'mascotas': mascotas,
         'mascotas_certificados': mascotas_certificados,
         'paseador': paseador,

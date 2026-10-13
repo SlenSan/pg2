@@ -1143,6 +1143,66 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   de prueba terminó en 1.34s sin problema (y se borró de Cloudinary al
   terminar la prueba).
 
+- **Punto 5 — incidentes en el detalle del historial del paseo, para
+  ambos roles (RF16)**: diagnóstico - la auditoría anterior ya había
+  confirmado que el dueño SÍ tenía un historial completo
+  (`incidentes:lista`, `@requiere_dueno`), pero el paseador no tenía
+  NADA equivalente (ni vista, ni link en el navbar) - su único camino
+  incidental era el banner del mapa (`_info_incidente_reciente`, solo el
+  incidente MÁS RECIENTE de ese paseo, no una lista). También se había
+  confirmado que `incidentes.repository.listar_por_paseos()` existía
+  pero nunca se usaba en ningún lado.
+
+  **Sección "Incidentes de este paseo"** (`coordenadas/templates/
+  coordenadas/mapa.html`, debajo de "Fotos del paseo"): nueva, visible
+  tanto en vivo como histórico (mismo `_paseo_accesible_o_none()` que ya
+  cubre los dos estados). `coordenadas.views_web.mapa_paseo()` calcula
+  `items_incidentes` con el mismo criterio de privacidad que
+  `incidentes.views_web.lista_incidentes()`: paseador → `repository.
+  listar_por_paseos([paseo['_id']])` (sin filtrar, ve todos los de ESE
+  paseo); dueño → `repository.listar_visibles_para_dueno([paseo['_id']],
+  ids_mascota_dueno)`, donde `ids_mascota_dueno` sale de las mascotas
+  que ya estaban resueltas para ESE dueño más arriba en la misma función
+  (`_mascotas_del_dueno_en_paseo()` - nunca las 8 posibles del paseo).
+  `fecha_hora` se marca `tzinfo=utc` antes de pasarla a la plantilla
+  (mismo cuidado de siempre - ver CLAUDE.md), igual que ya hacía
+  `incidentes.views_web.detalle_incidente()` para esta misma fecha, en
+  la pantalla individual.
+
+  **Hallazgo aparte, no corregido (fuera de alcance de este punto)**:
+  `incidentes.views_web.lista_incidentes()` (el historial GLOBAL del
+  dueño, no esta sección nueva) NO marca `tzinfo=utc` sobre `fecha_hora`
+  antes de pasarla a `lista.html` - a diferencia de `detalle_incidente()`
+  y de la sección nueva de este punto, que sí lo hacen. Es el mismo bug
+  de zona horaria documentado en CLAUDE.md/sección 8 (naive UTC
+  interpretado como hora local, 5 horas de desfase), pero en un lugar
+  que esta tarea no pidió tocar - se reporta para una corrección
+  aparte.
+
+  **Lista propia del paseador** (`/incidentes/paseador/`, vista nueva
+  `incidentes.views_web.lista_incidentes_paseador()`, reutiliza
+  `lista.html` tal cual - mismo shape de `items` que ya usaba
+  `lista_incidentes()`): todos los incidentes de TODOS los paseos del
+  paseador (`paseos_repository.listar_por_paseador()` +
+  `repository.listar_por_paseos()`), sin filtrar - se los llevó él
+  mismo. Nuevo link "Incidentes" en la rama del paseador del navbar
+  (`core/templates/base.html`) - antes esa rama no tenía ninguno.
+
+  **Verificado ejecutando** (`canigo_dev`, incidentes de prueba creados
+  y borrados en la misma prueba, sobre el paseo multi-dueño existente
+  de pruebas anteriores): sembrados 3 incidentes marcados (uno afecta a
+  la mascota de D1, otro a la de D2, otro "accidente_paseador") -
+  **paseador**: ve los 3; **D1**: ve el suyo + el de "accidente_
+  paseador", **nunca** el de D2; **D2**: ve el suyo + el de "accidente_
+  paseador", **nunca** el de D1 - confirma que el filtro de privacidad
+  de `listar_visibles_para_dueno()` se respeta igual en esta sección
+  nueva. `/incidentes/paseador/` muestra los incidentes del paseador sin
+  filtrar. Capturas de pantalla (vista de celular, 390px) tomadas contra
+  estos datos de prueba antes de borrarlos. De paso, se encontraron y
+  limpiaron 4 incidentes de prueba de tareas ANTERIORES de este mismo
+  cierre de auditoría que habían quedado sin borrar en `canigo_dev`
+  (`"Medicion de timeout de push..."`, de la revisión de fase 2).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
