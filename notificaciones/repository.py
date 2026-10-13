@@ -14,6 +14,17 @@ from core.mongo import get_db
 
 logger = logging.getLogger(__name__)
 
+# Incremento 4, fase 2, revisión (punto 1): sin esto, pywebpush/requests
+# no le pone NINGUN limite de tiempo a la llamada - una suscripcion con
+# un endpoint que no responde (servidor caido, red que no corta la
+# conexion) podia colgar la peticion HTTP completa que disparo la
+# notificacion (p.ej. reportar una emergencia) hasta que el sistema
+# operativo cortara la conexion por su cuenta, que puede tardar minutos.
+# 4s es corto frente al RNF3 del proyecto (responder en <=3s a una
+# accion del usuario) pero no tan corto como para fallar de mas contra
+# un servicio de push lento pero sano.
+_TIMEOUT_PUSH_SEGUNDOS = 4
+
 _TITULO_POR_TIPO = {
     'inicio_paseo': 'Paseo iniciado',
     'fin_paseo': 'Paseo finalizado',
@@ -205,6 +216,7 @@ def _enviar_push(id_usuario, tipo, mensaje):
                 data=payload,
                 vapid_private_key=settings.VAPID_PRIVATE_KEY,
                 vapid_claims={'sub': f'mailto:{settings.VAPID_CLAIMS_EMAIL}'},
+                timeout=_TIMEOUT_PUSH_SEGUNDOS,
             )
         except WebPushException as exc:
             status = exc.response.status_code if exc.response is not None else None

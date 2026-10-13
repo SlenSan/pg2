@@ -33,8 +33,22 @@ def service_worker(request):
     service worker es su propio directorio - si viviera bajo /static/,
     solo podria controlar esa carpeta, no el sitio entero (push,
     notificationclick). Ver core/root_files/sw.js.
+
+    `Cache-Control: no-cache` explícito (revisión de fase 2, punto 2):
+    antes esta vista no mandaba ningún header de caché, así que un
+    cambio futuro a sw.js podía tardar en llegarle a un navegador que ya
+    tuviera una copia cacheada - "no-cache" NO significa "no guardar
+    nada" (eso sería "no-store"): el navegador SÍ puede quedarse con una
+    copia, pero está obligado a revalidarla con el servidor (GET
+    condicional, que puede devolver 304 sin volver a mandar el archivo)
+    antes de usarla, en vez de confiar en ella a ciegas por el tiempo
+    que decida su propia heurística.
     """
-    return HttpResponse(_SERVICE_WORKER_CONTENIDO, content_type='application/javascript')
+    return HttpResponse(
+        _SERVICE_WORKER_CONTENIDO,
+        content_type='application/javascript',
+        headers={'Cache-Control': 'no-cache'},
+    )
 
 
 def _db_status(request):

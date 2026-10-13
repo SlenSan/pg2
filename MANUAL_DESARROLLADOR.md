@@ -693,6 +693,51 @@ Chrome real después de agregar el bloque de wake lock - intervalos de
 `wakeLock.request('screen')` confirmado tanto al cargar la pantalla
 como al simular un ciclo de `visibilitychange` (oculta → visible).
 
+**Incremento 4, fase 2, revisión (puntos 1 y 2, 2026-10-13)**:
+
+- **Punto 1 — timeout por suscripción de Web Push**: diagnóstico -
+  `notificaciones/repository.py::_enviar_push()` llamaba a
+  `pywebpush.webpush(...)` sin pasarle `timeout`, así que la llamada
+  HTTP interna (vía `requests`) no tenía NINGÚN límite de tiempo propio
+  - una suscripción con un endpoint que no responde podía colgar la
+    petición completa que disparó la notificación (p.ej. reportar una
+    emergencia) hasta que el sistema operativo cortara la conexión por
+  su cuenta, que puede tardar minutos. Se agregó
+  `_TIMEOUT_PUSH_SEGUNDOS = 4` (constante nombrada, con el motivo en el
+  comentario) pasado como `timeout=_TIMEOUT_PUSH_SEGUNDOS` en la
+  llamada a `webpush()`. Un timeout de `requests` (`ReadTimeout`/
+  `ConnectTimeout`) no es un `WebPushException` - lo captura igual el
+  `except Exception` genérico ya existente (best effort, nunca lanza).
+
+  **Medido con un paseo multi-dueño real** (D1 y D2, una suscripción
+  cada uno - la de D1 apuntando a un servidor TCP que acepta la
+  conexión y nunca responde, la de D2 a un puerto cerrado que falla
+  rápido) y reportando una emergencia (`accidente_paseador`, notifica a
+  los dos): **6.78s en total** (antes del fix, sin límite, hubiera
+  tardado lo que tardara el sistema operativo en cortar la conexión
+  colgada - minutos, no segundos). La mayor parte de esos 6.78s es la
+  suma de la subida real a Cloudinary (~2s) más el tope de 4s de la
+  suscripción colgada - el reporte ya NO puede colgarse indefinidamente,
+  pero sigue agregando varios segundos reales por cada suscripción
+  problemática, porque `_enviar_push()` se llama de forma SÍNCRONA
+  dentro de la misma petición HTTP que crea el incidente. Quedó
+  documentado como una limitación conocida, no corregida en esta
+  revisión (mover el envío de push a algo asíncrono - un hilo aparte o
+  una cola - no se pidió explícitamente y cambiaría la arquitectura
+  síncrona que usa el resto del proyecto).
+
+- **Punto 2 — `sw.js` sin caché de páginas ni respuestas autenticadas**:
+  confirmado por lectura completa del archivo - `core/root_files/sw.js`
+  solo tiene `install`, `activate`, `push` y `notificationclick`; NUNCA
+  tuvo un handler de `fetch` (no hay nada que quitar, el archivo ya
+  cumplía esto desde que se creó). Lo que SÍ faltaba: ningún
+  `Cache-Control` explícito en la respuesta de `/sw.js`
+  (`core/views.py::service_worker()`) - ahora manda
+  `Cache-Control: no-cache` (confirmado con `curl -I`) - el navegador
+  puede guardar una copia, pero tiene que revalidarla con el servidor
+  antes de usarla, para que una actualización futura del service worker
+  no tarde en propagarse por culpa de una caché vieja.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
