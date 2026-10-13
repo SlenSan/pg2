@@ -117,23 +117,26 @@ def subir_imagen(archivo, carpeta):
     Incremento 4, fase 1, punto 3: antes solo confiaba en
     `forms.ImageField` (que valida que el contenido sea una imagen
     cargable con Pillow, pero NO limita el tamaño) - un archivo de más
-    de 5MB se subía igual. Mismo criterio que `subir_certificado()`:
-    tamaño máximo y firma real del contenido (jpg/png, nunca PDF aquí -
-    esta función es solo para fotos, el certificado usa
-    `subir_certificado`). Lanza ErrorSubidaImagen si Cloudinary no esta
-    configurado, si el archivo no pasa esta validación, o si la subida
-    falla (red, credenciales, etc.) - en cualquier caso, ANTES de
-    gastar una subida real a Cloudinary.
+    de 5MB se subía igual. Revisión de fase 2, punto (b): la validación
+    de contenido se decide SOLO por la firma real del archivo (sus
+    primeros bytes), nunca por su extensión declarada - un PNG real
+    guardado como `.jpg` (o viceversa) se ACEPTA igual, porque Cloudinary
+    y cualquier visor de imágenes lo van a mostrar bien de todas formas
+    (identifican el formato por contenido, no por nombre); lo que de
+    verdad importa rechazar es un archivo cuyo CONTENIDO no sea ninguna
+    imagen soportada (p.ej. un .txt renombrado a .jpg) o que supere el
+    tamaño máximo. Antes esta función comparaba el tipo por contenido
+    CONTRA el tipo por extensión y rechazaba cualquier diferencia - eso
+    rechazaba de más (un PNG real con extensión .jpg, que no tiene nada
+    de malo). Lanza ErrorSubidaImagen si Cloudinary no esta configurado,
+    si el archivo no pasa esta validación, o si la subida falla (red,
+    credenciales, etc.) - en cualquier caso, ANTES de gastar una subida
+    real a Cloudinary.
     """
     if archivo.size > _TAMANO_MAXIMO_IMAGEN_MB * 1024 * 1024:
         raise ErrorValidacionImagen(f'El archivo supera el tamaño máximo permitido ({_TAMANO_MAXIMO_IMAGEN_MB} MB).')
-    tipo_declarado = _tipo_por_extension(archivo.name)
-    if tipo_declarado not in ('jpg', 'png'):
-        raise ErrorValidacionImagen('Formato no permitido. Solo se aceptan JPG o PNG.')
-    if _tipo_por_contenido(archivo) != tipo_declarado:
-        raise ErrorValidacionImagen(
-            'El contenido del archivo no coincide con su extensión. Verifica que no esté dañado o renombrado.'
-        )
+    if _tipo_por_contenido(archivo) not in ('jpg', 'png'):
+        raise ErrorValidacionImagen('Formato no permitido. Solo se aceptan imágenes JPG o PNG.')
 
     _asegurar_configuracion()
     try:

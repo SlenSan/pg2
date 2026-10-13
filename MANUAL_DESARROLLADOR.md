@@ -886,15 +886,24 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   descripción) en menos de 10s — el segundo responde como si hubiera
   tenido éxito, en vez de un error confuso o un documento duplicado.
   `core/media.py::subir_imagen()` ahora también valida tamaño (máx.
-  5MB) y que el contenido real coincida con la extensión declarada
-  (mismo criterio que `subir_certificado()`, nueva excepción
+  5MB) y que el CONTENIDO real sea una imagen JPG o PNG (nueva excepción
   `ErrorValidacionImagen` para distinguir "archivo inválido" de "falló
   Cloudinary" y responder 400 en vez de 502) - antes solo dependía de
   `forms.ImageField` (Pillow), que valida que el contenido sea una
-  imagen cargable pero NO limita el tamaño, y que además NO detecta un
-  archivo de un formato real pero renombrado a otra extensión (Pillow
-  identifica el formato por contenido, no por nombre - un PNG real
-  guardado como `.jpg` pasa su validación igual).
+  imagen cargable pero NO limita el tamaño.
+  **Corrección de la revisión de fase 2, punto (b)**: la primera versión
+  de este cambio además comparaba el contenido CONTRA la extensión
+  declarada y rechazaba cualquier diferencia - eso rechazaba de más: un
+  PNG real guardado como `.jpg` es un archivo perfectamente válido (lo
+  abre cualquier visor, Cloudinary lo sirve bien), no había motivo real
+  para rechazarlo. Ahora la decisión es SOLO por la firma real del
+  archivo (sus primeros bytes) - se acepta si el contenido es JPG o PNG,
+  sin importar la extensión del nombre; se sigue rechazando cualquier
+  contenido que NO sea ninguno de los dos (p.ej. un `.txt` renombrado a
+  `.jpg`) y cualquier archivo de más de 5MB. `_tipo_por_extension()`
+  sigue existiendo y se sigue usando en `subir_certificado()` (que sí
+  necesita saber si es PDF vs imagen para pasarle el `resource_type`
+  correcto a Cloudinary) - el cambio es solo en `subir_imagen()`.
 - **Privacidad en paseos con varios dueños**: cualquier pantalla que le
   muestre a un dueño específico "las mascotas de este paseo" debe filtrar a
   las de ESE dueño (`mascotas.repository.obtener_varias_por_id_y_dueno`),
