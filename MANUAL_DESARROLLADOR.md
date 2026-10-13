@@ -426,6 +426,31 @@ incidente para los dos roles - antes ese link solo existía para el
 dueño y llevaba a la lista genérica (`incidentes:lista`, que ni
 siquiera existe para el paseador).
 
+**Incremento 4, fase 1 — punto B (teléfono del paseador)**:
+`usuarios.telefono` ya existía y era obligatorio para los dos roles -
+antes NO se validaba su formato (`forms.CharField` libre) ni se mostraba
+en ningún lado. Ahora: `usuarios/forms.py::_validar_telefono_colombiano()`
+(celular colombiano = 10 dígitos que empiezan en 3, ignorando espacios o
+guiones) se aplica en `clean_telefono()` de `_RegistroBaseForm`
+(registro de los dos roles) y de `EditarPerfilPaseadorForm` (editar
+perfil) - rechazado en el backend, no solo sugerido por el `<input>`.
+Se muestra como link `tel:` en dos lugares, los dos ya con el objeto
+`paseador` en su contexto:
+`paseos/templates/paseos/_lista_paseos_activos.html` ("Paseos activos"
+del dueño - esta pantalla YA filtra a solo `disponible`/`en_vivo`, ver
+`paseos.repository.listar_activos_por_dueno`, así que no hace falta un
+chequeo de estado aparte) y
+`coordenadas/templates/coordenadas/mapa.html` (mapa de seguimiento,
+SOLO para `es_dueno` - el paseador no necesita ver su propio número),
+con un `id="telefono-paseador"` que el polling de 10s oculta
+dinámicamente si el estado pasa a `historico` MIENTRAS esa pantalla ya
+está abierta (no solo al cargar la página). También incluido en el
+detalle de un incidente (punto C) con el mismo criterio. Nunca se
+muestra en `historial.html` (paseos ya `historico`) ni en el perfil
+público de un paseador (`detalle_paseador` - ahí el dueño todavía no
+tiene ninguna mascota inscrita con él, mostrar el teléfono ahí sería
+exponerlo sin que exista una relación real todavía).
+
 ## 8. Convenciones del proyecto
 
 - **snake_case en todo**: nombres de campos de Mongo (`id_dueno`,

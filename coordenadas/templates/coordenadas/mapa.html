@@ -48,6 +48,22 @@
         >
         {% endif %}
         <span class="fw-bold">{{ paseador.nombre|default:"Paseador" }}</span>
+        {% comment %}
+        Teléfono del paseador (Incremento 4, punto B) - SOLO para el
+        dueño (el paseador no necesita ver su propio número), y solo
+        mientras el paseo sigue "disponible"/"en_vivo" (oculto en
+        historial). El estado puede cambiar MIENTRAS esta pantalla ya
+        esta abierta (el paseo pasa a "historico" sin que el dueño
+        recargue) - por eso el id, para que el polling de mas abajo
+        pueda ocultarlo en caliente, no solo al cargar la pagina.
+        {% endcomment %}
+        {% if es_dueno and paseador.telefono %}
+        <a
+          href="tel:{{ paseador.telefono }}"
+          class="small ms-1 {% if paseo.estado == 'historico' %}d-none{% endif %}"
+          id="telefono-paseador"
+        >{{ paseador.telefono }}</a>
+        {% endif %}
       </div>
     </div>
     <div class="text-end">
@@ -253,6 +269,14 @@ solo ocultarla con CSS, para no exponerle un link que lo rebotaria.
         var badge = document.getElementById('estado-badge');
         badge.textContent = data.estado;
         badge.className = 'badge ' + (claseBadgePorEstado[data.estado] || 'bg-secondary');
+
+        // Teléfono del paseador (punto B) - no existe en el DOM para el
+        // paseador ni si no tiene teléfono (ver el "if" en el HTML), de
+        // ahi el chequeo de null.
+        var telefonoPaseador = document.getElementById('telefono-paseador');
+        if (telefonoPaseador) {
+          telefonoPaseador.classList.toggle('d-none', data.estado === 'historico');
+        }
 
         // .d-none (no el atributo "hidden") - ver el comentario en el
         // HTML de mas arriba sobre por que "hidden" no alcanza junto a

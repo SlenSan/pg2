@@ -15,6 +15,17 @@ el aviso breve.
       <div>
         <strong>{{ item.mascotas_nombres|default:"—" }}</strong>
         con <strong>{{ item.paseador.nombre|default:"—" }}</strong>
+        {% comment %}
+        Teléfono del paseador (Incremento 4, punto B): esta pantalla
+        SOLO lista paseos "disponible"/"en_vivo" (ver
+        paseos.repository.listar_activos_por_dueno) - nunca "historico"
+        (eso vive en historial(), aparte) - asi que no hace falta un
+        chequeo de estado aca ademas: por construccion, cualquier item
+        de esta lista ya cumple la condicion "mientras este activo".
+        {% endcomment %}
+        {% if item.paseador.telefono %}
+        <a href="tel:{{ item.paseador.telefono }}" class="small">{{ item.paseador.telefono }}</a>
+        {% endif %}
         <div class="text-muted small">
           {% if item.paseo.hora_inicio %}Inicio: {{ item.paseo.hora_inicio }}{% endif %}
         </div>

@@ -1,3 +1,4 @@
+import re
 from datetime import date
 
 from django import forms
@@ -11,6 +12,28 @@ TIPOS_CERTIFICADO_PASEADOR = (
     ('Capacitación en cuidado o manejo canino', 'Capacitación en cuidado o manejo canino'),
     ('Otro certificado relacionado', 'Otro certificado relacionado'),
 )
+
+# Celular colombiano: 10 digitos, empieza en 3 (operadores moviles) - ver
+# CLAUDE.md, teléfono es obligatorio para los dos roles y ahora se
+# muestra como link "tel:" (Incremento 4, punto B), asi que vale la pena
+# que lo que se guarda sea realmente marcable. Antes esto NO se validaba
+# (CharField libre) - Incremento 4, punto B lo agrega.
+_PATRON_TELEFONO_COLOMBIANO = re.compile(r'^3\d{9}$')
+
+
+def _limpiar_telefono(telefono):
+    """Quita espacios y guiones antes de validar - '300 123 4567' y
+    '300-123-4567' son formas comunes de escribir el mismo numero."""
+    return re.sub(r'[\s-]', '', telefono or '')
+
+
+def _validar_telefono_colombiano(telefono):
+    telefono = _limpiar_telefono(telefono)
+    if not _PATRON_TELEFONO_COLOMBIANO.match(telefono):
+        raise forms.ValidationError(
+            'Ingresa un celular colombiano válido: 10 dígitos que empiecen en 3 (ej. 3001234567).'
+        )
+    return telefono
 
 
 class _RegistroBaseForm(forms.Form):
@@ -40,6 +63,9 @@ class _RegistroBaseForm(forms.Form):
         label='Confirmar contraseña',
         widget=forms.PasswordInput(attrs={'class': _INPUT_CLASS}),
     )
+
+    def clean_telefono(self):
+        return _validar_telefono_colombiano(self.cleaned_data.get('telefono', ''))
 
     def clean(self):
         cleaned = super().clean()
@@ -89,6 +115,9 @@ class EditarPerfilPaseadorForm(forms.Form):
         label='Foto de perfil',
         widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
     )
+
+    def clean_telefono(self):
+        return _validar_telefono_colombiano(self.cleaned_data.get('telefono', ''))
 
     def __init__(self, *args, tenia_descripcion=False, **kwargs):
         super().__init__(*args, **kwargs)
