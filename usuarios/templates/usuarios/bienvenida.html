@@ -21,6 +21,8 @@
   </a>
 </div>
 
+{% include 'notificaciones/_activar_push.html' %}
+
 <a
   href="{% if paseo_activo %}{% url 'coordenadas:mapa_paseo' paseo_activo.id_paseo %}{% else %}#{% endif %}"
   class="banner-paseo-activo d-flex align-items-center gap-3 mb-4 {% if not paseo_activo %}d-none{% endif %}"

@@ -1,0 +1,176 @@
+{% comment %}
+Activación de Web Push (Incremento 4, fase 2, punto E) - incluido en
+los dos dashboards (bienvenida.html del dueño, bienvenida_paseador.html
+del paseador), "en el panel" como pidió la tarea, un solo archivo para
+no mantener dos copias.
+
+Toda la tarjeta queda oculta si el servidor no tiene Web Push
+configurado (sin VAPID_PUBLIC_KEY) - no tiene sentido mostrarle nada al
+usuario sobre una función que el backend no puede completar; esto SÍ se
+resuelve en el servidor (Django), el resto de los estados de abajo los
+decide el JS según el dispositivo.
+{% endcomment %}
+{% if vapid_public_key %}
+<div class="card mb-4" id="push-activacion">
+  <div class="card-body py-2 px-3">
+    <div id="push-no-soportado" hidden>
+      <p class="text-muted small mb-0">
+        <i class="bi bi-bell-slash"></i> Tu dispositivo o navegador no admite notificaciones.
+      </p>
+    </div>
+    <div id="push-instrucciones-ios" hidden>
+      <p class="text-muted small mb-0">
+        <i class="bi bi-bell"></i> Para recibir notificaciones: toca <strong>Compartir</strong> →
+        <strong>Agregar a inicio</strong> y abre Canigo desde ese ícono.
+      </p>
+    </div>
+    <div id="push-bloqueado" hidden>
+      <p class="text-muted small mb-0">
+        <i class="bi bi-bell-slash"></i> Bloqueaste las notificaciones para Canigo.
+        Actívalas desde la configuración de tu navegador.
+      </p>
+    </div>
+    <div id="push-activo" hidden>
+      <p class="text-success small mb-0">
+        <i class="bi bi-bell-fill"></i> Notificaciones activadas en este dispositivo.
+      </p>
+    </div>
+    <div id="push-boton-contenedor" hidden>
+      <button type="button" class="btn btn-outline-primary btn-sm" id="btn-activar-push">
+        <i class="bi bi-bell"></i> Activar notificaciones en este dispositivo
+      </button>
+      <p class="text-danger small mt-2 mb-0" id="push-error" hidden></p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var VAPID_PUBLIC_KEY = "{{ vapid_public_key }}";
+  var URL_GUARDAR_SUSCRIPCION = "{% url 'notificaciones:guardar_suscripcion_push' %}";
+  // Token incrustado DIRECTO del contexto de Django (no leído de la
+  // cookie "csrftoken"): esta pantalla puede ser la PRIMERA que un
+  // dueño/paseador visita tras iniciar sesión, antes de que ninguna
+  // otra página con un <form> haya hecho que esa cookie exista - leerla
+  // del DOM en ese momento devolvía null en silencio (bug encontrado al
+  // probar: el POST de abajo fallaba con 403, pero como el código no
+  // revisaba resp.ok, igual mostraba "activado" - ver guardarSuscripcion).
+  var csrftoken = "{{ csrf_token }}";
+
+  function mostrarSolo(idVisible) {
+    ['push-no-soportado', 'push-instrucciones-ios', 'push-bloqueado', 'push-activo', 'push-boton-contenedor']
+      .forEach(function (id) {
+        document.getElementById(id).hidden = id !== idVisible;
+      });
+  }
+
+  // Detección de plataforma (pedida explícitamente): iOS no expone
+  // "standalone" en ningún otro navegador, y matchMedia(display-mode)
+  // es el estándar general (también lo soporta iOS 16.4+, además de
+  // navigator.standalone) - se comprueban los dos por si alguno falta.
+  var esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  var esStandalone = window.navigator.standalone === true
+    || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  var soportaPush = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+  function urlBase64ToUint8Array(base64String) {
+    var padding = '='.repeat((4 - base64String.length % 4) % 4);
+    var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    var rawData = window.atob(base64);
+    var outputArray = new Uint8Array(rawData.length);
+    for (var i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  function guardarSuscripcion(suscripcion) {
+    var json = suscripcion.toJSON();
+    return fetch(URL_GUARDAR_SUSCRIPCION, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken,
+      },
+      body: JSON.stringify({endpoint: json.endpoint, keys: json.keys}),
+    }).then(function (resp) {
+      // CRÍTICO: si esto no se revisa, un POST fallido (403 de CSRF,
+      // 400 de validación, 500) deja a la suscripción SIN guardar en el
+      // servidor pero igual muestra "activado" al usuario - encontrado
+      // probando con un Chrome real (el primer intento fallaba en
+      // silencio por la cookie csrftoken ausente, ver el comentario de
+      // arriba).
+      if (!resp.ok) {
+        throw new Error('No se pudo guardar la suscripción en el servidor (HTTP ' + resp.status + ').');
+      }
+      return resp.json();
+    });
+  }
+
+  function suscribirYGuardar(registro) {
+    return registro.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    }).then(guardarSuscripcion);
+  }
+
+  if (!soportaPush) {
+    mostrarSolo('push-no-soportado');
+  } else if (esIOS && !esStandalone) {
+    // Safari normal en iPhone: pushManager puede incluso EXISTIR en el
+    // objeto window ahí, pero no funciona de verdad fuera de modo
+    // standalone - por eso esta condición va ANTES de mirar el permiso.
+    mostrarSolo('push-instrucciones-ios');
+  } else if (Notification.permission === 'denied') {
+    mostrarSolo('push-bloqueado');
+  } else if (Notification.permission === 'granted') {
+    // Permiso ya concedido - puede que la suscripción se haya perdido
+    // con el tiempo (pedido explícito de la tarea: "las suscripciones
+    // pueden perderse... vuelve a registrar si el permiso sigue
+    // concedido") - se revisa y, si hace falta, se rehace en silencio,
+    // sin pedirle nada de nuevo al usuario (el permiso del SO ya está).
+    navigator.serviceWorker.ready.then(function (registro) {
+      return registro.pushManager.getSubscription().then(function (suscripcionExistente) {
+        if (suscripcionExistente) {
+          // El dispositivo YA está suscrito de verdad (esto lo confirma
+          // el propio navegador, no el backend) - se muestra "activo" ya
+          // mismo. El re-guardado es solo para re-sincronizar el
+          // backend por si la había perdido (p.ej. se reinició la base
+          // de datos local de pruebas) - si ESE POST falla, no hace
+          // falta mostrarle un error al usuario (el push le sigue
+          // funcionando a nivel del navegador), solo no se interrumpe
+          // con una excepción sin atrapar.
+          mostrarSolo('push-activo');
+          return guardarSuscripcion(suscripcionExistente).catch(function () {});
+        }
+        return suscribirYGuardar(registro).then(function () {
+          mostrarSolo('push-activo');
+        });
+      });
+    }).catch(function () {
+      mostrarSolo('push-boton-contenedor');
+    });
+  } else {
+    mostrarSolo('push-boton-contenedor');
+    document.getElementById('btn-activar-push').addEventListener('click', function () {
+      // CRÍTICO (pedido explícito): Notification.requestPermission() se
+      // llama DIRECTO acá, sin ningún await/then previo - Safari exige
+      // que el permiso se pida sincrónicamente dentro del gesto de clic,
+      // o lo rechaza sin ni preguntarle al usuario.
+      Notification.requestPermission().then(function (permiso) {
+        if (permiso !== 'granted') {
+          mostrarSolo('push-bloqueado');
+          return;
+        }
+        return navigator.serviceWorker.ready.then(suscribirYGuardar).then(function () {
+          mostrarSolo('push-activo');
+        });
+      }).catch(function () {
+        document.getElementById('push-error').hidden = false;
+        document.getElementById('push-error').textContent = 'No se pudo activar las notificaciones. Intenta de nuevo.';
+      });
+    });
+  }
+})();
+</script>
+{% endif %}

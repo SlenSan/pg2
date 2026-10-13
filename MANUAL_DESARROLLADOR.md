@@ -615,6 +615,51 @@ tenía la pestaña abierta.
   se puede hacer con un dispositivo real - ver la sección de
   verificación del reporte.
 
+**Incremento 4, fase 2 — punto E, continuación (permiso y UI de
+activación)**: nuevo parcial compartido
+`notificaciones/templates/notificaciones/_activar_push.html`, incluido
+una sola vez en cada dashboard (`bienvenida.html`,
+`bienvenida_paseador.html`) - "en el panel" de cada rol, sin mantener
+dos copias. Oculto por completo si el servidor no tiene
+`VAPID_PUBLIC_KEY` configurada (chequeo en Django, no en JS). El JS
+decide cuál de 5 estados mostrar: no soportado, instrucciones iOS,
+bloqueado, activo, o el botón - detección de iOS
+(`/iPad|iPhone|iPod/.test(navigator.userAgent)`) y de modo standalone
+(`navigator.standalone` + `matchMedia('(display-mode: standalone)')`,
+los dos, por si alguno falta). El permiso se pide con
+`Notification.requestPermission()` LLAMADO DIRECTO dentro del
+listener de clic, sin ningún `await`/`.then()` previo - Safari exige
+el gesto del usuario de forma estricta, cualquier espera previa (aunque
+sea de una promesa ya resuelta) hace que lo rechace sin preguntar nada.
+Con el permiso ya concedido de antes, se revisa
+`pushManager.getSubscription()` y se vuelve a suscribir en silencio si
+hace falta (pedido explícito: "las suscripciones pueden perderse con
+el tiempo").
+
+**Bug real encontrado probando con un Chrome real (no solo leyendo el
+código)**: el primer intento de `guardarSuscripcion()` no revisaba
+`resp.ok` del POST al backend - un fallo (403 por falta de la cookie
+`csrftoken`, que en la primera visita al dashboard tras iniciar sesión
+todavía no existía, al no haber pasado antes por ninguna página con un
+`<form>`) dejaba la suscripción SIN guardar en el servidor, pero la UI
+igual mostraba "Notificaciones activadas" - confirmado con un push real
+que nunca llegaba a guardarse en `suscripciones_push` pese a que la
+pantalla decía lo contrario. Corregido en dos frentes: (1) el token
+CSRF ahora se incrusta directo del contexto de Django
+(`{{ csrf_token }}`) en vez de leerse de la cookie, eliminando la
+condición de carrera; (2) `guardarSuscripcion()` ahora lanza si
+`!resp.ok`, así que un fallo del backend SÍ se refleja como error en la
+UI en vez de mostrar éxito falso.
+
+**Sesión independiente en iOS standalone**: `base_auth.html` (login/
+registro/seleccionar_rol) muestra un aviso con
+`window.navigator.standalone === true` explicando que iniciar sesión
+ahí es independiente de Safari - la app instalada en la pantalla de
+inicio en iOS NO comparte cookies con Safari normal (son contextos de
+navegación separados a propósito de Apple), así que SIEMPRE pide
+sesión de nuevo la primera vez que se abre desde ese ícono, aunque ya
+hubiera una sesión iniciada en Safari.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

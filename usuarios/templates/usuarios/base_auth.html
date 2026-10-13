@@ -68,6 +68,27 @@ footer, empujándolo fuera de la pantalla en login/registro.
       <h1 class="h3 mb-1">{% block auth_titulo %}{% endblock %}</h1>
       <p class="text-muted mb-4">{% block auth_subtitulo %}{% endblock %}</p>
 
+      {% comment %}
+      Incremento 4, fase 2, punto E: la app instalada en la pantalla de
+      inicio en iOS NO comparte las cookies de Safari (son contextos de
+      navegación separados) - un paseador/dueño que abre Canigo desde
+      ese ícono SIEMPRE llega sin sesión la primera vez, aunque ya haya
+      iniciado sesión en Safari normal. Sin este aviso, eso se ve como
+      un error ("¿por qué me pide iniciar sesión de nuevo?"); con él,
+      queda claro que es esperado. Oculto por defecto - solo JS lo
+      muestra, y solo en iOS standalone (navigator.standalone), nunca en
+      Safari normal ni en Android/escritorio.
+      {% endcomment %}
+      <div class="alert alert-info small" id="aviso-sesion-independiente" hidden>
+        Estás usando Canigo instalado en tu pantalla de inicio: inicia sesión aquí,
+        es independiente de Safari.
+      </div>
+      <script>
+      if (window.navigator.standalone === true) {
+        document.getElementById('aviso-sesion-independiente').hidden = false;
+      }
+      </script>
+
       {% if messages %}
         {% for message in messages %}
           <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>

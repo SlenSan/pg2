@@ -12,6 +12,8 @@
 {% block content %}
 <h1 class="h3 mb-4">Hola, {{ nombre }}</h1>
 
+{% include 'notificaciones/_activar_push.html' %}
+
 {% if paseo_activo.estado == 'en_vivo' %}
 <div class="card mb-4">
   <div class="card-body">
