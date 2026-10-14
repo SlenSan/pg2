@@ -457,7 +457,38 @@ un script de esta plantilla.
       });
   }
 
-  setInterval(actualizar, 12000);
+  // Lentitud en producción, 14 de octubre, punto 4: este sondeo era el
+  // único de los cuatro del proyecto (junto al mapa en vivo y al emisor
+  // de GPS, que SÍ tienen una razón explícita para no pausarse) que
+  // seguía corriendo con la pestaña en segundo plano - mismo patrón ya
+  // establecido en usuarios/bienvenida.html y paseos/mis_paseos.html.
+  var intervaloId = null;
+
+  function iniciarSondeo() {
+    if (!intervaloId) {
+      intervaloId = setInterval(actualizar, 12000);
+    }
+  }
+
+  function detenerSondeo() {
+    if (intervaloId) {
+      clearInterval(intervaloId);
+      intervaloId = null;
+    }
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') {
+      actualizar();
+      iniciarSondeo();
+    } else {
+      detenerSondeo();
+    }
+  });
+
+  if (document.visibilityState === 'visible') {
+    iniciarSondeo();
+  }
 })();
 </script>
 {% endif %}

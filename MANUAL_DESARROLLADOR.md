@@ -1355,6 +1355,26 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   existente (ver "Hallazgos de la caminata real del 13 de octubre,
   punto 4").
 
+- **Punto 4 — el dashboard del paseador (`bienvenida_paseador.html`,
+  sondeo de 12s cuando NO está caminando) era el único de los 4 sondeos
+  periódicos del proyecto sin pausa en segundo plano**: diagnóstico -
+  `usuarios/bienvenida.html` y `paseos/mis_paseos.html` ya tenían el
+  patrón `iniciarSondeo()`/`detenerSondeo()` + `visibilitychange`
+  (ver sección 8 más abajo); este archivo nunca lo tuvo, seguía
+  llamando al servidor cada 12s aunque el navegador estuviera en
+  segundo plano o la pantalla bloqueada. Fix: mismo patrón exacto,
+  copiado de `bienvenida.html` - sin cambiar el intervalo de 12s (eso
+  es una inconsistencia aparte frente a los 10s de los otros dos, no
+  parte de esta corrección - reportado, no corregido, para no mezclar
+  dos cambios en un commit).
+
+  **Verificado ejecutando** (`canigo_dev`, Chrome headless, `fetch`
+  interceptado para contar llamadas reales a `.../bienvenida/estado/`):
+  con la pestaña oculta (`document.visibilityState = 'hidden'`
+  simulado) durante 13s (más de un ciclo de 12s), 0 peticiones nuevas;
+  al volver a "visible", 1 petición inmediata (el refresco explícito al
+  recuperar foco, igual que `bienvenida.html`).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
