@@ -1355,6 +1355,18 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   existente (ver "Hallazgos de la caminata real del 13 de octubre,
   punto 4").
 
+  **Confirmado después en producción real** con un paseo en vivo de
+  ~12 minutos (89 ciclos de GPS + mapa cada 8s, cuentas `@canigo.test`,
+  respaldadas y borradas al terminar): cada respuesta del mapa trajo
+  **exactamente 1 punto nuevo** (nunca el historial acumulado) durante
+  TODO el paseo - confirma que el fix funciona igual en producción que
+  en local. Tiempos estables (GPS mediana 0.74s, mapa mediana 0.95s),
+  sin tendencia a empeorar con la duración - pero con picos aislados
+  (GPS hasta 14.3s, mapa hasta 3.1s en un solo ciclo cada uno, de 89):
+  consistentes con contención de CPU compartida del plan gratuito de
+  Render bajo uso concurrente, no con una fuga progresiva - ver más
+  abajo, "Lentitud en producción".
+
 - **Punto 4 — el dashboard del paseador (`bienvenida_paseador.html`,
   sondeo de 12s cuando NO está caminando) era el único de los 4 sondeos
   periódicos del proyecto sin pausa en segundo plano**: diagnóstico -
@@ -1374,6 +1386,19 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   simulado) durante 13s (más de un ciclo de 12s), 0 peticiones nuevas;
   al volver a "visible", 1 petición inmediata (el refresco explícito al
   recuperar foco, igual que `bienvenida.html`).
+
+- **Conclusión tras los dos puntos corregidos + ~12 minutos de uso
+  continuo real en producción**: no se observó una tendencia de
+  degradación progresiva ("se pone más lento mientras más se usa") en
+  esa ventana - los tiempos de respuesta se mantuvieron estables de
+  principio a fin. Sí aparecieron picos aislados de latencia bajo la
+  CPU compartida/limitada del plan gratuito (hasta 14.3s en un único
+  ciclo de 89) - coherente con "a veces los botones tardan en
+  responder" como síntoma de contención de CPU puntual, no como fuga
+  de memoria. La causa dominante y más reproducible de lentitud sigue
+  siendo el costo fijo de `check_password()` en cada login (ver más
+  arriba) - eso no cambia con estos dos puntos, porque ninguno de los
+  dos lo toca.
 
 ## 8. Convenciones del proyecto
 
