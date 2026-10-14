@@ -1400,6 +1400,52 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   arriba) - eso no cambia con estos dos puntos, porque ninguno de los
   dos lo toca.
 
+- **Decisión de la autora sobre el hasher (14 de octubre)**: PBKDF2-SHA256
+  con **600.000 iteraciones** (antes 1.000.000, el default de Django) -
+  es el mínimo que recomienda hoy el [OWASP Password Storage Cheat
+  Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+  para PBKDF2-HMAC-SHA256 ("use PBKDF2 with a work factor of 600,000 or
+  more [...] with an internal hash function of HMAC-SHA-256") - no se
+  bajó más allá de ese piso por seguridad, aunque mediciones anteriores
+  mostraban que iteraciones más bajas (260k, 100k) serían aún más
+  rápidas.
+
+  `core/hashers.py::PBKDF2HasherOWASP600k` hereda de
+  `PBKDF2PasswordHasher` de Django, solo cambia `iterations`. `settings.
+  PASSWORD_HASHERS` lo pone PRIMERO (es el que usa `make_password()`
+  para cualquier contraseña nueva) y deja el `PBKDF2PasswordHasher` de
+  Django DESPUÉS (pedido explícito, defensa adicional explícita, aunque
+  con el `algorithm` igual en los dos - `'pbkdf2_sha256'` heredado sin
+  cambios - el primero de la lista ya es en la práctica el único que
+  Django usa para verificar CUALQUIER hash pbkdf2_sha256, viejo o
+  nuevo: las iteraciones reales se leen del propio hash guardado al
+  verificar, nunca de `self.iterations` - ver el docstring de la
+  clase).
+
+  **Actualización automática al iniciar sesión**: como este proyecto no
+  usa el modelo `User` de Django (pymongo directo, sin ORM - ver
+  CLAUDE.md), el re-hash automático que Django normalmente hace solo
+  vía `AbstractBaseUser.check_password()` hubo que armarlo a mano en
+  `usuarios.views_web.login()`: se le pasa un `setter` a la función
+  `check_password()` de Django (acepta uno desde siempre, parámetro que
+  este proyecto nunca había usado) - si la contraseña es correcta Y el
+  hash guardado no coincide con los parámetros del hasher "default"
+  actual (`hasher.must_update(encoded)`, interno de Django), el
+  `setter` genera un hash nuevo con `make_password()` (600k) y lo
+  guarda (`usuarios.repository.actualizar_contrasena()`, sin tocar
+  ningún otro campo). Una cuenta vieja con 1.000.000 de iteraciones
+  queda en 600.000 la PRIMERA vez que su dueño inicia sesión después de
+  este cambio, sin que nadie tenga que hacer nada - las que nunca
+  vuelvan a iniciar sesión se quedan en 1.000.000 para siempre (más
+  lentas de verificar, pero igual de válidas).
+
+  **Verificado ejecutando** (`canigo_dev`): una cuenta de prueba
+  sembrada con un hash simulando 1.000.000 de iteraciones (el formato
+  real de una cuenta anterior a este cambio) inició sesión
+  correctamente por la vista real (`/cuentas/login/`), y quedó guardada
+  con `600000` iteraciones inmediatamente después - confirmado leyendo
+  el documento en Mongo tras el login, no solo la respuesta HTTP.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

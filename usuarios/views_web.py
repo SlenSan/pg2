@@ -170,7 +170,21 @@ def login(request):
         if form.is_valid():
             usuario = repository.obtener_por_correo(form.cleaned_data['correo'])
             contrasena = form.cleaned_data['contrasena']
-            if not usuario or not check_password(contrasena, usuario['contrasena']):
+
+            def _actualizar_hash_de_contrasena(contrasena_plana):
+                # Lentitud en producción (14 de octubre) - re-hash
+                # automático al iniciar sesión: `check_password` llama
+                # a esto SOLO si la contraseña es correcta Y el hash
+                # guardado no coincide con los parámetros del hasher
+                # "default" actual (ver settings.PASSWORD_HASHERS) -
+                # exactamente el caso de una cuenta vieja con
+                # 1.000.000 de iteraciones, que termina guardada con
+                # 600.000 sin que la autora tenga que hacer nada.
+                repository.actualizar_contrasena(usuario['_id'], make_password(contrasena_plana))
+
+            if not usuario or not check_password(
+                contrasena, usuario['contrasena'], setter=_actualizar_hash_de_contrasena
+            ):
                 form.add_error(None, 'Correo o contraseña incorrectos.')
             elif rol and usuario['rol'] != _ROL_MONGO[rol]:
                 form.add_error(None, 'Esta cuenta está registrada como {}. Ingresa desde "{}".'.format(

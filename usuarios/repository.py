@@ -105,6 +105,18 @@ def actualizar_calificacion_promedio(id_paseador, promedio):
     get_db().usuarios.update_one({'_id': oid}, {'$set': {'calificacion_promedio': promedio}})
 
 
+def actualizar_contrasena(id_usuario, nuevo_hash):
+    """
+    Lentitud en producción (14 de octubre) - re-hash automático al
+    iniciar sesión (ver usuarios.views_web.login()): reemplaza
+    `contrasena` por un hash ya generado con el hasher "default" actual
+    (`core.hashers.PBKDF2HasherOWASP600k`, 600.000 iteraciones). No
+    toca ningún otro campo del usuario.
+    """
+    oid = id_usuario if isinstance(id_usuario, ObjectId) else ObjectId(id_usuario)
+    get_db().usuarios.update_one({'_id': oid}, {'$set': {'contrasena': nuevo_hash}})
+
+
 def aceptar_autorizacion_datos(id_usuario):
     """
     RNF1/Ley 1581 (cierre de auditoría, punto 1) - pantalla intermedia

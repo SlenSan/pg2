@@ -210,6 +210,25 @@ CANIGO_ADMIN_EMAILS = [
 ]
 
 
+# Lentitud en producción (14 de octubre) - decisión de la autora: baja
+# el costo de CPU de check_password() de 1.000.000 a 600.000
+# iteraciones (el mínimo que recomienda hoy el OWASP Password Storage
+# Cheat Sheet para PBKDF2-HMAC-SHA256 - ver core/hashers.py). El hasher
+# de Django queda DESPUÉS en la lista (no antes) para que, si algún día
+# se agrega otro algoritmo con un `algorithm` distinto, una contraseña
+# vieja siga teniendo con qué validarse - con los dos hashers actuales
+# (mismo `algorithm` = 'pbkdf2_sha256'), el primero de la lista ya es
+# el único que se usa en la práctica para verificar CUALQUIER hash
+# pbkdf2_sha256 (viejo o nuevo - Django lee las iteraciones reales
+# desde el propio hash guardado, no desde este hasher), pero dejar el
+# de Django registrado no hace daño y es la defensa explícita que pidió
+# la autora.
+PASSWORD_HASHERS = [
+    'core.hashers.PBKDF2HasherOWASP600k',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+]
+
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
