@@ -568,7 +568,9 @@ def perfil_paseador(request):
 
     if request.method == 'POST':
         form = EditarPerfilPaseadorForm(
-            request.POST, request.FILES, tenia_descripcion=tenia_descripcion
+            request.POST, request.FILES,
+            tenia_descripcion=tenia_descripcion,
+            telefono_actual=usuario.get('telefono', ''),
         )
         if form.is_valid():
             foto_perfil_url = usuario.get('foto_perfil', '')

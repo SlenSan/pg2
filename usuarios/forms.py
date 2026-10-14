@@ -145,12 +145,29 @@ class EditarPerfilPaseadorForm(forms.Form):
         widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
     )
 
-    def clean_telefono(self):
-        return _validar_telefono_colombiano(self.cleaned_data.get('telefono', ''))
-
-    def __init__(self, *args, tenia_descripcion=False, **kwargs):
+    def __init__(self, *args, tenia_descripcion=False, telefono_actual=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._tenia_descripcion = tenia_descripcion
+        # INC-08 (hallazgos de la prueba con un usuario final, 14 de
+        # octubre) - una cuenta creada ANTES del Incremento 4 punto B
+        # (437334f) puede tener un teléfono guardado que no pasa el
+        # patrón actual (celular colombiano estricto, 10 dígitos que
+        # empiezan en 3). Sin esto, "Guardar cambios" fallaba con un
+        # error de teléfono aunque el paseador no hubiera tocado ESE
+        # campo para nada - solo quería cambiar su descripción o su
+        # foto. Se guarda ya limpio (sin espacios/guiones) para
+        # comparar manzanas con manzanas en clean_telefono().
+        self._telefono_actual_limpio = _limpiar_telefono(telefono_actual) if telefono_actual else None
+
+    def clean_telefono(self):
+        telefono = self.cleaned_data.get('telefono', '')
+        telefono_limpio = _limpiar_telefono(telefono)
+        if self._telefono_actual_limpio is not None and telefono_limpio == self._telefono_actual_limpio:
+            # No cambió respecto al valor ya guardado - se deja pasar
+            # tal cual, aunque no cumpla el patrón nuevo (dato viejo,
+            # no uno que el paseador esté intentando guardar ahora).
+            return telefono_limpio
+        return _validar_telefono_colombiano(telefono)
 
     def clean_descripcion(self):
         descripcion = self.cleaned_data.get('descripcion', '').strip()

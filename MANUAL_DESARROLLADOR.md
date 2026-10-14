@@ -1446,6 +1446,42 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   con `600000` iteraciones inmediatamente después - confirmado leyendo
   el documento en Mongo tras el login, no solo la respuesta HTTP.
 
+**Hallazgos de la prueba con un usuario final (14 de octubre)**:
+
+- **INC-08 — error al guardar cambios al editar**: diagnóstico -
+  reproducidas las ediciones de perfil del paseador (con y sin cambiar
+  cada campo), mascota (con y sin certificados nuevos) y confirmado que
+  no existe pantalla de "editar datos del dueño" (nada que probar ahí).
+  Causa raíz encontrada: `EditarPerfilPaseadorForm.clean_telefono()`
+  (agregado en `437334f`, Incremento 4 punto B) revalida el teléfono en
+  **cada** "Guardar cambios", incluso si el paseador no tocó ese campo -
+  una cuenta creada ANTES de esa validación (con un teléfono en
+  cualquier formato viejo, ej. un fijo de 7 dígitos) queda bloqueada
+  para guardar CUALQUIER cambio de perfil (descripción, foto) hasta que
+  también arregle un teléfono que ni siquiera estaba intentando tocar.
+  Los otros 3 sospechosos (middleware de autorización de datos,
+  normalización de correo, timeout de Cloudinary) se descartaron:
+  `EditarPerfilPaseadorForm` no tiene campo `correo`; una cuenta
+  reciente (post cce89d8) siempre tiene `autorizacion_datos_ok` en
+  sesión; y una subida normal de foto termina muy por debajo de los 15s
+  del timeout (ya medido en la tarea de lentitud).
+
+  Fix: `EditarPerfilPaseadorForm` recibe ahora `telefono_actual` (el
+  valor YA guardado) - `clean_telefono()` solo exige el patrón nuevo
+  **si el valor cambió** respecto al guardado; si el paseador deja el
+  mismo teléfono viejo tal cual, se acepta sin volver a validarlo (dato
+  viejo, no uno que esté intentando guardar ahora). Cambiarlo a
+  cualquier OTRO valor sigue exigiendo el formato correcto - doble capa
+  intacta, el backend sigue siendo quien decide.
+
+  **Verificado ejecutando** (`canigo_dev`): cuenta de prueba con
+  teléfono `"6301234"` (formato viejo) - ANTES del fix, "Guardar
+  cambios" sin tocar nada fallaba con "Ingresa un celular colombiano
+  válido..."; DESPUÉS, guarda sin error. Cambiar a un teléfono NUEVO
+  pero inválido (`"12345"`) sigue rechazándose igual que antes (sin
+  regresión). Edición de mascota sin archivos nuevos, confirmada sin
+  error (no afectada por este bug).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
