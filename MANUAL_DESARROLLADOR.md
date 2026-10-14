@@ -1482,6 +1482,33 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   regresión). Edición de mascota sin archivos nuevos, confirmada sin
   error (no afectada por este bug).
 
+- **INC-09 — horario publicado sin comuna**: diagnóstico -
+  `paseos.forms.PublicarHorarioForm.zonas` era `required=False` a
+  propósito (decisión original: "0 a N zonas, nunca 'todas' por
+  defecto" - ver CLAUDE.md), permitiendo publicar un horario sin
+  ninguna comuna - invisible para cualquier dueño que filtrara por
+  zona en "Paseadores disponibles", sin ninguna pista de en qué parte
+  de la ciudad atiende ese paseador. La autora decidió que al menos
+  una zona pase a ser obligatoria. Fix: `zonas` ahora es
+  `required=True` (el default) con `error_messages={'required': ...}`,
+  mismo patrón que `InscribirMascotaForm.ids_mascota`. No hizo falta
+  tocar la vista (`publicar_disponibilidad()`) ni el template: esa
+  vista ya arma el mensaje de error con el primer campo que falle
+  (`messages.error(..., f'No se pudo publicar el horario: {primer_error}')`),
+  así que "Elige al menos una zona de servicio." sale gratis por ese
+  mismo mecanismo genérico.
+
+  **Horarios ya existentes sin zona** (solo lectura, sin modificar):
+  de 8 paseos en `canigo` (producción), **1** no tiene ninguna zona
+  (`zonas: []`) - ya está en estado `historico` (un paseo ya
+  finalizado, no una oferta activa que un dueño pudiera estar
+  buscando por zona ahora mismo).
+
+  **Verificado ejecutando** (`canigo_dev`): publicar sin zonas →
+  rechazado, mensaje "Elige al menos una zona de servicio." visible,
+  cero paseos creados; publicar con 1 zona → aceptado, "Horario
+  publicado correctamente.", paseo creado normalmente.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

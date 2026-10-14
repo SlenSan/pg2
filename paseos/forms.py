@@ -20,15 +20,23 @@ class PublicarHorarioForm(forms.Form):
         label='Hasta',
         widget=forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
     )
-    # required=False + MultipleChoiceField: selección múltiple, opcional
-    # (0 a N zonas, nunca "todas" por defecto - ver
-    # paseos.repository.crear_disponibilidad). choices=ZONAS_VALIDAS es la
-    # validacion de backend "gratis": Django ya rechaza cualquier valor
-    # fuera de esa lista fija al llamar is_valid(), sin codigo extra.
-    # attrs={'class': 'zona-chip-input'} en el WIDGET (no a mano en la
-    # plantilla con {{ casilla.tag }}): asi cualquier plantilla que
-    # renderice este campo la trae puesta por construccion. Sin esto, el
-    # checkbox se renderizaba sin clase -> la regla CSS
+    # MultipleChoiceField: selección múltiple, de 1 a N zonas -
+    # INC-09 (hallazgos de la prueba con un usuario final, 14 de
+    # octubre): antes era required=False (0 a N, "[] significa 'no
+    # especificó zona'" - ver CLAUDE.md), pero eso permitía publicar un
+    # horario sin ninguna comuna, invisible para cualquier filtro por
+    # zona ("Paseadores disponibles" lo mostraba solo sin filtrar -
+    # confuso para el dueño, que no entendía en qué zona atendía ese
+    # paseador). Ahora exige al menos una, con el mismo patrón ya
+    # establecido en InscribirMascotaForm.ids_mascota (required=True,
+    # que ya rechaza una selección vacía sin necesitar un clean()
+    # aparte, más un mensaje de error propio). choices=ZONAS_VALIDAS es
+    # la validacion de backend "gratis": Django ya rechaza cualquier
+    # valor fuera de esa lista fija al llamar is_valid(), sin codigo
+    # extra. attrs={'class': 'zona-chip-input'} en el WIDGET (no a mano
+    # en la plantilla con {{ casilla.tag }}): asi cualquier plantilla
+    # que renderice este campo la trae puesta por construccion. Sin
+    # esto, el checkbox se renderizaba sin clase -> la regla CSS
     # ".zona-chip-input { opacity: 0; position: absolute; ... }" nunca
     # aplicaba (confirmado con getComputedStyle: opacity "1", position
     # "static"), dejando la casilla visible y desalineada de su propia
@@ -36,8 +44,8 @@ class PublicarHorarioForm(forms.Form):
     # por error (bug (b) del reporte de hallazgos).
     zonas = forms.MultipleChoiceField(
         label='Zonas de servicio',
-        required=False,
         widget=forms.CheckboxSelectMultiple(attrs={'class': 'zona-chip-input'}),
+        error_messages={'required': 'Elige al menos una zona de servicio.'},
         # El VALOR sigue siendo el nombre a secas (lo que se guarda en
         # Mongo, sin cambios - Incremento 4, punto G) - solo la ETIQUETA
         # visible cambia a "Comuna N. Nombre", vía la misma

@@ -127,9 +127,13 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
   fecha: Date,
   horario_desde: Date,     // horario PROPUESTO por el paseador (solo mientras estado="disponible")
   horario_hasta: Date,     // idem - distintos de hora_inicio/hora_fin (el momento REAL)
-  zonas: [String],         // 0 a N valores de ZONAS_VALIDAS (paseos/repository.py) - se elige CADA
+  zonas: [String],         // 1 a N valores de ZONAS_VALIDAS (paseos/repository.py) - se elige CADA
                             // VEZ que se publica un horario (no es un dato fijo del perfil del
-                            // paseador); [] significa "no especificó zona", NUNCA "todas las zonas"
+                            // paseador). Al menos una es obligatoria desde INC-09 (hallazgos de la
+                            // prueba con un usuario final, 14 de octubre) - antes [] era válido
+                            // ("no especificó zona"); un horario ya existente con [] de ANTES de
+                            // ese punto no se migró, sigue así hasta que su paseador lo vuelva a
+                            // publicar (ver MANUAL_DESARROLLADOR.md para el conteo)
                             // (Incremento 1, RF5/RF6, ver "Corrección de alcance" 2026-09-29 mas abajo)
   hora_inicio: Date,
   hora_fin: Date,

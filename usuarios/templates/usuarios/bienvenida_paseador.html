@@ -149,18 +149,24 @@ servidor - ver estado_bienvenida_paseador() y _horarios_paseador.html.
         </div>
 
         {% comment %}
-        Zonas de servicio (Incremento 1, RF5/RF6) - selección múltiple y
-        OPCIONAL (0 a N comunas; vacío significa "no especificó zona", no
-        "todas las zonas" - ver paseos.repository.crear_disponibilidad).
-        Toggle sin JavaScript: cada "casilla.tag" es un checkbox real,
-        oculto, cuyo label inmediato siguiente es el chip visual -
-        ".zona-chip-input:checked + .zona-chip" en canigo-theme.css hace
-        el cambio de color, no un onclick.
+        Zonas de servicio (Incremento 1, RF5/RF6) - selección múltiple,
+        de 1 a N comunas (INC-09, hallazgos de la prueba con un usuario
+        final, 14 de octubre: antes era opcional, dejando publicar un
+        horario sin ninguna zona - ver paseos.forms.PublicarHorarioForm
+        y MANUAL_DESARROLLADOR.md). El mensaje "Elige al menos una
+        zona..." si se envía vacío ya lo muestra el bloque de
+        {% verbatim %}{{ messages }}{% endverbatim %} genérico de arriba
+        (ver publicar_disponibilidad(), que ya arma ese mensaje con el
+        primer error de cualquier campo del form - no hace falta nada
+        nuevo acá). Toggle sin JavaScript: cada "casilla.tag" es un
+        checkbox real, oculto, cuyo label inmediato siguiente es el chip
+        visual - ".zona-chip-input:checked + .zona-chip" en
+        canigo-theme.css hace el cambio de color, no un onclick.
         {% endcomment %}
         <div class="card">
           <div class="card-body">
             <h3 class="h6 mb-1">Zonas de servicio</h3>
-            <p class="text-muted small mb-3">Selecciona las comunas donde puedes pasear</p>
+            <p class="text-muted small mb-3">Selecciona las comunas donde puedes pasear (elige al menos una)</p>
             <div class="zona-chips-grid">
               {% for casilla in form_horario.zonas.subwidgets %}
               {{ casilla.tag }}
