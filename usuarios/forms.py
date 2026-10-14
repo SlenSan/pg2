@@ -53,25 +53,28 @@ class _RegistroBaseForm(forms.Form):
     plataforma web (ver CLAUDE.md) — solo cambia si se pide `descripcion`."""
 
     nombre = forms.CharField(
-        max_length=150,
+        max_length=80,
         label='Nombre completo',
         widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
     )
     correo = forms.EmailField(
+        max_length=254,
         label='Correo electrónico',
         widget=forms.EmailInput(attrs={'class': _INPUT_CLASS}),
     )
     telefono = forms.CharField(
-        max_length=30,
+        max_length=20,
         label='Teléfono',
         widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
     )
     contrasena = forms.CharField(
         min_length=8,
+        max_length=128,
         label='Contraseña',
         widget=forms.PasswordInput(attrs={'class': _INPUT_CLASS}),
     )
     confirmar_contrasena = forms.CharField(
+        max_length=128,
         label='Confirmar contraseña',
         widget=forms.PasswordInput(attrs={'class': _INPUT_CLASS}),
     )
@@ -107,7 +110,7 @@ class _RegistroBaseForm(forms.Form):
 
 class RegistroDuenoForm(_RegistroBaseForm):
     direccion = forms.CharField(
-        max_length=255,
+        max_length=150,
         required=False,
         label='Dirección',
         widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
@@ -116,6 +119,7 @@ class RegistroDuenoForm(_RegistroBaseForm):
 
 class RegistroPaseadorForm(_RegistroBaseForm):
     descripcion = forms.CharField(
+        max_length=500,
         required=False,
         label='Cuéntale a los dueños sobre ti',
         widget=forms.Textarea(attrs={'class': _INPUT_CLASS, 'rows': 3}),
@@ -130,11 +134,12 @@ class EditarPerfilPaseadorForm(forms.Form):
     """
 
     telefono = forms.CharField(
-        max_length=30,
+        max_length=20,
         label='Teléfono',
         widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
     )
     descripcion = forms.CharField(
+        max_length=500,
         required=False,
         label='Cuéntale a los dueños sobre ti',
         widget=forms.Textarea(attrs={'class': _INPUT_CLASS, 'rows': 3}),
@@ -220,10 +225,12 @@ class LoginForm(forms.Form):
     que ya existe, no lo que el usuario elige al iniciar sesión."""
 
     correo = forms.EmailField(
+        max_length=254,
         label='Correo electrónico',
         widget=forms.EmailInput(attrs={'class': _INPUT_CLASS}),
     )
     contrasena = forms.CharField(
+        max_length=128,
         label='Contraseña',
         widget=forms.PasswordInput(attrs={'class': _INPUT_CLASS}),
     )

@@ -27,6 +27,7 @@ class MascotaForm(forms.Form):
         widget=forms.NumberInput(attrs={'class': _INPUT_CLASS, 'step': '0.1'}),
     )
     observaciones = forms.CharField(
+        max_length=500,
         required=False,
         label='Observaciones (alergias, comportamiento, etc.)',
         widget=forms.Textarea(attrs={'class': _INPUT_CLASS, 'rows': 3}),

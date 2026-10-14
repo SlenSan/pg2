@@ -1509,6 +1509,63 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   cero paseos creados; publicar con 1 zona → aceptado, "Horario
   publicado correctamente.", paseo creado normalmente.
 
+- **INC-10 — sin límite de caracteres**: diagnóstico - se listaron
+  programáticamente TODOS los `CharField`/`EmailField` de todos los
+  `forms.py` del proyecto (28 campos en 11 formularios) para confirmar
+  cuáles tenían `max_length` y cuáles no, en vez de revisarlos a
+  mano uno por uno. `max_length` en un `CharField`/`EmailField` ya
+  agrega el atributo HTML `maxlength` automáticamente (comportamiento
+  de Django, confirmado renderizando el widget) - no hizo falta
+  tocar ningún template para la parte visual.
+
+  **Antes de reducir cualquier límite ya existente o agregar uno
+  nuevo**, se revisó `canigo` (producción) por campo para confirmar que
+  ningún dato real ya guardado quedara más largo que el nuevo límite
+  (mismo cuidado que INC-08: una validación nueva no debe bloquear la
+  edición de un dato viejo que no se está tocando). Se encontró **una
+  mascota de prueba real** (cuenta `@gmail.com`, registrada el mismo 14
+  de octubre - coincide con la sesión de prueba del usuario final) con
+  `nombre`/`raza` de 100 caracteres (texto de relleno, "2000...") y
+  **`observaciones` de ~1.9 MILLONES de caracteres** - claramente datos
+  de prueba/estrés, no una mascota real. Se decidió **mantener**
+  `nombre`/`raza` de mascota en 100 (no bajar a los 40/50 sugeridos)
+  justamente por este caso real ya guardado con esa longitud; para
+  `observaciones` sí se aplicó el límite sugerido de 500 porque ninguna
+  OTRA mascota real se acerca a eso - esta única mascota de prueba
+  queda reportada aparte (ver el reporte entregado a la autora) en vez
+  de truncarla sin permiso.
+
+  No existe ningún campo "Indicaciones" en el proyecto (sugerido en la
+  tarea) - ninguna pantalla real lo tiene, así que no se agregó nada
+  para un campo que no existe.
+
+  Tabla final de límites (los marcados con * ya tenían ese valor, sin
+  cambios):
+
+  | Campo | Máximo | Dónde |
+  |---|---|---|
+  | Nombre de persona | 80 | registro (dueño/paseador) |
+  | Correo | 254 | registro, login |
+  | Teléfono | 20 (ya validado a 10 dígitos por regex) | registro, editar perfil |
+  | Contraseña | 128 | registro, login |
+  | Nombre de mascota | 100* | registrar/editar mascota (dato real ya en 100) |
+  | Raza | 100* | registrar/editar mascota (dato real ya en 100) |
+  | Observaciones de mascota | 500 | registrar/editar mascota |
+  | Descripción del paseador | 500 | registro, editar perfil |
+  | Descripción del incidente | 500 | reportar incidente |
+  | Comentario de calificación | 300 | calificar paseo |
+  | Observación de verificación (admin) | 300* | panel de administración |
+  | Dirección | 150 | registro de dueño |
+  | Nombre/entidad de certificado | 150* | certificados del paseador |
+
+  **Verificado ejecutando** (`canigo_dev`): un `nombre` de registro de
+  90 caracteres (más de 80) se rechaza con el mensaje estándar de
+  Django ("Asegúrese de que este valor tenga como máximo 80
+  caracteres..."); un registro normal, dentro de todos los límites,
+  sigue funcionando igual que antes. Confirmado con
+  `str(form['campo'])` que el HTML ya trae `maxlength` para los campos
+  revisados (nombre, teléfono, correo).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

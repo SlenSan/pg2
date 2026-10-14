@@ -23,6 +23,7 @@ class ReportarIncidenteForm(forms.Form):
         widget=forms.Select(attrs={'class': 'form-select'}),
     )
     descripcion = forms.CharField(
+        max_length=500,
         label='Descripción breve',
         widget=forms.Textarea(attrs={'class': _INPUT_CLASS, 'rows': 3}),
     )
