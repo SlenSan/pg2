@@ -64,12 +64,29 @@ def obtener_ultima_recepcion(id_paseo):
     return punto['fecha_recepcion'] if punto else None
 
 
-def listar_por_paseo(id_paseo):
+def listar_por_paseo(id_paseo, desde=None):
+    """
+    `desde` (datetime, opcional) - lentitud en producción, 14 de
+    octubre, punto 3: antes el polling del mapa en vivo (cada 8s,
+    mientras dura el paseo) llamaba a esto SIN `desde`, así que cada
+    vuelta volvía a traer y volvía a serializar TODOS los puntos desde
+    el inicio del paseo, no solo los nuevos - en un paseo de 30 minutos
+    (~225 puntos a 8s cada uno) el volumen total transferido a lo largo
+    del paseo crece proporcional al CUADRADO de su duración, no a su
+    duración (confirmado leyendo coordenadas/views_web.py::
+    coordenadas_de_paseo(), que ya recibía el array entero y lo volvía
+    a mandar completo en cada respuesta JSON). Con `desde`, cada
+    petición de polling solo pide (y Mongo solo escanea) los puntos
+    posteriores al último que el navegador ya tiene - ver mapa.html.
+    """
     try:
         oid = ObjectId(id_paseo)
     except (InvalidId, TypeError):
         return []
-    return list(get_db().coordenadas_detalle.find({'id_paseo': oid}).sort('fecha_captura', 1))
+    query = {'id_paseo': oid}
+    if desde is not None:
+        query['fecha_captura'] = {'$gt': desde}
+    return list(get_db().coordenadas_detalle.find(query).sort('fecha_captura', 1))
 
 
 def _distancia_haversine_km(lat1, lon1, lat2, lon2):

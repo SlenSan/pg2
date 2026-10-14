@@ -299,17 +299,27 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
   // "sin redibujar el mapa entero" en cada vuelta del polling: en vez de
   // volver a mandarle a Leaflet la lista COMPLETA de puntos cada vuelta
   // (lo que antes hacia linea.setLatLngs(puntos) con el array entero),
-  // se recuerda cuantos puntos YA se PROCESARON (puntosProcesados,
-  // buenos o malos) y en cada vuelta solo se evaluan los nuevos - la
-  // linea y los puntos viejos no se tocan. Sirve igual para el
-  // historial (sin polling: se procesa todo de una sola vez, mismo
-  // codigo, puntosProcesados arranca en 0 igual).
+  // cada respuesta del backend ya viene incremental (ver "?desde=" mas
+  // abajo, lentitud en produccion del 14 de octubre) - la linea y los
+  // puntos viejos no se tocan. Sirve igual para el historial (sin
+  // polling: se procesa todo de una sola vez en la unica llamada sin
+  // "desde", mismo codigo).
   var linea = L.polyline([], { color: '#D9703A' }).addTo(mapa);
   var capaPuntos = L.layerGroup().addTo(mapa);
   var marcadorInicio = null;
   var marcadorActual = null;
   var circuloIncertidumbre = null;
-  var puntosProcesados = 0;
+  // Lentitud en producción, 14 de octubre, punto 3: antes se guardaba
+  // CUANTOS puntos ya se habian procesado (un contador) y se le pedia
+  // al backend la lista COMPLETA en cada vuelta del polling, solo para
+  // recortarla del lado del cliente (puntos.slice(puntosProcesados)) -
+  // el backend igual hacia el trabajo de traer y serializar TODO el
+  // historial cada vez, creciendo con cada punto nuevo del paseo. Ahora
+  // se guarda la fecha_captura del ULTIMO punto ya visto y se manda
+  // como "?desde=" - el backend (coordenadas_de_paseo) devuelve SOLO
+  // los puntos posteriores a esa fecha, asi que "nuevos" de abajo ya
+  // viene incremental sin necesitar recortar nada del lado del cliente.
+  var ultimaFechaCapturaConocida = null;
   var vistaAjustada = false;
   var intervalo = null;
 
@@ -360,7 +370,11 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
   };
 
   function actualizar() {
-    fetch(urlDatos)
+    var url = urlDatos;
+    if (ultimaFechaCapturaConocida) {
+      url += '?desde=' + encodeURIComponent(ultimaFechaCapturaConocida);
+    }
+    fetch(url)
       .then(function (resp) { return resp.json(); })
       .then(function (data) {
         var badge = document.getElementById('estado-badge');
@@ -411,7 +425,13 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
         });
 
         var puntos = data.puntos;
-        document.getElementById('sin-puntos').hidden = puntos.length > 0;
+        // "hay_puntos_historicos" (no "puntos.length"): con el polling
+        // incremental de abajo, esta respuesta puede traer 0 puntos
+        // nuevos aunque el paseo YA tenga historial (simplemente no hubo
+        // una lectura GPS nueva en estos 8s) - si se siguiera mirando
+        // "puntos.length" aca, "Todavía no hay puntos..." parpadearia
+        // cada vez que una vuelta del polling no trae nada nuevo.
+        document.getElementById('sin-puntos').hidden = data.hay_puntos_historicos;
 
         // "Esperando la ubicación del paseador…" (punto 1) - calculado
         // en el BACKEND (hora del servidor, no el reloj del navegador
@@ -419,11 +439,13 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
         // "en_vivo": en "historico" el ultimo punto siempre es "viejo",
         // eso es normal, no una alarma.
         var elEsperando = document.getElementById('esperando-ubicacion');
-        elEsperando.hidden = !(puntos.length > 0 && data.estado === 'en_vivo' && !data.hay_punto_reciente);
+        elEsperando.hidden = !(data.hay_puntos_historicos && data.estado === 'en_vivo' && !data.hay_punto_reciente);
 
-        if (puntos.length > puntosProcesados) {
+        if (puntos.length > 0) {
           var vistaYaAjustadaAntes = vistaAjustada;
-          var nuevos = puntos.slice(puntosProcesados);
+          // "nuevos" ya viene incremental desde el backend (ver
+          // "?desde=" mas arriba) - no hace falta recortar nada aca.
+          var nuevos = puntos;
           nuevos.forEach(function (p) {
             if (!precisionAceptable(p)) {
               return; // mala precision: no entra a la ruta (si al marcador de posicion actual, mas abajo)
@@ -498,7 +520,11 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
             }).addTo(mapa);
           }
 
-          puntosProcesados = puntos.length;
+          // El ultimo punto de ESTE lote (ya viene ordenado por
+          // fecha_captura ascendente, igual que antes) - la proxima
+          // vuelta del polling solo pedira lo que llegue despues de esta
+          // fecha.
+          ultimaFechaCapturaConocida = nuevos[nuevos.length - 1].fecha_captura;
 
           if (!vistaYaAjustadaAntes) {
             // linea.getBounds() solo es valido si ya tiene al menos un

@@ -1269,6 +1269,92 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   tarjeta - ahí debería aparecer el botón "Activar notificaciones" de
   siempre.
 
+**Lentitud en producción (14 de octubre)**:
+
+- **Causa raíz confirmada del login lento**: `check_password()` con el
+  hasher por defecto de Django (`PBKDF2PasswordHasher`, 1.000.000 de
+  iteraciones) mide **~1.0-1.3s en esta máquina de desarrollo** (Ryzen 7
+  7730U) - medido en producción (Render, plan gratuito, CPU compartida y
+  limitada a una fracción de un core), el `POST /cuentas/login/` real
+  tardó **2.4-3.1s** (3 mediciones por rol, cuenta `@canigo.test`,
+  servicio ya despierto). Es el único paso de todo el flujo de login
+  cuyo costo es intrínsecamente de CPU (no de red ni de Mongo) y escala
+  con la potencia de cómputo disponible - en un plan con CPU limitada,
+  tarda proporcionalmente más que en cualquier máquina de desarrollo
+  normal. **No se cambió el hasher ni las iteraciones** (decisión de
+  seguridad, pendiente de la autora) - ver las opciones medidas más
+  abajo.
+
+- **Opciones de hasher/iteraciones** (medidas en esta máquina,
+  *no aplicadas* - la autora decide): PBKDF2 escala linealmente con las
+  iteraciones -
+  600.000 → ~600ms (40% más rápido), 390.000 → ~370ms (~3x más rápido),
+  260.000 → ~250ms (~4x más rápido), 100.000 → ~100ms (~10x más rápido,
+  cerca del viejo default de Django ~2019). Bajar iteraciones no usa
+  memoria adicional (PBKDF2 es CPU-only, a diferencia de Argon2/bcrypt,
+  que exigen varios MB de RAM por verificación - un costo real en un
+  plan de 512MB con varias verificaciones concurrentes). Argon2
+  (`argon2-cffi`) y bcrypt (`bcrypt`) no están instalados en el
+  proyecto - usarlos exigiría agregar una dependencia nueva, no es un
+  cambio de una sola línea de `settings.py`. Más iteraciones = más
+  resistente a un ataque de fuerza bruta offline si la base de datos se
+  filtrara algún día; menos iteraciones = login más rápido. Es un
+  trade-off de seguridad explícito, no algo que se decida por
+  rendimiento solo.
+
+- **Inventario de peticiones periódicas** (ver tabla completa en el
+  reporte entregado a la autora) - resumen: 4 `setInterval` reales que
+  llaman al servidor (notificaciones genérico 15s, mapa en vivo 8s,
+  "Mis paseos" 10s, dashboard del dueño 10s) + 1 que NO llamaba al
+  servidor hasta este punto en segundo plano por descuido (dashboard
+  del paseador, 12s - corregido, ver más abajo) + el emisor de GPS (8s,
+  nunca se pausa, por diseño - RNF2). Los pollers "genéricos" y los de
+  dashboard YA comparten una sola petición con el punto de notificaciones
+  del navbar (patrón establecido, sin duplicación entre ellos).
+
+- **Punto 3 — `coordenadas_de_paseo()` reenviaba TODO el historial de
+  puntos en cada vuelta del polling del mapa en vivo**: diagnóstico -
+  el polling de `mapa.html` (cada 8s mientras el paseo está "en_vivo")
+  llamaba a `repository.listar_por_paseo(id_paseo)` SIN ningún filtro,
+  así que cada respuesta traía (y volvía a serializar a JSON) todos los
+  puntos GPS desde el inicio del paseo, no solo los nuevos - el
+  volumen total transferido y el costo de Mongo a lo largo de UN paseo
+  crecían con el **cuadrado** de su duración, no linealmente (confirmado
+  leyendo el código: el filtro de "ya procesados" vivía solo del lado
+  del cliente, `puntos.slice(puntosProcesados)` en `mapa.html`, después
+  de que el servidor ya había hecho el trabajo completo). Para un paseo
+  de 30 minutos (~225 puntos a 8s), esto significa que el servidor
+  termina transfiriendo del orden de **~25.000 valores de punto** a lo
+  largo del paseo (suma 1+2+...+225), en vez de los 225 que realmente
+  importan.
+
+  Fix: `coordenadas_de_paseo()` ahora acepta `?desde=<ISO>` (opcional,
+  reusa `_parsear_fecha()` que ya existía para
+  `registrar_coordenada()`) y `repository.listar_por_paseo()` filtra
+  por `fecha_captura > desde` cuando se le pasa. `mapa.html` guarda la
+  `fecha_captura` del último punto ya recibido (`ultimaFechaCapturaConocida`,
+  reemplaza al contador `puntosProcesados`) y la manda en cada vuelta -
+  la respuesta ya viene incremental, sin recortar nada del lado del
+  cliente. Se agregó `hay_puntos_historicos` (independiente de
+  `puntos`, vía `obtener_ultimo_punto()` - ya existía, consulta barata
+  con índice) porque con el polling incremental una respuesta puede
+  traer 0 puntos NUEVOS aunque el paseo sí tenga historial (simplemente
+  no hubo una lectura GPS nueva en esos 8s) - sin este campo aparte,
+  "Todavía no hay puntos..." habría parpadeado en cada vuelta sin
+  novedades.
+
+  **Verificado ejecutando** (`canigo_dev`): sin `desde`, trae todos los
+  puntos sembrados; con `desde` = el último conocido y SIN puntos
+  nuevos, trae 0 puntos pero `hay_puntos_historicos` sigue `true`; con
+  un punto nuevo agregado, trae exactamente ese 1 punto. Confirmado
+  también de punta a punta en un navegador real (Chrome headless): el
+  mapa cargó con 1 punto sembrado, se agregó un 2º punto a más de 10m
+  del primero, y tras un ciclo de polling (8-9s) el número de `<path>`
+  en el mapa subió de 4 a 5 (línea extendida + nuevo circleMarker) sin
+  ningún error - el polling incremental se integra sin romper el dibujo
+  existente (ver "Hallazgos de la caminata real del 13 de octubre,
+  punto 4").
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

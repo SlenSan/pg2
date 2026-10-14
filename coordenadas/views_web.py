@@ -338,7 +338,14 @@ def coordenadas_de_paseo(request, id_paseo):
     ids_mascota_viewer = (
         [m['_id'] for m in _mascotas_del_dueno_en_paseo(paseo, id_usuario)] if es_dueno else None
     )
-    puntos = repository.listar_por_paseo(id_paseo)
+    # Lentitud en producción, 14 de octubre, punto 3: `?desde=` (ISO,
+    # opcional) - mapa.html lo manda con la fecha_captura del último
+    # punto que ya tiene, para que esta vista solo traiga (y solo
+    # serialice) los puntos NUEVOS en cada vuelta del polling, no el
+    # historial entero del paseo otra vez. Sin `desde` (primera carga de
+    # la página), se comporta igual que antes: todos los puntos.
+    desde = _parsear_fecha(request.GET.get('desde'))
+    puntos = repository.listar_por_paseo(id_paseo, desde=desde)
     return JsonResponse({
         'estado': paseo['estado'],
         'emergencia': paseo.get('emergencia', False),
@@ -347,6 +354,11 @@ def coordenadas_de_paseo(request, id_paseo):
         # "emergencia".
         'info_incidente_reciente': _info_incidente_reciente(paseo['_id'], ids_mascota_viewer),
         'puntos': [repository.a_json(p) for p in puntos],
+        # Independiente de `puntos` (que con `desde` puede venir vacío
+        # aunque el paseo SÍ tenga historial) - mapa.html lo necesita
+        # para decidir "sin puntos todavía" sin depender de si esta
+        # vuelta del polling trajo algo nuevo o no.
+        'hay_puntos_historicos': repository.obtener_ultimo_punto(id_paseo) is not None,
         # Esta pantalla ya hace polling cada 8s mientras el paseo esta
         # "en_vivo" - se aprovecha esa misma peticion para el punto de
         # notificaciones del navbar en vez de sumar una aparte (ver
