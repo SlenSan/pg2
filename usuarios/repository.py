@@ -117,6 +117,49 @@ def actualizar_contrasena(id_usuario, nuevo_hash):
     get_db().usuarios.update_one({'_id': oid}, {'$set': {'contrasena': nuevo_hash}})
 
 
+def asignar_contrasena_temporal(id_usuario, *, nuevo_hash, asignado_por):
+    """
+    Mejora 2 (hallazgos de la prueba con un usuario final, 14 de
+    octubre) - un admin (`asignado_por`, su correo) le asigna una
+    contraseña temporal a una cuenta desde el panel de administración.
+    `nuevo_hash` ya viene generado por el llamador con `make_password()`
+    (nunca se guarda ni se recibe en texto plano aquí); la contraseña en
+    texto plano no se guarda en ningún lado, solo se muestra una vez en
+    la respuesta de la vista que llama a esto.
+
+    `requiere_cambio_contrasena=True` obliga a cambiarla en el siguiente
+    login (ver `core.middleware.ExigirCambioContrasenaMiddleware`).
+    `$push` a `contrasena_temporal_historial` deja un registro de quién
+    hizo esto y cuándo (nunca la contraseña), mismo patrón que
+    `marcar_verificado()`/`retirar_verificado()` más abajo.
+    """
+    entrada = {'asignado_por': asignado_por, 'fecha': datetime.now(timezone.utc)}
+    oid = id_usuario if isinstance(id_usuario, ObjectId) else ObjectId(id_usuario)
+    get_db().usuarios.update_one(
+        {'_id': oid},
+        {
+            '$set': {'contrasena': nuevo_hash, 'requiere_cambio_contrasena': True},
+            '$push': {'contrasena_temporal_historial': entrada},
+        },
+    )
+    return entrada
+
+
+def completar_cambio_contrasena_forzado(id_usuario, nuevo_hash):
+    """
+    El usuario eligió su propia contraseña nueva en
+    `usuarios.views_web.cambiar_contrasena_forzado()`, tras entrar con
+    una temporal asignada por un admin - reemplaza `contrasena` y apaga
+    `requiere_cambio_contrasena` (no se vuelve a pedir en logins
+    siguientes).
+    """
+    oid = id_usuario if isinstance(id_usuario, ObjectId) else ObjectId(id_usuario)
+    get_db().usuarios.update_one(
+        {'_id': oid},
+        {'$set': {'contrasena': nuevo_hash, 'requiere_cambio_contrasena': False}},
+    )
+
+
 def aceptar_autorizacion_datos(id_usuario):
     """
     RNF1/Ley 1581 (cierre de auditoría, punto 1) - pantalla intermedia

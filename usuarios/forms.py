@@ -242,6 +242,37 @@ class LoginForm(forms.Form):
         return _normalizar_correo(self.cleaned_data.get('correo'))
 
 
+class CambiarContrasenaForzadoForm(forms.Form):
+    """
+    Mejora 2 (hallazgos de la prueba con un usuario final, 14 de
+    octubre) - pantalla intermedia obligatoria cuando un admin le asignó
+    una contraseña temporal a la cuenta (ver
+    `usuarios.views_web.cambiar_contrasena_forzado`,
+    `core.middleware.ExigirCambioContrasenaMiddleware`). Mismos límites
+    que `_RegistroBaseForm.contrasena`/`.confirmar_contrasena`.
+    """
+
+    nueva_contrasena = forms.CharField(
+        min_length=8,
+        max_length=128,
+        label='Nueva contraseña',
+        widget=forms.PasswordInput(attrs={'class': _INPUT_CLASS}),
+    )
+    confirmar_contrasena = forms.CharField(
+        max_length=128,
+        label='Confirmar nueva contraseña',
+        widget=forms.PasswordInput(attrs={'class': _INPUT_CLASS}),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        nueva = cleaned.get('nueva_contrasena')
+        confirmar = cleaned.get('confirmar_contrasena')
+        if nueva and confirmar and nueva != confirmar:
+            self.add_error('confirmar_contrasena', 'Las contraseñas no coinciden.')
+        return cleaned
+
+
 class AutorizacionDatosForm(forms.Form):
     """
     Pantalla intermedia para cuentas que ya existían antes de este punto

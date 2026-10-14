@@ -93,3 +93,59 @@ class ExigirAutorizacionDatosMiddleware:
         ):
             return redirect('usuarios:autorizar_datos')
         return self.get_response(request)
+
+
+class ExigirCambioContrasenaMiddleware:
+    """
+    Mejora 2 (hallazgos de la prueba con un usuario final, 14 de
+    octubre) - mismo patrón que ExigirAutorizacionDatosMiddleware de
+    arriba, para la contraseña temporal: cualquier sesión autenticada
+    con `requiere_cambio_contrasena` (ver `usuarios.views_web.
+    _iniciar_sesion`, que lo guarda en sesión en cada login, y
+    `administracion.views_web.asignar_contrasena_temporal`, que lo deja
+    en `True` al asignar la temporal) se redirige a
+    `usuarios:cambiar_contrasena_forzado` sin importar a qué ruta
+    intentaba entrar, hasta que elija una contraseña nueva.
+
+    Va DESPUÉS de ExigirAutorizacionDatosMiddleware (si una cuenta
+    necesitara las dos pantallas a la vez - caso excepcional, ya que
+    una contraseña temporal solo se asigna a una cuenta que ya existía -
+    primero se le pide la autorización de datos, y solo después el
+    cambio de contraseña). Por eso `usuarios:autorizar_datos` también
+    está en las rutas permitidas de ESTA clase: si no lo estuviera, una
+    cuenta con las dos pendientes a la vez quedaría en un bucle de
+    redirects entre las dos pantallas (la primera la manda a
+    autorizar_datos, pero esta clase la rebotaría de ahí mismo hacia
+    cambiar_contrasena_forzado, que a su vez la primera clase rebota de
+    vuelta - bug real, encontrado probando este flujo de punta a punta).
+    """
+
+    _RUTAS_PERMITIDAS = None
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def _rutas_permitidas(self):
+        # Mismo motivo que en ExigirAutorizacionDatosMiddleware - resuelto
+        # en el primer request, no al importar el módulo.
+        if ExigirCambioContrasenaMiddleware._RUTAS_PERMITIDAS is None:
+            ExigirCambioContrasenaMiddleware._RUTAS_PERMITIDAS = frozenset([
+                reverse('usuarios:cambiar_contrasena_forzado'),
+                reverse('usuarios:autorizar_datos'),
+                reverse('usuarios:logout'),
+                reverse('privacidad'),
+                reverse('manifest'),
+                reverse('service_worker'),
+            ])
+        return ExigirCambioContrasenaMiddleware._RUTAS_PERMITIDAS
+
+    def __call__(self, request):
+        es_estatico = request.path.startswith(settings.STATIC_URL)
+        if (
+            request.session.get('id_usuario')
+            and request.session.get('requiere_cambio_contrasena')
+            and not es_estatico
+            and request.path not in self._rutas_permitidas()
+        ):
+            return redirect('usuarios:cambiar_contrasena_forzado')
+        return self.get_response(request)

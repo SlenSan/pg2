@@ -8,4 +8,5 @@ urlpatterns = [
     path('verificacion/', views_web.verificacion, name='verificacion'),
     path('verificacion/<str:id_paseador>/marcar/', views_web.marcar_verificado, name='marcar_verificado'),
     path('verificacion/<str:id_paseador>/retirar/', views_web.retirar_verificado, name='retirar_verificado'),
+    path('contrasenas/', views_web.asignar_contrasena_temporal, name='asignar_contrasena_temporal'),
 ]

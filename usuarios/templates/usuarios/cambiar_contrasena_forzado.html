@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Cambia tu contraseña — Canigo{% endblock %}
+
+{% comment %}
+Mejora 2 (14 de octubre) - mismo patrón que autorizar_datos.html:
+navbar propio, sin los links normales del dashboard, mientras esta
+cuenta tenga una contraseña temporal pendiente de cambiar, lo único que
+puede hacer es ver esta pantalla o cerrar sesión (el middleware
+redirige de vuelta aquí si intenta cualquier otra ruta).
+{% endcomment %}
+{% block navbar %}
+<nav class="navbar navbar-dark bg-primary">
+  <div class="container d-flex justify-content-between">
+    <span class="navbar-brand mb-0">🐾 Canigo</span>
+    <a class="nav-link text-white" href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-7 col-lg-6">
+    <div class="card">
+      <div class="card-body p-4">
+        <h1 class="h4 mb-3">Cambia tu contraseña</h1>
+        <p class="text-muted">
+          Un administrador de Canigo te asignó una contraseña temporal.
+          Para seguir usando la plataforma, elige una contraseña nueva.
+        </p>
+
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ form.nueva_contrasena.id_for_label }}">{{ form.nueva_contrasena.label }}</label>
+            {{ form.nueva_contrasena }}
+            {% for error in form.nueva_contrasena.errors %}
+            <div class="text-danger small mt-1">{{ error }}</div>
+            {% endfor %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="{{ form.confirmar_contrasena.id_for_label }}">{{ form.confirmar_contrasena.label }}</label>
+            {{ form.confirmar_contrasena }}
+            {% for error in form.confirmar_contrasena.errors %}
+            <div class="text-danger small mt-1">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          {% if form.non_field_errors %}
+          <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+          {% endif %}
+
+          <button type="submit" class="btn btn-primary w-100">Cambiar contraseña</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

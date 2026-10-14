@@ -1659,6 +1659,89 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
     "fría" del proceso), no un error del código - repitiendo la prueba
     con más margen de espera, el botón se restauró correctamente.
 
+- **Mejora 2 — «¿Olvidaste tu contraseña?» (versión provisional)**:
+  diseño - la recuperación automática por correo necesita un servicio de
+  envío que queda para después (fuera del alcance de este punto), así
+  que se implementó una versión manual con dos partes:
+  1. **Para cualquier usuario**: el link «¿Olvidaste tu contraseña?» del
+     login (antes `href="#"`, placeholder muerto) ahora lleva a
+     `usuarios:recuperar_contrasena` (`/cuentas/recuperar-contrasena/`),
+     una pantalla pública (sin sesión, igual que `/privacidad/`) con el
+     texto fijo pedido: escribir a srojas13@udi.edu.co desde el correo
+     con el que se registró.
+  2. **Para un admin** (`/administracion/contrasenas/`, protegida por
+     `requiere_admin` igual que `/administracion/verificacion/` - 404
+     para quien no sea admin): busca una cuenta por correo
+     (`usuarios_repository.obtener_por_correo()`, que ya hace el
+     lookup case-insensitive) y le asigna una contraseña temporal
+     **generada por el servidor** (`secrets.choice()`, 12 caracteres,
+     sin `0/O/1/l/I` para que no se confundan al copiarla de un correo o
+     dictarla) - nunca una que el admin escriba a mano. Se hashea con
+     `make_password()` (usa el hasher "default" actual,
+     `core.hashers.PBKDF2HasherOWASP600k`, 600.000 iteraciones - mismo
+     hasher que cualquier contraseña nueva del sitio). La contraseña en
+     texto plano **nunca se guarda ni se registra en ningún log**: solo
+     se muestra una vez, en la respuesta de esa misma petición (vía
+     `messages.success`), y no reaparece si se recarga la página. La
+     acción queda registrada en `usuarios.contrasena_temporal_historial`
+     (`$push`, mismo patrón que `verificacion_historial` de RF14) con
+     quién la asignó y cuándo - nunca la contraseña.
+
+  **Forzar el cambio en el siguiente login**: `requiere_cambio_
+  contrasena: True` se guarda en el usuario al asignar la temporal, se
+  copia a la sesión en `_iniciar_sesion()` (mismo patrón que
+  `autorizacion_datos_ok`) y
+  `core.middleware.ExigirCambioContrasenaMiddleware` redirige a
+  `/cuentas/cambiar-contrasena/` para CUALQUIER otra ruta mientras siga
+  en `True` - calco exacto de `ExigirAutorizacionDatosMiddleware`
+  (RNF1/Ley 1581). Al elegir la contraseña nueva,
+  `usuarios_repository.completar_cambio_contrasena_forzado()` la
+  hashea y apaga la bandera, sin esperar al próximo login.
+
+  **Bug real encontrado probando el flujo de punta a punta**: una
+  cuenta que necesitara las DOS pantallas intermedias a la vez
+  (autorización de datos pendiente Y contraseña temporal pendiente -
+  caso de borde, ya que una temporal solo se asigna a una cuenta que ya
+  existía) entraba en un bucle infinito de redirects: el middleware de
+  autorización la mandaba a `/cuentas/autorizacion-datos/`, pero el de
+  contraseña no tenía esa ruta en su lista de permitidas y la rebotaba
+  de inmediato hacia `/cuentas/cambiar-contrasena/`, que el primer
+  middleware volvía a rebotar hacia `/cuentas/autorizacion-datos/` -
+  Chrome terminaba mostrando "Esta página no funciona"
+  (`ERR_TOO_MANY_REDIRECTS`). Fix: se agregó
+  `usuarios:autorizar_datos` a las rutas permitidas de
+  `ExigirCambioContrasenaMiddleware`, para que esa pantalla termine de
+  mostrarse primero sin que el segundo middleware interfiera - solo
+  DESPUÉS de aceptarla (`autorizacion_datos_ok=True`), el primer
+  middleware deja de interceptar y el segundo puede llevar al cambio de
+  contraseña.
+
+  **Verificado ejecutando** (contra `canigo_dev`, con una cuenta de
+  prueba real que tenía las dos pantallas pendientes a la vez, para
+  probar el caso que encontró el bug):
+  - El link del login lleva a la página pública correcta, con el texto
+    exacto pedido.
+  - Un admin asigna una contraseña temporal por correo: el mensaje de
+    éxito la muestra una sola vez y desaparece al recargar la página;
+    `usuarios.contrasena_temporal_historial` queda con `asignado_por`/
+    `fecha`, sin la contraseña.
+  - Login con la contraseña temporal: redirige primero a
+    autorización de datos (sin bucle, tras el fix) y, al aceptarla, a
+    `/cuentas/cambiar-contrasena/`; cualquier otra ruta (se probó el
+    dashboard directamente) redirige de vuelta ahí mientras no se
+    cambie.
+  - Tras cambiar la contraseña: `requiere_cambio_contrasena` queda en
+    `False` en Mongo, el hash nuevo usa el hasher de 600.000
+    iteraciones, y un login posterior con la contraseña NUEVA entra
+    directo al dashboard (sin volver a pedir el cambio); la contraseña
+    TEMPORAL ya no funciona para iniciar sesión.
+  - Un admin busca un correo que no existe: mensaje de error claro, sin
+    revelar si la cuenta existe con otro dato.
+  - Una sesión sin `correo` en `CANIGO_ADMIN_EMAILS` que intenta entrar
+    a `/administracion/contrasenas/` directamente: `404` (mismo
+    criterio que el resto del panel de administración, no confirma que
+    la ruta existe).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

@@ -3,6 +3,11 @@
 {% block title %}Verificación de paseadores — Canigo{% endblock %}
 
 {% block content %}
+<div class="zona-chips-contenedor mb-3">
+  <a href="{% url 'administracion:verificacion' %}" class="zona-chip zona-chip-activa">Verificación</a>
+  <a href="{% url 'administracion:asignar_contrasena_temporal' %}" class="zona-chip">Contraseñas</a>
+</div>
+
 <h1 class="h4 mb-4">Verificación de paseadores</h1>
 
 {% comment %}

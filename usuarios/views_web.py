@@ -34,6 +34,7 @@ from usuarios.decorators import URL_DASHBOARD_POR_ROL, requiere_autenticacion, r
 from usuarios.forms import (
     TIPO_PRIMEROS_AUXILIOS,
     AutorizacionDatosForm,
+    CambiarContrasenaForzadoForm,
     CertificadoPaseadorForm,
     EditarPerfilPaseadorForm,
     LoginForm,
@@ -229,6 +230,48 @@ def logout(request):
     """
     request.session.flush()
     return redirect('home')
+
+
+def recuperar_contrasena(request):
+    """
+    Mejora 2 (hallazgos de la prueba con un usuario final, 14 de
+    octubre) - versión provisional de "¿Olvidaste tu contraseña?": la
+    recuperación automática por correo requiere un servicio de envío
+    que queda para después, así que por ahora esta pantalla solo explica
+    que hay que escribir a srojas13@udi.edu.co (texto fijo en el
+    template). Pública (sin sesión) - se enlaza desde login.html, antes
+    de iniciar sesión, igual que `core.views.privacidad`.
+    """
+    return render(request, 'usuarios/recuperar_contrasena.html')
+
+
+@requiere_autenticacion
+def cambiar_contrasena_forzado(request):
+    """
+    Mejora 2 - pantalla intermedia obligatoria cuando un admin le asignó
+    una contraseña temporal a esta cuenta desde el panel de
+    administración (ver `administracion.views_web.asignar_contrasena_
+    temporal`). `core.middleware.ExigirCambioContrasenaMiddleware`
+    redirige aquí a cualquier sesión con `requiere_cambio_contrasena`,
+    sin importar a qué ruta intentaba entrar - mismo patrón que
+    `autorizar_datos()` de arriba para la autorización de datos.
+    """
+    if not request.session.get('requiere_cambio_contrasena'):
+        return redirect(_url_dashboard(request.session.get('rol')))
+
+    if request.method == 'POST':
+        form = CambiarContrasenaForzadoForm(request.POST)
+        if form.is_valid():
+            repository.completar_cambio_contrasena_forzado(
+                request.session['id_usuario'], make_password(form.cleaned_data['nueva_contrasena'])
+            )
+            request.session['requiere_cambio_contrasena'] = False
+            messages.success(request, 'Tu contraseña se actualizó correctamente.')
+            return redirect(_url_dashboard(request.session.get('rol')))
+    else:
+        form = CambiarContrasenaForzadoForm()
+
+    return render(request, 'usuarios/cambiar_contrasena_forzado.html', {'form': form})
 
 
 @requiere_autenticacion
@@ -747,3 +790,11 @@ def _iniciar_sesion(request, usuario):
     # en el momento en que la cuenta acepta (ver autorizar_datos() mas
     # abajo), sin esperar al proximo login.
     request.session['autorizacion_datos_ok'] = bool(usuario.get('autorizacion_datos'))
+    # Mejora 2 (hallazgos de la prueba con un usuario final, 14 de
+    # octubre) - mismo criterio que "autorizacion_datos_ok" arriba: se
+    # guarda en sesión para que
+    # core.middleware.ExigirCambioContrasenaMiddleware no necesite una
+    # consulta a Mongo en cada petición. Se apaga en el momento en que
+    # el usuario cambia su contraseña (ver cambiar_contrasena_forzado()
+    # más abajo), sin esperar al próximo login.
+    request.session['requiere_cambio_contrasena'] = bool(usuario.get('requiere_cambio_contrasena'))

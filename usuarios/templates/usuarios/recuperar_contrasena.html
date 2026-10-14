@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}¿Olvidaste tu contraseña? — Canigo{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-7 col-lg-6">
+    <div class="card">
+      <div class="card-body p-4">
+        <h1 class="h4 mb-3">¿Olvidaste tu contraseña?</h1>
+        <p>
+          Escríbenos a <a href="mailto:srojas13@udi.edu.co">srojas13@udi.edu.co</a>
+          desde el correo con el que te registraste y te ayudamos a restablecerla.
+        </p>
+        <a href="{% url 'usuarios:login' %}" class="btn btn-outline-secondary">Volver a iniciar sesión</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

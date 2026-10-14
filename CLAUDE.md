@@ -88,7 +88,23 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
   },
   calificacion_promedio: Number,  // solo rol=paseador
   verificado: Boolean,             // solo rol=paseador
-  descripcion: String              // solo rol=paseador
+  descripcion: String,             // solo rol=paseador
+  requiere_cambio_contrasena: Boolean,  // Mejora 2 (hallazgos de la prueba con un usuario final,
+                                          // 14 de octubre) - "¿Olvidaste tu contraseña?" (versión
+                                          // provisional, sin envío de correo): true mientras la
+                                          // cuenta tenga pendiente cambiar una contraseña TEMPORAL
+                                          // que le asignó un admin desde /administracion/contrasenas/
+                                          // (core.middleware.ExigirCambioContrasenaMiddleware la
+                                          // redirige a /cuentas/cambiar-contrasena/ para CUALQUIER
+                                          // ruta mientras esto sea true, igual que
+                                          // ExigirAutorizacionDatosMiddleware con autorizacion_datos
+                                          // arriba). Ausente/false en una cuenta normal
+  contrasena_temporal_historial: [{      // un registro por cada vez que un admin asignó una
+                                          // contraseña temporal - NUNCA la contraseña en sí (ni
+                                          // aquí ni en ningún log), solo quién y cuándo
+    asignado_por: String,                // correo del admin
+    fecha: Date                          // UTC
+  }]
 }
 ```
 

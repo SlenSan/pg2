@@ -34,7 +34,7 @@
     {% endfor %}
   </div>
   <div class="text-end mb-3">
-    <a href="#" class="auth-link small">¿Olvidaste tu contraseña?</a>
+    <a href="{% url 'usuarios:recuperar_contrasena' %}" class="auth-link small">¿Olvidaste tu contraseña?</a>
   </div>
 
   {% if form.non_field_errors %}

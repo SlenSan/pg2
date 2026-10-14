@@ -114,6 +114,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'core.middleware.NoCacheParaAutenticadosMiddleware',
     'core.middleware.ExigirAutorizacionDatosMiddleware',
+    'core.middleware.ExigirCambioContrasenaMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'

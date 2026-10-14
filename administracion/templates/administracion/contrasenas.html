@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Contraseñas temporales — Canigo{% endblock %}
+
+{% block content %}
+<div class="zona-chips-contenedor mb-3">
+  <a href="{% url 'administracion:verificacion' %}" class="zona-chip">Verificación</a>
+  <a href="{% url 'administracion:asignar_contrasena_temporal' %}" class="zona-chip zona-chip-activa">Contraseñas</a>
+</div>
+
+<h1 class="h4 mb-4">Asignar contraseña temporal</h1>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-md-7 col-lg-6">
+    <div class="card">
+      <div class="card-body p-4">
+        <p class="text-muted">
+          Busca la cuenta por su correo y se le asigna una contraseña
+          temporal generada por el servidor. Se muestra una sola vez en
+          esta pantalla — cópiala y compártesela al usuario por tu cuenta.
+          En su próximo inicio de sesión, se le pedirá que la cambie.
+        </p>
+
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ form.correo.id_for_label }}">{{ form.correo.label }}</label>
+            {{ form.correo }}
+            {% for error in form.correo.errors %}
+            <div class="text-danger small mt-1">{{ error }}</div>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Asignar contraseña temporal</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
