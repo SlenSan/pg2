@@ -1566,6 +1566,35 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   `str(form['campo'])` que el HTML ya trae `maxlength` para los campos
   revisados (nombre, teléfono, correo).
 
+- **INC-11 — panel de administración de Django expuesto**: diagnóstico
+  - confirmado que ningún `admin.py` del proyecto llama a
+  `admin.site.register()` (son los archivos vacíos que deja
+  `startapp` por defecto) - `/admin/` de Django nunca tuvo ningún
+  modelo que administrar, solo expone una pantalla de login y
+  superficie de ataque sin ningún beneficio real. El panel de
+  administración REAL del proyecto (RF14, verificación de paseadores)
+  es `/administracion/verificacion/`, una app propia sin relación con
+  `django.contrib.admin`.
+
+  Fix: `path('admin/', admin.site.urls)` ahora se agrega a
+  `urlpatterns` SOLO si `settings.DEBUG` es `True` - en producción
+  (`DEBUG=False`), la ruta no existe en absoluto (no es un
+  403/401, que confirmaría que la URL es real - es un 404 igual que
+  cualquier URL que nunca estuvo en `urlpatterns`). `django.contrib.
+  admin` se queda en `INSTALLED_APPS` sin cambios (lo siguen
+  necesitando `auth`/`contenttypes`/`sessions` internamente) - solo se
+  quitó la RUTA en producción.
+
+  **Verificado ejecutando**: con `DEBUG=True` (local, como siempre) -
+  `/admin/` responde `302` (redirige al login de Django, sigue
+  disponible). Simulando `DEBUG=False` (vía `Client(secure=True)`, para
+  evitar el ruido del redirect a HTTPS de `SecurityMiddleware` que
+  tapaba el resultado real la primera vez que lo probé) - `/admin/`
+  responde **404**; `/administracion/verificacion/` (el panel real)
+  sigue respondiendo `302` (redirige a login, sin tocar), confirmando
+  que solo se quitó la ruta de Django, no la administración real del
+  proyecto.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

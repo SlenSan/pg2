@@ -14,6 +14,7 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 
@@ -21,7 +22,6 @@ from core import views as core_views
 from usuarios import views_web as usuarios_views_web
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
     # Servidos desde la RAIZ a proposito (Incremento 4, fase 2, punto E
     # - Web Push) - ver core/views.py::manifest()/service_worker() para
     # el motivo (alcance del service worker, start_url del manifest).
@@ -42,3 +42,17 @@ urlpatterns = [
     path('administracion/', include('administracion.urls_web')),
     path('api/', include('core.urls')),
 ]
+
+# INC-11 (hallazgos de la prueba con un usuario final, 14 de octubre) -
+# el panel de administracion REAL de Canigo es /administracion/
+# verificacion/ (RF14, ver administracion/urls_web.py) - el de Django
+# (/admin/) nunca tuvo ningun modelo registrado (confirmado: ningun
+# admin.py del proyecto llama a admin.site.register, ver
+# MANUAL_DESARROLLADOR.md), asi que no sirve para nada real, solo
+# expone una pantalla de login y superficie de ataque de mas. Solo se
+# agrega la ruta si DEBUG=True (desarrollo local) - en produccion
+# (DEBUG=False) la ruta no existe en absoluto, responde 404 como
+# cualquier URL que no esta en urlpatterns, no un 403/401 que
+# confirmaria que la ruta es real.
+if settings.DEBUG:
+    urlpatterns.insert(0, path('admin/', admin.site.urls))
