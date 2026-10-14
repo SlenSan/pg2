@@ -32,10 +32,13 @@ class MascotaForm(forms.Form):
         label='Observaciones (alergias, comportamiento, etc.)',
         widget=forms.Textarea(attrs={'class': _INPUT_CLASS, 'rows': 3}),
     )
+    # Mejora 1 (hallazgos de la prueba con un usuario final, 14 de
+    # octubre) - accept="image/*" SIN "capture": ofrece tomar una foto
+    # nueva o elegir una ya tomada, en vez de forzar la cámara.
     foto = forms.ImageField(
         required=False,
         label='Foto (opcional)',
-        widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
+        widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS, 'accept': 'image/*'}),
     )
     # Certificados (Ley 2480 de 2025, Ley Kiara) - hallazgos del 9 oct,
     # punto 2: ya no viven en una pantalla aparte (mascotas:certificados,

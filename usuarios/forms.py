@@ -144,10 +144,13 @@ class EditarPerfilPaseadorForm(forms.Form):
         label='Cuéntale a los dueños sobre ti',
         widget=forms.Textarea(attrs={'class': _INPUT_CLASS, 'rows': 3}),
     )
+    # Mejora 1 (hallazgos de la prueba con un usuario final, 14 de
+    # octubre) - accept="image/*" SIN "capture": ofrece tomar una foto
+    # nueva o elegir una ya tomada, en vez de forzar la cámara.
     foto_perfil = forms.ImageField(
         required=False,
         label='Foto de perfil',
-        widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
+        widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS, 'accept': 'image/*'}),
     )
 
     def __init__(self, *args, tenia_descripcion=False, telefono_actual=None, **kwargs):

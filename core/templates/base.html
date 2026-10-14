@@ -154,6 +154,61 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
   {% comment %}
+  Mejora 1 (hallazgos de la prueba con un usuario final, 14 de octubre)
+  - aviso de carga reutilizable: CUALQUIER formulario tradicional del
+  sitio (registro, login, mascota, certificados, publicar horario...)
+  deshabilita su botón de enviar y muestra "Cargando…" mientras se
+  procesa, sin repetir esta lógica en cada plantilla - un solo listener
+  a nivel de documento (delegación de eventos), así que tampoco hace
+  falta tocar nada cuando se agregue un formulario nuevo más adelante.
+
+  Los formularios que YA se enviaban por `fetch` (el de emergencia y el
+  de subir foto en bienvenida_paseador.html, que hacen
+  `event.preventDefault()` para no cortar el emisor de GPS con una
+  recarga completa de página) se marcan con
+  `data-canigo-carga-manual` para que este listener genérico no
+  interfiera - esos dos llaman a `canigoMarcarCargando()`/
+  `canigoQuitarCargando()` directamente desde su propio manejador, en
+  el mismo punto donde antes solo hacían `boton.disabled = true/false`
+  a mano (ver ese archivo) - mismas dos funciones, un solo lugar que
+  decide cómo se ve "cargando", no un `innerHTML` distinto por pantalla.
+  {% endcomment %}
+  <script>
+  function canigoMarcarCargando(boton, texto) {
+    if (!boton || boton.disabled) {
+      return false; // ya estaba deshabilitado - evita un doble envío
+    }
+    if (boton.dataset.canigoTextoOriginal === undefined) {
+      boton.dataset.canigoTextoOriginal = boton.innerHTML;
+    }
+    boton.disabled = true;
+    boton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ' + (texto || 'Cargando…');
+    return true;
+  }
+
+  function canigoQuitarCargando(boton) {
+    if (!boton) {
+      return;
+    }
+    boton.disabled = false;
+    if (boton.dataset.canigoTextoOriginal !== undefined) {
+      boton.innerHTML = boton.dataset.canigoTextoOriginal;
+    }
+  }
+
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (form.dataset.canigoCargaManual !== undefined) {
+      return; // este formulario ya maneja su propio aviso de carga (fetch)
+    }
+    var boton = form.querySelector('button[type="submit"]');
+    if (!canigoMarcarCargando(boton)) {
+      event.preventDefault(); // ya se estaba enviando - evita el doble envío
+    }
+  });
+  </script>
+
+  {% comment %}
   Registro del service worker (Incremento 4, fase 2, punto E) - en
   CUALQUIER pagina, con o sin sesión: el permiso/suscripción de push se
   piden aparte (ver notificaciones/_activar_push.html, con el gesto

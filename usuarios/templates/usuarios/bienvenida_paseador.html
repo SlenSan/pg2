@@ -212,6 +212,7 @@ servidor - ver estado_bienvenida_paseador() y _horarios_paseador.html.
         method="post"
         enctype="multipart/form-data"
         action="{% url 'incidentes:reportar_incidente' paseo_activo.id_paseo %}"
+        data-canigo-carga-manual
         hidden
       >
         {% csrf_token %}
@@ -260,7 +261,7 @@ servidor - ver estado_bienvenida_paseador() y _horarios_paseador.html.
 {% if paseo_activo.fotos_pendientes %}
 <div class="modal fade" id="modalFoto" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
-    <form id="formFoto" method="post" enctype="multipart/form-data" class="modal-content">
+    <form id="formFoto" method="post" enctype="multipart/form-data" class="modal-content" data-canigo-carga-manual>
       {% csrf_token %}
       <div class="modal-header">
         <h2 class="h5 modal-title" id="modalFotoTitulo">Subir foto</h2>
@@ -343,10 +344,13 @@ un script de esta plantilla.
       // (el backend igual lo descarta, ver
       // incidentes.repository.obtener_duplicado_reciente, pero esto
       // evita gastar una subida de foto y una segunda espera de red).
-      if (boton.disabled) {
+      // Mejora 1 (14 de octubre): canigoMarcarCargando() ya hace el
+      // "if (boton.disabled) return" de arriba (devuelve false) y
+      // además muestra "Cargando…" - una sola función para esto en
+      // todo el sitio, ver core/templates/base.html.
+      if (!canigoMarcarCargando(boton)) {
         return;
       }
-      boton.disabled = true;
       fetch(formEmergencia.action, {
         method: 'POST',
         headers: {'X-CSRFToken': csrftoken},
@@ -371,7 +375,7 @@ un script de esta plantilla.
         aviso.textContent = 'No se pudo enviar el reporte. Revisa tu conexión e intenta de nuevo.';
         formEmergencia.querySelector('.modal-body').appendChild(aviso);
       }).finally(function () {
-        boton.disabled = false;
+        canigoQuitarCargando(boton);
       });
     });
   }
@@ -401,11 +405,12 @@ un script de esta plantilla.
     formFoto.addEventListener('submit', function (event) {
       event.preventDefault();
       var boton = formFoto.querySelector('button[type="submit"]');
-      // Mismo motivo que el formulario de emergencia arriba (punto 3).
-      if (boton.disabled) {
+      // Mismo motivo que el formulario de emergencia arriba (punto 3) -
+      // Mejora 1 (14 de octubre): misma función compartida, ver
+      // core/templates/base.html.
+      if (!canigoMarcarCargando(boton)) {
         return;
       }
-      boton.disabled = true;
       fetch(formFoto.action, {
         method: 'POST',
         headers: {'X-CSRFToken': csrftoken},
@@ -436,7 +441,7 @@ un script de esta plantilla.
         aviso.textContent = 'No se pudo subir la foto. Revisa tu conexión e intenta de nuevo.';
         formFoto.querySelector('.modal-body').appendChild(aviso);
       }).finally(function () {
-        boton.disabled = false;
+        canigoQuitarCargando(boton);
       });
     });
   }

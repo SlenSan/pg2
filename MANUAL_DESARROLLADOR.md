@@ -1595,6 +1595,70 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   que solo se quitó la ruta de Django, no la administración real del
   proyecto.
 
+- **Mejora 1 — foto desde cámara o galería, y aviso de carga**:
+  diagnóstico - el compañero que probó la plataforma reportó que, en su
+  celular, el selector de foto abría directo la cámara (sin opción de
+  elegir una ya tomada) y que al enviar un formulario con archivo
+  (registrar mascota, certificados, emergencia, foto del paseo) no había
+  ninguna señal de que la página estuviera procesando el envío, lo que
+  invitaba a tocar "enviar" dos veces.
+
+  Fix (dos partes independientes):
+  1. **Selector de foto**: se agregó `accept="image/*"` a los 4
+     `ImageField`/`FileField` de foto que ya existían
+     (`mascotas.MascotaForm.foto`, `incidentes.ReportarIncidenteForm.foto`,
+     `usuarios.EditarPerfilPaseadorForm.foto_perfil`,
+     `paseos.SubirFotoPaseoForm.foto`) - **sin** el atributo `capture`
+     (que sí fuerza la cámara). `accept` por sí solo le dice al navegador
+     qué tipo de archivo se espera, pero dejando que él ofrezca cámara Y
+     galería como opciones, no una sola a la fuerza.
+  2. **Aviso de carga**: un solo par de funciones compartidas,
+     `canigoMarcarCargando(boton)`/`canigoQuitarCargando(boton)`, definidas
+     una vez en `core/templates/base.html`, más un único
+     `document.addEventListener('submit', ...)` a nivel de documento que
+     las aplica automáticamente a CUALQUIER formulario tradicional del
+     sitio (deshabilita el botón y le pone un spinner + «Cargando…»,
+     evitando el doble envío). Los dos formularios que ya usaban
+     `fetch`/`FormData` en vez de un POST tradicional (emergencia y subir
+     foto del paseo, en `bienvenida_paseador.html` - ver Incremento 4,
+     punto D1) manejan su propio ciclo de vida de envío, así que se
+     marcaron con el atributo `data-canigo-carga-manual` (que el listener
+     genérico respeta y no toca) y se migraron para llamar a las MISMAS
+     dos funciones compartidas en vez de repetir su propia lógica de
+     deshabilitar/rehabilitar el botón.
+
+  **Verificado ejecutando** (navegador headless a 390×844, sesión real de
+  dueño/paseador en `canigo_dev`):
+  - `/mascotas/nueva/`: el input de foto renderiza con
+    `accept="image/*"` y sin `capture` (confirmado leyendo los atributos
+    del DOM ya renderizado, no solo el código fuente).
+  - Un formulario tradicional (login) sometido con
+    `requestSubmit()`: el botón pasa de "Ingresar" a un spinner +
+    "Cargando…" y queda `disabled`, sin tocar el HTML de
+    `login.html` para lograrlo (confirma que el listener genérico de
+    `base.html` sí alcanza formularios que nunca se tocaron a mano).
+  - El formulario de emergencia (`fetch`, con
+    `data-canigo-carga-manual`): sometido con una mascota, tipo y foto
+    reales contra el servidor de desarrollo - el botón muestra
+    "Cargando…"/`disabled` mientras la petición está en curso y vuelve a
+    "Enviar reporte"/habilitado al terminar; se confirmó en
+    `canigo_dev` que el incidente quedó realmente creado (con su foto en
+    Cloudinary) y la notificación al dueño se generó - luego se
+    eliminaron ambos documentos de prueba (y se vació `paseos.fotos` del
+    paseo de prueba usado) para no dejar basura en la base de datos de
+    desarrollo.
+  - El formulario de subir foto del paseo (`fetch`, con
+    `data-canigo-carga-manual`): mismo patrón - "Cargando…" durante el
+    envío, restaurado al terminar, foto subida de verdad a Cloudinary
+    para los 3 momentos (`inicio`/`mitad`/`fin`); un primer intento
+    pareció quedarse "pegado" en "Cargando…" más de lo esperado — se
+    confirmó con captura de errores globales
+    (`window.onerror`/`unhandledrejection`) que no hubo ninguna excepción
+    de JavaScript y que el backend sí respondió `200 OK`: fue una
+    petición más lenta de lo esperado hacia Cloudinary (primera subida
+    "fría" del proceso), no un error del código - repitiendo la prueba
+    con más margen de espera, el botón se restauró correctamente.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

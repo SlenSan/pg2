@@ -63,9 +63,14 @@ class PublicarHorarioForm(forms.Form):
 
 
 class SubirFotoPaseoForm(forms.Form):
+    # Mejora 1 (hallazgos de la prueba con un usuario final, 14 de
+    # octubre) - accept="image/*" SIN "capture": en iPhone y Android
+    # eso ofrece elegir entre tomar una foto nueva o elegir una de la
+    # galería; "capture" (cualquier valor) fuerza la cámara y le quita
+    # al paseador la opción de usar una foto ya tomada.
     foto = forms.ImageField(
         label='Foto',
-        widget=forms.ClearableFileInput(attrs={'class': 'form-control'}),
+        widget=forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
     )
 
 
