@@ -114,13 +114,18 @@ decide el JS según el dispositivo.
     }).then(guardarSuscripcion);
   }
 
-  if (!soportaPush) {
-    mostrarSolo('push-no-soportado');
-  } else if (esIOS && !esStandalone) {
-    // Safari normal en iPhone: pushManager puede incluso EXISTIR en el
-    // objeto window ahí, pero no funciona de verdad fuera de modo
-    // standalone - por eso esta condición va ANTES de mirar el permiso.
+  if (esIOS && !esStandalone) {
+    // INC-07: esta condición tiene que ir ANTES que "!soportaPush" (no
+    // solo antes de mirar el permiso, como decía este comentario antes
+    // de corregirlo) - en Safari/Chrome normal de iPhone (sin agregar
+    // Canigo a inicio), 'PushManager' NO existe en absoluto en `window`
+    // (ni siquiera de forma rota): soportaPush ya daba false ahí, así
+    // que la rama de abajo ("no admite notificaciones") se disparaba
+    // primero y esta nunca se alcanzaba. En iOS 16.4+ con standalone,
+    // 'PushManager' sí existe - por eso el orden importa.
     mostrarSolo('push-instrucciones-ios');
+  } else if (!soportaPush) {
+    mostrarSolo('push-no-soportado');
   } else if (Notification.permission === 'denied') {
     mostrarSolo('push-bloqueado');
   } else if (Notification.permission === 'granted') {

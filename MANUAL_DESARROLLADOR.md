@@ -1225,6 +1225,50 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
   `/incidentes/paseador/` con el mismo incidente de prueba. Incidente
   de prueba borrado al terminar.
 
+- **INC-07 — en iPhone (Safari o Chrome normal, sin agregar Canigo a
+  inicio), `_activar_push.html` mostraba "Tu dispositivo o navegador no
+  admite notificaciones" en vez de las instrucciones de iOS**:
+  diagnóstico - el comentario de la línea ya decía *"por eso esta
+  condición va ANTES de mirar el permiso"*, pero el `if/else` real tenía
+  `!soportaPush` como PRIMERA condición, antes de `esIOS && !esStandalone`.
+  `soportaPush` exige `'PushManager' in window`, que en iOS Safari/Chrome
+  FUERA de modo standalone es `false` (no es que falle o esté incompleto:
+  directamente no existe en absoluto hasta iOS 16.4+ **y** solo dentro de
+  una PWA instalada) - así que `!soportaPush` ya daba `true` y disparaba
+  la rama genérica de "no soportado" antes de que el código llegara a
+  revisar si era iOS. Fix: se invirtió el orden - `esIOS && !esStandalone`
+  ahora va primero, igual que ya decía el comentario (corregido para que
+  diga lo que el código realmente hace).
+
+  **Verificado ejecutando** (`canigo_dev`, Chrome headless con
+  `Network.setUserAgentOverride` a un iPhone real y `delete
+  window.PushManager` inyectado ANTES de que cargara la página - vía
+  `Page.addScriptToEvaluateOnNewDocument`, que necesita `Page.enable`
+  primero para que el script realmente se ejecute, detalle encontrado
+  recién al armar esta prueba) con `git stash` para el antes/después:
+  ANTES del fix, con `PushManager` genuinamente ausente (`'PushManager'
+  in window` → `false`, igual que un iPhone real fuera de standalone),
+  se mostraba "no admite notificaciones" y las instrucciones de iOS
+  quedaban ocultas; DESPUÉS, exactamente al revés (instrucciones
+  visibles, "no admite notificaciones" oculto). Dos casos de regresión
+  confirmados sin cambios: navegador de escritorio sin `PushManager`
+  (no iOS) sigue mostrando "no admite notificaciones"; iPhone en modo
+  **standalone** (`navigator.standalone = true`, `PushManager` presente)
+  sigue mostrando el botón normal de activar, no las instrucciones.
+
+  **Cómo probarlo en un iPhone real** (pendiente de la autora, ningún
+  entorno de prueba automatizado reemplaza esto): entrar a Canigo desde
+  Safari (o Chrome, que en iOS usa el mismo motor WebKit) **sin**
+  haberlo agregado a la pantalla de inicio, iniciar sesión, y mirar la
+  tarjeta de notificaciones en el panel (`bienvenida.html`/
+  `bienvenida_paseador.html`) - debería decir "Para recibir
+  notificaciones: toca Compartir → Agregar a inicio..." en vez de "no
+  admite notificaciones". Para confirmar que el flujo normal sigue
+  intacto: agregar Canigo a inicio desde ese mismo botón Compartir,
+  abrirlo desde el ícono nuevo (no desde Safari), volver a esa misma
+  tarjeta - ahí debería aparecer el botón "Activar notificaciones" de
+  siempre.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
