@@ -266,24 +266,30 @@ en vez de `paseo['zonas']`).
 ## 7. Flujos principales
 
 El proyecto se construyó en 3 incrementos, cada uno agregando un conjunto de
-requisitos funcionales (ver la tabla completa en `CLAUDE.md`):
+requisitos funcionales. El reparto por incremento es el de la **tabla 3.3
+del documento de grado** (no una agrupación por rango consecutivo de RF -
+ver la tabla completa de RF en `CLAUDE.md`):
 
-**Incremento 1 — Núcleo funcional (RF1–RF6)**: registro y login de ambos
+- Incremento 1 = RF1–RF6 **y RF9**
+- Incremento 2 = RF7, RF8 **y RF15**
+- Incremento 3 = RF10–RF14 **y RF16**
+
+**Incremento 1 — Núcleo funcional (RF1–RF6, RF9)**: registro y login de ambos
 roles (`usuarios/views_web.py`: `registro`, `login`, `logout`,
-`seleccionar_rol`), gestión de mascotas (`mascotas/views.py`), y el ciclo de
+`seleccionar_rol`), gestión de mascotas (`mascotas/views.py`), el ciclo de
 publicar/buscar/inscribir un horario de paseo (`paseos/views_web.py`:
 `publicar_disponibilidad`, `lista_disponibles`, `detalle_paseador`,
 `inscribir_en_horario`), incluida la selección de zonas de servicio y el
-filtro por zona del lado del dueño.
+filtro por zona del lado del dueño, y **registrar la hora de inicio del
+paseo** (RF9, `paseos/views_web.py::iniciar_paseo`).
 
-**Incremento 2 — Monitoreo y seguimiento (RF7–RF11)**: iniciar/finalizar el
-paseo (`paseos/views_web.py`: `iniciar_paseo`, `finalizar_paseo`), el envío
+**Incremento 2 — Monitoreo y seguimiento (RF7, RF8, RF15)**: el envío
 periódico de coordenadas GPS desde el navegador del paseador y el mapa de
 seguimiento (`coordenadas/views_web.py`: `registrar_coordenada`,
 `mapa_paseo`, `coordenadas_de_paseo`, con Leaflet.js en
-`coordenadas/templates/coordenadas/mapa.html`), y las notificaciones de
-inicio/fin de paseo con actualización en vivo en el navbar
-(`notificaciones/`, `core/context_processors.py`).
+`coordenadas/templates/coordenadas/mapa.html`), y el **registro fotográfico
+del paseo** al inicio, a mitad y al final (RF15, `paseos/views_web.py::
+subir_foto`).
 
 **INC-03/INC-04 (13 oct) — ráfagas de GPS y envío interrumpido**:
 diagnóstico completo en el reporte del 12 oct, resumen aquí porque ya
@@ -328,7 +334,10 @@ un incidente) se ocultan en la plantilla con la bandera `es_dueno` del
 contexto — nunca se renderiza el link para el paseador, aunque de todas
 formas esas vistas de destino también tienen su propio decorador de rol.
 
-**Incremento 3 — Seguridad y evaluación (RF12–RF16)**: el botón de
+**Incremento 3 — Seguridad y evaluación (RF10–RF14, RF16)**: **finalizar el
+paseo** (RF10, `paseos/views_web.py::finalizar_paseo`) y las
+**notificaciones de inicio/fin de paseo** con actualización en vivo en el
+navbar (RF11, `notificaciones/`, `core/context_processors.py`), el botón de
 emergencia del paseador y el registro de incidentes
 (`incidentes/views_web.py`: `reportar_incidente`, `lista_incidentes`), y las
 calificaciones al finalizar un paseo (`calificaciones/views_web.py`:
