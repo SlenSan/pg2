@@ -1829,6 +1829,107 @@ histórico SIN el campo (simulado) lo calcula en vivo correctamente, y
 uno que YA tiene `distancia_m: None` guardado NO lo recalcula (se
 respeta el valor ya guardado, aunque sea `None`).
 
+**Ajustes del 19 de octubre, puntos 2 y 3 — fotos/documentos sin la
+opción de grabar video, y cámara + galería donde falte**: diagnóstico -
+inventario completo de los 7 campos de archivo del proyecto:
+
+| Campo | Pantalla | `accept` antes | `capture` antes |
+|---|---|---|---|
+| `foto_perfil` | Editar perfil del paseador | `image/*` | (ninguno) |
+| `foto` (mascota) | Registrar/editar mascota | `image/*` | (ninguno) |
+| `certificado_salud` | Registrar/editar mascota | **(ninguno - cualquier archivo)** | (ninguno) |
+| `carne_vacunacion` | Registrar/editar mascota | **(ninguno - cualquier archivo)** | (ninguno) |
+| `archivo` (certificado paseador) | Mis certificados | **(ninguno - cualquier archivo)** | (ninguno) |
+| `foto` (evidencia incidente) | Reportar emergencia (modal) | `image/*` | (ninguno) |
+| `foto` (paseo inicio/mitad/fin) | Subir foto del paseo (modal) | `image/*` (escrito a mano en el HTML del modal, NO via el widget de `SubirFotoPaseoForm` - ese formulario nunca se renderiza con `{{ form.foto }}`, es un hallazgo aparte, sin impacto porque el HTML a mano ya tenía el valor correcto) | (ninguno) |
+
+**Por qué aparece la opción de video en iPhone**: Safari ofrece "Tomar
+foto o video" cuando el `accept` del `<input>` admite algo más que
+imágenes puras (o no restringe nada) - los 3 campos de certificados
+(salud, vacunación, del paseador) no tenían NINGÚN `accept` (aceptaban
+cualquier archivo, para poder subir también un PDF), así que activaban
+esa opción. Los 4 campos que ya eran `accept="image/*"` (desde Mejora
+1, 14 de octubre) no deberían ofrecerla - no se pudo confirmar en un
+iPhone físico (no se dispone de uno), queda pendiente que la autora lo
+confirme en su propio dispositivo.
+
+Fix:
+- Los 4 campos solo-foto se dejan **sin cambios** (`accept="image/*"`,
+  sin `capture` - ya cumplían lo pedido desde Mejora 1).
+- Los 3 campos de documento (imagen o PDF) ahora usan
+  `core.widgets.CamaraOArchivoWidget` (nuevo, extiende
+  `ClearableFileInput` - mantiene intacto el "Currently: X / Clear" de
+  Django para un archivo ya subido, solo cambia la parte final): un
+  único `<input type="file">` real **oculto**, con DOS botones que le
+  cambian `accept`/`capture` antes de abrirlo:
+  - "Tomar foto": `accept="image/*"` + `capture="environment"` (cámara,
+    sin video ni galería);
+  - "Elegir archivo": vuelve a `accept="image/*,application/pdf"` sin
+    `capture` (selector nativo normal, imagen o PDF).
+  Una sola función JS delegada en `base.html`
+  (`data-canigo-modo-captura`/`data-canigo-camara-o-archivo`), reusada
+  por los 3 campos - no un script por campo. El mismo backend
+  (`core/media.py::subir_certificado`) sigue validando formato/tamaño/
+  contenido exactamente igual que antes - el widget es puramente de
+  interfaz, no cambia qué se acepta en el servidor.
+
+**Tabla final** (campo | pantalla | `accept`/`capture` antes | `accept`/
+`capture` después | qué ofrece en iPhone/Android):
+
+| Campo | Pantalla | Antes | Después | iPhone | Android |
+|---|---|---|---|---|---|
+| `foto_perfil` | Editar perfil paseador | `image/*` / — | sin cambios | Cámara o galería, sin video | Cámara o galería |
+| `foto` (mascota) | Registrar/editar mascota | `image/*` / — | sin cambios | Cámara o galería, sin video | Cámara o galería |
+| `certificado_salud` | Registrar/editar mascota | — / — | dos botones: `image/*`+`environment` / `image/*,application/pdf` | "Tomar foto" sin video; "Elegir archivo" abre Fotos/Archivos (puede incluir PDF) | Cámara (solo foto) o selector de archivos |
+| `carne_vacunacion` | Registrar/editar mascota | — / — | ídem anterior | ídem anterior | ídem anterior |
+| `archivo` (certificado paseador) | Mis certificados | — / — | ídem anterior | ídem anterior | ídem anterior |
+| `foto` (evidencia incidente) | Reportar emergencia | `image/*` / — | sin cambios | Cámara o galería, sin video | Cámara o galería |
+| `foto` (paseo) | Subir foto del paseo | `image/*` / — (hardcoded en el HTML) | sin cambios | Cámara o galería, sin video | Cámara o galería |
+
+**Backend - video rechazado por contenido real, no por extensión**:
+confirmado con una prueba real (no solo lectura de código) - un archivo
+con la firma real de un `.mp4` (`ftypmp42...`), renombrado a `.jpg`, se
+mandó a `core.media.subir_certificado()` y fue **rechazado**
+("El contenido del archivo no coincide con su extensión..."), porque
+`_FIRMAS_POR_TIPO` solo reconoce `jpg`/`png`/`pdf` por sus primeros
+bytes - cualquier otra firma (incluida la de un video) no coincide con
+NINGUNA extensión permitida. `subir_imagen()` (campos solo-foto) tiene
+la misma protección de forma independiente (rechaza cualquier
+contenido que no sea `jpg`/`png`, sin importar qué diga la extensión).
+
+**HEIC - reportado, no modificado**: `_FIRMAS_POR_TIPO`/
+`_EXTENSIONES_POR_TIPO` NO incluyen HEIC - un archivo HEIC real sería
+rechazado por ambas funciones (`subir_imagen()`: firma no es jpg/png;
+`subir_certificado()`: `.heic` no está en las extensiones permitidas).
+En la práctica, Safari en iOS suele convertir la foto a JPEG antes de
+subirla desde un `<input type="file">` (comportamiento estándar de
+WebKit desde iOS 11), así que esto normalmente no debería pasar - pero
+no se pudo confirmar sin un iPhone real, y existe al menos un caso
+conocido donde SÍ podría llegar HEIC real: si el usuario tiene
+"Mantener original" activado en Ajustes > Cámara > Formatos Y elige una
+foto YA existente de la galería (en vez de tomarla en el momento) vía
+"Elegir archivo". Se reporta esta incertidumbre tal cual pide la tarea,
+sin tocar la validación de contenido para no aceptar de más sin
+confirmar primero que hace falta.
+
+**Verificado ejecutando** (`canigo_dev`, navegador headless): el
+widget renderiza correctamente en `/mascotas/nueva/`, `/mascotas/<id>/
+editar/` (confirmado que no rompe nada - esos dos campos NUNCA pasaban
+`initial=` con un valor con `.url`, así que el bloque "Currently/Clear"
+de `ClearableFileInput` no se usaba ahí ni antes ni después de este
+cambio) y `/cuentas/paseador/certificados/`; clic en "Tomar foto" deja
+el `<input>` oculto con `accept="image/*"` y `capture="environment"`;
+clic en "Elegir archivo" lo vuelve a `accept="image/*,application/pdf"`
+sin `capture`; al asignarle un archivo real (vía CDP
+`DOM.setFileInputFiles`), el nombre se muestra correctamente junto a
+los botones. Prueba de contenido real: un `.mp4` renombrado a `.jpg`
+rechazado por `subir_certificado()`.
+
+**Solo leído en código** (sin dispositivo real para confirmarlo):
+que `accept="image/*"` efectivamente no ofrezca la opción de video en
+Safari de iPhone, y el comportamiento exacto de HEIC al tomar/elegir
+una foto.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

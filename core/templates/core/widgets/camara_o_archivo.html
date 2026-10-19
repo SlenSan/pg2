@@ -1,0 +1,25 @@
+{% comment %}
+Ajustes del 19 de octubre, punto 2 - ver core/widgets.py::CamaraOArchivoWidget.
+El bloque "Currently: X / Clear" de arriba es EXACTO al de
+django/forms/templates/django/forms/widgets/clearable_file_input.html
+(sin tocar) - solo cambia la parte final: en vez de un <input> visible,
+un <input> OCULTO más dos botones que lo abren con un accept/capture
+distinto cada uno (JS compartido en base.html, mismos data-attributes
+para los 3 campos que usan este widget - no un script por campo).
+{% endcomment %}
+{% if widget.is_initial %}{{ widget.initial_text }}: <a href="{{ widget.value.url }}">{{ widget.value }}</a>{% if not widget.required %}
+<input type="checkbox" name="{{ widget.checkbox_name }}" id="{{ widget.checkbox_id }}"{% if widget.attrs.disabled %} disabled{% endif %}{% if widget.attrs.checked %} checked{% endif %}>
+<label for="{{ widget.checkbox_id }}">{{ widget.clear_checkbox_label }}</label>{% endif %}<br>
+{{ widget.input_text }}:{% endif %}
+<div data-canigo-camara-o-archivo>
+  <input type="file" name="{{ widget.name }}"{% include "django/forms/widgets/attrs.html" %} data-accept-documento="{{ widget.attrs.accept }}" hidden>
+  <div class="d-flex flex-wrap gap-2 align-items-center">
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-canigo-modo-captura="camara">
+      Tomar foto
+    </button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-canigo-modo-captura="archivo">
+      Elegir archivo
+    </button>
+    <span class="small text-muted" data-canigo-nombre-archivo></span>
+  </div>
+</div>

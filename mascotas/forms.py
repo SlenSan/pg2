@@ -2,6 +2,8 @@ from datetime import date
 
 from django import forms
 
+from core.widgets import CamaraOArchivoWidget
+
 _INPUT_CLASS = 'form-control'
 
 
@@ -47,20 +49,27 @@ class MascotaForm(forms.Form):
     # Formato/tamaño/contenido del archivo se valida en
     # core/media.py::subir_certificado (backend obligatorio); aca solo se
     # valida la fecha de expedición, que es dato de formulario.
+    # Ajustes del 19 de octubre, punto 2 - CamaraOArchivoWidget en vez de
+    # ClearableFileInput a secas: admite imagen O PDF, así que un solo
+    # <input> con ese accept le ofrece a Safari en iPhone la opción de
+    # grabar VIDEO (cualquier accept que admita algo más que imágenes
+    # puras la activa) - dos controles ("Tomar foto"/"Elegir archivo")
+    # evitan eso sin perder la opción de adjuntar un PDF.
     certificado_salud = forms.FileField(
         required=False,
         label='Certificado de salud (opcional - JPG, PNG o PDF, máx. 5MB)',
-        widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
+        widget=CamaraOArchivoWidget(attrs={'class': _INPUT_CLASS}),
     )
     fecha_expedicion_salud = forms.DateField(
         required=False,
         label='Fecha de expedición del certificado de salud',
         widget=forms.DateInput(attrs={'class': _INPUT_CLASS, 'type': 'date'}),
     )
+    # Mismo motivo que certificado_salud de arriba.
     carne_vacunacion = forms.FileField(
         required=False,
         label='Carné de vacunación (opcional - JPG, PNG o PDF, máx. 5MB)',
-        widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
+        widget=CamaraOArchivoWidget(attrs={'class': _INPUT_CLASS}),
     )
 
     def clean(self):

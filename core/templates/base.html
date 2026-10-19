@@ -210,6 +210,50 @@
   });
   </script>
 
+  <script>
+  // Ajustes del 19 de octubre, punto 2 - CamaraOArchivoWidget
+  // (core/widgets.py): dos botones que abren el MISMO <input
+  // type="file"> oculto con un accept/capture distinto cada vez -
+  // "Tomar foto" fuerza la cámara y SOLO imagen (para que Safari en
+  // iPhone no ofrezca la opción de grabar video, que aparece si el
+  // accept admite algo más que imágenes puras); "Elegir archivo" vuelve
+  // al accept original del campo (imagen o PDF, en
+  // data-accept-documento) sin forzar la cámara. Una sola función
+  // delegada para los 3 campos que usan este widget (certificado de
+  // salud, carné de vacunación, certificados del paseador), no un
+  // script por campo.
+  document.addEventListener('click', function (event) {
+    var boton = event.target.closest('[data-canigo-modo-captura]');
+    if (!boton) {
+      return;
+    }
+    var contenedor = boton.closest('[data-canigo-camara-o-archivo]');
+    var input = contenedor.querySelector('input[type="file"]');
+    if (boton.dataset.canigoModoCaptura === 'camara') {
+      input.setAttribute('accept', 'image/*');
+      input.setAttribute('capture', 'environment');
+    } else {
+      input.setAttribute('accept', input.dataset.acceptDocumento);
+      input.removeAttribute('capture');
+    }
+    input.click();
+  });
+
+  // El <input> real queda oculto (ver la plantilla del widget) - sin
+  // esto, el usuario no tendría ninguna señal de qué archivo quedó
+  // elegido antes de enviar el formulario.
+  document.addEventListener('change', function (event) {
+    if (!event.target.matches('[data-canigo-camara-o-archivo] input[type="file"]')) {
+      return;
+    }
+    var contenedor = event.target.closest('[data-canigo-camara-o-archivo]');
+    var nombreEl = contenedor.querySelector('[data-canigo-nombre-archivo]');
+    if (nombreEl) {
+      nombreEl.textContent = event.target.files.length ? event.target.files[0].name : '';
+    }
+  });
+  </script>
+
   {% comment %}
   Registro del service worker (Incremento 4, fase 2, punto E) - en
   CUALQUIER pagina, con o sin sesión: el permiso/suscripción de push se

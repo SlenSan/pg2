@@ -3,6 +3,8 @@ from datetime import date
 
 from django import forms
 
+from core.widgets import CamaraOArchivoWidget
+
 _INPUT_CLASS = 'form-control'
 
 # Lista cerrada (no texto libre) - ver CLAUDE.md/consigna del punto 4.
@@ -211,9 +213,13 @@ class CertificadoPaseadorForm(forms.Form):
         label='Fecha de expedición',
         widget=forms.DateInput(attrs={'class': _INPUT_CLASS, 'type': 'date'}),
     )
+    # Ajustes del 19 de octubre, punto 2 - mismo motivo que
+    # mascotas.forms.MascotaForm.certificado_salud: admite imagen O PDF,
+    # CamaraOArchivoWidget evita que Safari en iPhone ofrezca grabar
+    # video en un solo control.
     archivo = forms.FileField(
         label='Archivo (JPG, PNG o PDF, máx. 5MB)',
-        widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS}),
+        widget=CamaraOArchivoWidget(attrs={'class': _INPUT_CLASS}),
     )
 
     def clean_fecha_expedicion(self):
