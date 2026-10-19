@@ -328,6 +328,20 @@ def finalizar_paseo(*, id_paseo, id_paseador):
     )
 
 
+def guardar_distancia(id_paseo, distancia_m):
+    """
+    Ajustes del 19 de octubre, punto 1 - se llama UNA vez, al finalizar
+    el paseo (ver finalizar_paseo() en paseos/views_web.py), para que el
+    historial no tenga que recalcular la distancia desde
+    coordenadas_detalle cada vez que se consulta. `distancia_m` puede
+    ser None (paseo con menos de 2 puntos GPS validos) - se guarda igual,
+    para distinguir "se calculó y dio None" de "nunca se calculó"
+    (paseos de ANTES de este punto, que no tienen el campo en absoluto -
+    ver CLAUDE.md).
+    """
+    get_db().paseos.update_one({'_id': ObjectId(id_paseo)}, {'$set': {'distancia_m': distancia_m}})
+
+
 def incrementar_total_puntos(id_paseo):
     """Suma 1 a total_puntos cada vez que llega una coordenada GPS nueva."""
     resultado = get_db().paseos.find_one_and_update(

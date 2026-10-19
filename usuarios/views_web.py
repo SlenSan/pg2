@@ -23,6 +23,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from calificaciones import repository as calificaciones_repository
+from coordenadas import repository as coordenadas_repository
 from core.media import ErrorArchivoInvalido, ErrorSubidaImagen, eliminar_archivo, subir_certificado, subir_imagen
 from incidentes.forms import ReportarIncidenteForm
 from mascotas import repository as mascotas_repository
@@ -533,6 +534,11 @@ def bienvenida_paseador(request):
             ],
             # Certificados (Ley Kiara) - ver _certificados_de_mascotas_para_paseador().
             'mascotas_certificados': _certificados_de_mascotas_para_paseador(id_paseador, mascotas_paseo),
+            # Ajustes del 19 de octubre, punto 1 - valor inicial, antes de
+            # que el primer envio de GPS (cada 8s, base.html) lo actualice.
+            'distancia_texto': coordenadas_repository.formatear_distancia(
+                coordenadas_repository.distancia_recorrida_m(paseo['_id'])
+            ),
         }
         # mascotas=mascotas_paseo: si el paseo lleva mas de una, el form
         # agrega el radio "¿a cual mascota afecta?" (ver ReportarIncidenteForm);

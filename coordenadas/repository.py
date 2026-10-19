@@ -10,6 +10,14 @@ from core.mongo import get_db
 
 _RADIO_TIERRA_KM = 6371.0
 
+# Ajustes del 19 de octubre, punto 1 - mismo criterio que
+# UMBRAL_PRECISION_DIBUJO en coordenadas/templates/coordenadas/mapa.html
+# (no se puede compartir literalmente una constante entre Python y JS,
+# pero es el MISMO valor a propósito: un punto con mala precisión no
+# debería ni dibujarse en el mapa ni contar para la distancia recorrida).
+# Si se cambia uno, hay que cambiar el otro a mano.
+UMBRAL_PRECISION_METROS = 50
+
 
 def registrar_punto(*, id_paseo, latitud, longitud, altitud=None, precision=None, fecha_captura=None):
     ahora = datetime.now(timezone.utc)
@@ -89,40 +97,94 @@ def listar_por_paseo(id_paseo, desde=None):
     return list(get_db().coordenadas_detalle.find(query).sort('fecha_captura', 1))
 
 
-def _distancia_haversine_km(lat1, lon1, lat2, lon2):
+def _distancia_haversine_m(lat1, lon1, lat2, lon2):
     """
     Distancia en linea recta entre dos puntos GPS, formula de Haversine -
     tiene en cuenta la curvatura de la Tierra (una resta simple de
-    latitud/longitud no serviria para una distancia real en km).
+    latitud/longitud no serviria para una distancia real). En METROS
+    (no km): es la unidad que usa formatear_distancia() y en la que se
+    guarda paseos.distancia_m.
     """
     lat1_rad, lon1_rad, lat2_rad, lon2_rad = (math.radians(v) for v in (lat1, lon1, lat2, lon2))
     dlat = lat2_rad - lat1_rad
     dlon = lon2_rad - lon1_rad
     a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
-    return _RADIO_TIERRA_KM * 2 * math.asin(math.sqrt(a))
+    return _RADIO_TIERRA_KM * 1000 * 2 * math.asin(math.sqrt(a))
 
 
-def distancia_recorrida_km(id_paseo):
+def distancia_recorrida_m(id_paseo, *, desde=None, hasta=None):
     """
     Suma la distancia entre cada PAR de puntos GPS consecutivos de este
-    paseo (Haversine). No es un campo guardado en `paseos` - se calcula
-    al momento de consultarlo (ver "Mis paseos" del paseador). listar_por_paseo()
-    ya viene ordenado por fecha_captura ascendente, asi que los pares
-    consecutivos representan el recorrido real en orden. None con menos
-    de 2 puntos (no hay ningun tramo que medir - paseo recien iniciado,
-    o sin señal GPS en todo el trayecto).
+    paseo (Haversine, en metros) - Ajustes del 19 de octubre, punto 1.
+    No es un campo guardado en `paseos` mientras el paseo sigue en curso
+    (se calcula al consultarlo); para un paseo YA finalizado, el
+    llamador debería preferir el `distancia_m` ya guardado (ver
+    paseos.repository.guardar_distancia()) en vez de llamar a esto de
+    nuevo. None con menos de 2 puntos VALIDOS (paseo recien iniciado, o
+    sin señal GPS en todo el trayecto).
+
+    Mismo criterio que el dibujo del mapa (UMBRAL_PRECISION_METROS,
+    igual que UMBRAL_PRECISION_DIBUJO en mapa.html): se descartan los
+    puntos con `precision` peor a ese umbral ANTES de medir - un punto
+    con mala señal no debería contar como desplazamiento real. Un punto
+    sin `precision` (None, de antes del Incremento 4 o si el navegador
+    no la reportó) SI se usa - no hay forma de saber si es bueno o malo,
+    así que se trata como aceptable (nunca se asume "malo" por ausencia
+    de dato).
+
+    `desde`/`hasta` (datetime, opcionales, comparados contra
+    `fecha_captura`): sin usar todavía por ningún llamador real - queda
+    preparada para la Fase 3 (RF de "recogida por dueño"), donde cada
+    dueño necesitará la distancia de SOLO su propio tramo del paseo, no
+    el paseo completo.
+
+    Se decidió NO agregar un filtro de "jitter" (ignorar un tramo si es
+    más corto que la suma de las precisiones de sus dos puntos) a pesar
+    de que la tarea lo sugería - ver MANUAL_DESARROLLADOR.md para los
+    números reales de un paseo de producción que muestran por qué ese
+    filtro, tal como estaba planteado, sería CONTRAPRODUCENTE (descarta
+    casi todo el recorrido real, no solo el ruido).
     """
-    puntos = listar_por_paseo(id_paseo)
-    if len(puntos) < 2:
+    puntos = listar_por_paseo(id_paseo, desde=desde)
+    if hasta is not None:
+        puntos = [p for p in puntos if p['fecha_captura'] <= hasta]
+    puntos_validos = [
+        p for p in puntos
+        if p.get('precision') is None or p['precision'] <= UMBRAL_PRECISION_METROS
+    ]
+    if len(puntos_validos) < 2:
         return None
-    total_km = sum(
-        _distancia_haversine_km(
+    total_m = sum(
+        _distancia_haversine_m(
             anterior['latitud'], anterior['longitud'],
             actual['latitud'], actual['longitud'],
         )
-        for anterior, actual in zip(puntos, puntos[1:])
+        for anterior, actual in zip(puntos_validos, puntos_validos[1:])
     )
-    return round(total_km, 1)
+    return round(total_m)
+
+
+def formatear_distancia(metros):
+    """
+    ÚNICA función que da el texto de distancia a mostrar ("850 m" /
+    "1,2 km") - Ajustes del 19 de octubre, punto 1. None si `metros` es
+    None (paseo sin suficientes puntos para medir - el llamador decide
+    qué mostrar en ese caso, p.ej. "Sin datos de GPS").
+
+    Coma decimal a propósito (no es un bug tipo INC-05): esto arma un
+    STRING en el servidor para mostrar en HTML/texto, nunca un número
+    crudo que vaya a un <script>/JSON a ser interpretado por JS - por
+    eso no hace falta (ni corresponde) el filtro |unlocalize de INC-05
+    aquí. Quien necesite el número crudo en JSON debe usar
+    distancia_recorrida_m()/el campo `distancia_m` directamente, nunca
+    parsear este texto.
+    """
+    if metros is None:
+        return None
+    if metros < 1000:
+        return f'{round(metros)} m'
+    km = metros / 1000
+    return f'{km:.1f} km'.replace('.', ',')
 
 
 def a_json(punto):

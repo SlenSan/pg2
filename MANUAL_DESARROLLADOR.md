@@ -1751,6 +1751,84 @@ como al simular un ciclo de `visibilitychange` (oculta → visible).
     criterio que el resto del panel de administración, no confirma que
     la ruta existe).
 
+**Ajustes del 19 de octubre, punto 1 — distancia recorrida del paseo**:
+diagnóstico - el cálculo YA existía (`coordenadas/repository.py::
+distancia_recorrida_km()`, Haversine sobre todos los puntos de
+`coordenadas_detalle` en orden de `fecha_captura`), pero con tres
+problemas: (1) no filtraba por `precision` en absoluto - un punto con
+mala señal contaba igual que uno bueno; (2) no estaba formateado según
+el criterio pedido (devolvía un float en km sin redondear a un patrón
+fijo); (3) solo se mostraba en **un solo lugar**, `historial_paseador.
+html` (historial del paseador) - nunca en el mapa en vivo, ni en el
+panel del paseador durante el paseo, ni en el historial del dueño.
+
+Fix:
+- `coordenadas/repository.py::distancia_recorrida_m()` (reemplaza a
+  `distancia_recorrida_km()`) ahora filtra los puntos con
+  `UMBRAL_PRECISION_METROS = 50` (mismo criterio que
+  `UMBRAL_PRECISION_DIBUJO` del JS de `mapa.html` - no se puede
+  compartir una constante literal entre Python y JS, pero es el MISMO
+  valor a propósito) antes de sumar los tramos; un punto sin
+  `precision` (`None`) se acepta igual (no se asume "malo" por falta de
+  dato). Trabaja en METROS, no km.
+- `formatear_distancia(metros)`: única función que arma el texto ("850
+  m" bajo 1000m, "1,2 km" con coma decimal desde ahí) - ya es un STRING
+  armado en el servidor, nunca un número crudo en JSON (no aplica el
+  cuidado de INC-05 aquí porque no hay ningún número yendo a un
+  `<script>`/JSON para que JS lo interprete).
+- Se guarda en `paseos.distancia_m` al finalizar el paseo
+  (`paseos.repository.guardar_distancia()`, llamado desde
+  `finalizar_paseo()`) - el historial de un paseo YA finalizado no
+  recalcula; un paseo histórico de ANTES de este punto (sin el campo)
+  se calcula en vivo (`paseos/views_web.py::_distancia_texto_de_paseo()`,
+  compartida por `historial()` del dueño e `historial_paseador()`).
+- Se muestra en 3 lugares: el mapa en vivo (`coordenadas_de_paseo()`,
+  mismo sondeo de 8s, sin petición nueva), el panel del paseador durante
+  el paseo (reusa el mismo POST de GPS de `base.html`, también cada
+  8s), y el historial de ambos roles (`historial.html`/
+  `historial_paseador.html`).
+- `distancia_recorrida_m()` acepta `desde`/`hasta` (datetime,
+  opcionales, sin usar todavía por ningún llamador real) - preparación
+  explícita para la Fase 3 (RF de "recogida por dueño"), donde cada
+  dueño necesitará la distancia de solo su propio tramo.
+
+**Filtro de "jitter" — NO implementado, con los datos que lo explican**:
+la tarea pedía evaluar un filtro que ignorara un tramo más corto que la
+suma de las precisiones de sus dos puntos, antes de implementarlo.
+`canigo_dev` no tenía ningún paseo con movimiento real (todos sus
+paseos de prueba usan una sola coordenada GPS fija, de pruebas CDP
+anteriores) - se probó en su lugar, en **solo lectura**, contra un
+paseo REAL de producción (`canigo`, 32 minutos, 79 puntos, el mismo
+conservado en la limpieza de cuentas de prueba del 9 de octubre). El
+resultado: **928.4 m sin ningún filtro de jitter**, contra **145.6 m
+con el filtro propuesto** (77 de 78 tramos quedaban "ignorados"). La
+precisión típica del GPS real de un celular en ese paseo era de 15 a
+40m - muy por encima de los ~11m que camina una persona en 8s a paso
+normal, así que el umbral "tramo < suma de precisiones" descarta casi
+TODO el recorrido real, no solo el ruido: el filtro tal como estaba
+planteado sería contraproducente (subcuenta la distancia real en más
+del 80%). **Decisión: no se implementó.** Si en el futuro se quiere un
+filtro de jitter, necesitaría un diseño distinto (por ejemplo, un
+mínimo fijo de unos pocos metros por tramo, no basado en sumar
+precisiones típicas de 15-40m).
+
+**Verificado ejecutando** (`canigo_dev`, paseo de prueba desechable con
+4 puntos GPS reales variando ~100m entre sí, uno de ellos con
+`precision` > 50m a propósito): `distancia_recorrida_m()` excluye
+correctamente el punto de mala precisión (confirmado con un caso de
+prueba aislado: 2 puntos con `precision=None` SÍ se miden, sin
+excluirse); `formatear_distancia()` confirmado en los bordes exactos
+(850→"850 m", 999→"999 m", 1000→"1,0 km", 1200→"1,2 km", None→None);
+el mapa en vivo (`/coordenadas/paseos/<id>/mapa/`) y su polling
+(`/datos/`) muestran "300 m" consistentemente; el panel del paseador
+(`/cuentas/paseador/bienvenida/`) lo muestra igual, y
+`registrar_coordenada()` lo actualiza a "400 m" tras un punto GPS
+nuevo; al finalizar el paseo, `distancia_m: 400` queda guardado en
+Mongo y el historial del paseador lo muestra sin recalcular; un paseo
+histórico SIN el campo (simulado) lo calcula en vivo correctamente, y
+uno que YA tiene `distancia_m: None` guardado NO lo recalcula (se
+respeta el valor ya guardado, aunque sea `None`).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

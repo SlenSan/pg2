@@ -29,6 +29,24 @@ from usuarios.decorators import requiere_dueno, requiere_paseador
 from usuarios.forms import TIPO_PRIMEROS_AUXILIOS
 
 
+def _distancia_texto_de_paseo(paseo):
+    """
+    Ajustes del 19 de octubre, punto 1 - texto de distancia ("850 m" /
+    "1,2 km") para una tarjeta de historial, usada tanto por historial()
+    (dueño) como por historial_paseador(). Si el paseo YA tiene
+    `distancia_m` guardado (lo calculó finalizar_paseo() al terminar -
+    ver paseos.repository.guardar_distancia()), se usa tal cual, sin
+    recalcular; `'distancia_m' in paseo` (no `.get(...)`) distingue ese
+    caso de un paseo de ANTES de este punto, que no tiene el campo en
+    absoluto y sí necesita el cálculo en vivo.
+    """
+    if 'distancia_m' in paseo:
+        distancia_m = paseo['distancia_m']
+    else:
+        distancia_m = coordenadas_repository.distancia_recorrida_m(paseo['_id'])
+    return coordenadas_repository.formatear_distancia(distancia_m)
+
+
 def _horario_a_utc(hora_desde, hora_hasta):
     """
     Combina las horas que eligio el paseador (sin fecha - ver
@@ -399,6 +417,7 @@ def historial(request):
             'mascotas_nombres': mascotas_repository.nombres_unidos(mascotas_paseo),
             'duracion_min': duracion_min,
             'puntuacion': calificacion['puntuacion'] if calificacion else None,
+            'distancia_texto': _distancia_texto_de_paseo(p),
         })
 
     return render(request, 'paseos/historial.html', {'items': items})
@@ -503,6 +522,11 @@ def finalizar_paseo(request, id_paseo):
     if not paseo:
         messages.error(request, 'No se pudo finalizar el paseo: ya no estaba en curso.')
     else:
+        # Ajustes del 19 de octubre, punto 1 - se calcula y se guarda UNA
+        # sola vez aca, para que el historial no tenga que recorrer todo
+        # coordenadas_detalle de este paseo cada vez que se consulta.
+        distancia_m = coordenadas_repository.distancia_recorrida_m(paseo['_id'])
+        repository.guardar_distancia(paseo['_id'], distancia_m)
         for id_dueno in paseo.get('id_duenos', []):
             notificaciones_repository.crear(
                 id_usuario=id_dueno,
@@ -613,9 +637,10 @@ def historial_paseador(request):
             'duenos_nombres': usuarios_repository.nombres_unidos(duenos_paseo),
             'duracion_min': duracion_min,
             'puntuacion_promedio': puntuacion_promedio,
-            # None si el paseo tiene menos de 2 puntos GPS - ver
-            # coordenadas.repository.distancia_recorrida_km().
-            'distancia_km': coordenadas_repository.distancia_recorrida_km(p['_id']),
+            # None si el paseo tiene menos de 2 puntos GPS validos - ver
+            # coordenadas.repository.distancia_recorrida_m()/
+            # formatear_distancia().
+            'distancia_texto': _distancia_texto_de_paseo(p),
         })
 
     # --- estadisticas del encabezado (totales "de siempre", a diferencia

@@ -34,6 +34,13 @@
     </form>
     <p class="text-muted small mt-2 mb-1" id="estado-gps">Compartiendo tu ubicación...</p>
     {% comment %}
+    Ajustes del 19 de octubre, punto 1 - mismo patron que "estado-gps":
+    el valor inicial lo manda la vista (paseo_activo.distancia_texto);
+    cada envio de GPS (base.html, cada 8s) lo actualiza con la respuesta
+    del mismo POST, sin una peticion aparte.
+    {% endcomment %}
+    <p class="text-muted small mb-1">Distancia recorrida: <span id="distancia-paseo">{{ paseo_activo.distancia_texto|default:"" }}</span></p>
+    {% comment %}
     Indicador de wake lock (hallazgo de la caminata real, 13 oct - punto
     3): solo visible para el paseador, mientras camina - lo actualiza el
     script de base.html (bloque de wake lock, totalmente aparte del

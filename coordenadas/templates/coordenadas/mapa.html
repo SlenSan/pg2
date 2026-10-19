@@ -78,6 +78,12 @@
         {{ paseo.estado }}
       </span>
       <div class="text-muted small mt-1" id="tiempo-transcurrido"></div>
+      {% comment %}
+      Ajustes del 19 de octubre, punto 1 - valor inicial de la vista
+      (mapa_paseo()); el polling de abajo (actualizarTiempo/actualizar,
+      cada 8s) lo actualiza con distancia_texto de coordenadas_de_paseo().
+      {% endcomment %}
+      <div class="text-muted small" id="distancia-paseo">{{ distancia_texto|default:"" }}</div>
     </div>
   </div>
 </div>
@@ -423,6 +429,11 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
         document.querySelectorAll('.campana-punto').forEach(function (el) {
           el.classList.toggle('d-none', !data.hay_notificaciones_sin_leer);
         });
+
+        // Ajustes del 19 de octubre, punto 1 - mismo sondeo de 8s, sin
+        // peticion aparte (ver coordenadas_de_paseo()). Texto ya armado
+        // en el servidor ("850 m" / "1,2 km") - nunca se formatea acá.
+        document.getElementById('distancia-paseo').textContent = data.distancia_texto || '';
 
         var puntos = data.puntos;
         // "hay_puntos_historicos" (no "puntos.length"): con el polling

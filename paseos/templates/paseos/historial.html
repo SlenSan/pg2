@@ -26,6 +26,7 @@
           <div class="text-muted small mt-2">
             {{ item.paseo.hora_inicio|date:"j \d\e F \d\e Y" }}
             {% if item.duracion_min is not None %} · {{ item.duracion_min }} min{% endif %}
+            {% if item.distancia_texto %} · {{ item.distancia_texto }}{% endif %}
           </div>
         </a>
         <div class="d-flex flex-wrap gap-2">

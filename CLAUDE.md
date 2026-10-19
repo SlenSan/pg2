@@ -155,7 +155,16 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
   hora_fin: Date,
   total_puntos: Number,
   emergencia: Boolean,     // true si se activó el botón de emergencia
-  fotos: [{ url: String, momento: String }]  // momento: "inicio"|"mitad"|"fin"
+  fotos: [{ url: String, momento: String }],  // momento: "inicio"|"mitad"|"fin"
+  distancia_m: Number      // Ajustes del 19 de octubre, punto 1 - metros recorridos (Haversine
+                            // sobre coordenadas_detalle, solo puntos con precision <= 50m o nula -
+                            // ver coordenadas/repository.py::distancia_recorrida_m()/
+                            // UMBRAL_PRECISION_METROS). Se calcula y se guarda UNA vez, al
+                            // finalizar el paseo (paseos/views_web.py::finalizar_paseo) - un paseo
+                            // "disponible"/"en_vivo" no lo tiene todavía. Puede ser null (menos de 2
+                            // puntos válidos). Un paseo histórico de ANTES de este punto no tiene el
+                            // campo en absoluto (no se migró) - se calcula en vivo al consultarse
+                            // (paseos/views_web.py::_distancia_texto_de_paseo), sin guardarse
 }
 ```
 

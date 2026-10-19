@@ -320,6 +320,10 @@ def mapa_paseo(request, id_paseo):
         # tiene un ultimo punto "viejo", eso no es una alarma); el
         # template/JS igual solo lo muestra condicionado a ese estado.
         'hay_punto_reciente': _hay_punto_reciente(paseo['_id']),
+        # Ajustes del 19 de octubre, punto 1 - valor inicial (antes de
+        # que el primer polling de coordenadas_de_paseo() lo actualice);
+        # mismo texto formateado, ver ese docstring de mas abajo.
+        'distancia_texto': repository.formatear_distancia(repository.distancia_recorrida_m(paseo['_id'])),
     })
 
 
@@ -370,6 +374,12 @@ def coordenadas_de_paseo(request, id_paseo):
         'pendiente_calificar': _pendiente_calificar(paseo, id_usuario) if es_dueno else False,
         # Idem mapa_paseo() - punto 1 del reporte de revision.
         'hay_punto_reciente': _hay_punto_reciente(paseo['_id']),
+        # Ajustes del 19 de octubre, punto 1 - ya viene formateado
+        # ("850 m" / "1,2 km") para no mandar un numero crudo al JSON
+        # (mismo cuidado que INC-05: nunca un numero que JS vaya a tratar
+        # como tal, si al final solo se va a mostrar como texto). None si
+        # el paseo todavia no tiene 2 puntos validos.
+        'distancia_texto': repository.formatear_distancia(repository.distancia_recorrida_m(paseo['_id'])),
     })
 
 
@@ -462,6 +472,10 @@ def registrar_coordenada(request, id_paseo):
             return JsonResponse({
                 'total_puntos': paseo.get('total_puntos', 0),
                 'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, paseo['id_paseador']),
+                # Ajustes del 19 de octubre, punto 1 - panel del propio
+                # paseador: reusa este mismo POST de GPS (cada 8s) para
+                # actualizar la distancia, sin sumar una peticion aparte.
+                'distancia_texto': repository.formatear_distancia(repository.distancia_recorrida_m(paseo['_id'])),
             }, status=201)
 
     repository.registrar_punto(
@@ -481,4 +495,6 @@ def registrar_coordenada(request, id_paseo):
         # aprovecha este mismo POST de GPS, que ya se manda cada 10s, para
         # el punto del navbar en vez de sumar una peticion aparte.
         'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, paseo['id_paseador']),
+        # Ajustes del 19 de octubre, punto 1 - idem rama de arriba.
+        'distancia_texto': repository.formatear_distancia(repository.distancia_recorrida_m(paseo['_id'])),
     }, status=201)

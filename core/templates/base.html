@@ -337,6 +337,16 @@
             el.classList.toggle('d-none', !data.hay_notificaciones_sin_leer);
           });
         }
+        // Ajustes del 19 de octubre, punto 1 - "distancia-paseo" solo
+        // existe en bienvenida_paseador.html (mismo patron que
+        // "estado-gps" arriba); se reusa este mismo POST de GPS, que ya
+        // se manda cada 8s, en vez de sumar una peticion aparte.
+        if (data && data.distancia_texto) {
+          var distanciaEl = document.getElementById('distancia-paseo');
+          if (distanciaEl) {
+            distanciaEl.textContent = data.distancia_texto;
+          }
+        }
       }).catch(function () {
         var estadoEl = document.getElementById('estado-gps');
         if (estadoEl) {
