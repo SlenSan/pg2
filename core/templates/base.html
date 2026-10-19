@@ -203,10 +203,35 @@
     if (form.dataset.canigoCargaManual !== undefined) {
       return; // este formulario ya maneja su propio aviso de carga (fetch)
     }
+    // Ajustes del 19 de octubre, punto 4 - un formulario GET (p.ej. los
+    // filtros de "Paseadores disponibles") no se bloquea: no sube
+    // archivos ni tarda, y bloquearlo le quitaría sentido al botón
+    // "Atrás"/doble clic en un filtro, que no tiene ningún efecto
+    // secundario que proteger. method.toLowerCase() porque el atributo
+    // HTML puede venir en cualquier capitalización ("GET", "get"...).
+    if (form.method && form.method.toLowerCase() === 'get') {
+      return;
+    }
     var boton = form.querySelector('button[type="submit"]');
     if (!canigoMarcarCargando(boton)) {
       event.preventDefault(); // ya se estaba enviando - evita el doble envío
     }
+  });
+
+  // Ajustes del 19 de octubre, punto 4 - si el navegador restaura esta
+  // página desde la cache de "Atrás" (bfcache: event.persisted true),
+  // cualquier botón que haya quedado deshabilitado/"Cargando…" antes de
+  // salir de la página debe volver a su estado normal - si no, un
+  // formulario con un error de validación (que SSR vuelve a mostrar tal
+  // cual via bfcache) dejaría su botón de enviar inutilizable para
+  // siempre, sin ningún envío en curso de verdad.
+  window.addEventListener('pageshow', function (event) {
+    if (!event.persisted) {
+      return;
+    }
+    document.querySelectorAll('[data-canigo-texto-original]').forEach(function (boton) {
+      canigoQuitarCargando(boton);
+    });
   });
   </script>
 

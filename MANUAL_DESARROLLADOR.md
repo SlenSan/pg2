@@ -1930,6 +1930,63 @@ que `accept="image/*"` efectivamente no ofrezca la opción de video en
 Safari de iPhone, y el comportamiento exacto de HEIC al tomar/elegir
 una foto.
 
+**Ajustes del 19 de octubre, punto 4 — botones bloqueados mientras se
+procesa una petición**: diagnóstico - inventario completo de toda
+acción que manda una petición:
+
+| Acción | Tipo | ¿Ya bloqueaba? |
+|---|---|---|
+| Login, registro, autorización de datos, cambiar contraseña | form POST | Sí (listener genérico, Mejora 1) |
+| Registrar/editar mascota, editar perfil del paseador | form POST | Sí |
+| Publicar horario, despublicar, inscribir | form POST | Sí |
+| Iniciar paseo, finalizar paseo | form POST | Sí |
+| Fotos del paseo, emergencia | `fetch` | Sí (manual, Mejora 1) |
+| Calificar | form POST | Sí |
+| Marcar notificaciones como leídas | — | No es una acción con botón: se marca sola, como efecto de visitar `/notificaciones/` (`notificaciones/views.py`) - nada que bloquear |
+| Activar notificaciones | `fetch` | **No** (gap real, corregido aquí) |
+| Verificar paseador (marcar/retirar), asignar contraseña temporal | form POST | Sí |
+| Quitar filtros | enlace `<a>`, no un formulario | No aplica (solo navega, no envía nada) |
+| Filtro de "Paseadores disponibles" | form **GET** | Bloqueado por error - el listener genérico no distinguía GET de POST (gap real, corregido aquí) |
+
+Fix:
+- El listener genérico de `base.html` ahora ignora cualquier
+  `<form method="get">` (se confirmó que SÍ bloqueaba el filtro de
+  zonas antes de este punto - no estaba en el alcance original de
+  Mejora 1, que solo pensó en formularios que suben archivos).
+- Nuevo manejador `window.addEventListener('pageshow', ...)`: si
+  `event.persisted` (la página se restauró desde la caché de "Atrás"),
+  reactiva cualquier botón que haya quedado en estado "Cargando…" -
+  antes no existía ningún manejo de este caso.
+- El botón "Activar notificaciones en este dispositivo”
+  (`notificaciones/_activar_push.html`) no tenía ningún bloqueo (es un
+  `fetch`, el listener genérico de formularios no lo alcanza) - ahora
+  usa las mismas `canigoMarcarCargando()`/`canigoQuitarCargando()` que
+  el resto del sitio.
+
+**Respaldo en el backend - qué ya estaba cubierto y qué se agregó**:
+
+| Acción crítica | ¿Ya estaba cubierta? |
+|---|---|
+| Iniciar/finalizar (control de estado) | Sí - `find_one_and_update` con `estado` como parte del filtro atómico; un segundo POST no encuentra el documento y no hace nada (`paseos/repository.py::iniciar_paseo()`/`finalizar_paseo()`) |
+| Inscribir dos veces la misma mascota | Sí - `$addToSet` (no `$push`) en `id_mascotas`/`id_duenos`, ya documentado en el propio código (`paseos/repository.py::inscribir_mascotas()`) |
+| Calificar | Sí - índice único compuesto `(id_paseo, id_dueno)` |
+| Emergencia | Sí - `incidentes.repository.obtener_duplicado_reciente()`, descarta un incidente idéntico creado hace menos de 10s (`_SEGUNDOS_DUPLICADO_INCIDENTE`) |
+| **Publicar dos veces el mismo horario** | **No estaba cubierta - se agregó.** `paseos/repository.py::crear_disponibilidad()` no tenía ninguna protección: un doble POST creaba dos documentos `'disponible'` idénticos. Se agregó el mismo patrón que `obtener_duplicado_reciente()` (`_SEGUNDOS_DUPLICADO_HORARIO = 10`): si el mismo paseador ya publicó un horario con el mismo `horario_desde`/`horario_hasta` hace menos de 10s, se devuelve ESE documento en vez de crear uno nuevo. No compara `zonas` (publicar el mismo horario con otras zonas tan rápido no tiene un caso de uso real) |
+
+**Verificado ejecutando** (`canigo_dev`): el formulario GET de filtro de
+zonas ya NO deshabilita su botón tras un submit (antes sí lo hacía);
+simulando `pageshow` con `persisted: true` sobre un botón ya
+deshabilitado, se reactiva y recupera su texto original; `crear_
+disponibilidad()` llamado dos veces con el mismo horario devuelve el
+MISMO documento (`_id` igual, un solo documento en Mongo), y llamado con
+horarios genuinamente distintos sigue creando documentos separados (sin
+sobre-bloquear).
+
+**Solo leído en código**: que los formularios POST ya listados
+("inicio de sesión", "registrar mascota", etc.) de verdad no tenían
+`data-canigo-carga-manual` (confirmado por inspección, no se probó
+cada uno manualmente en el navegador).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

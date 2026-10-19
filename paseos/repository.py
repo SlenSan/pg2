@@ -6,7 +6,7 @@ listar paseadores libres, inscribir una mascota). Iniciar/finalizar el
 paseo ("en_vivo"/"historico") se agrega en una fase posterior.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -23,6 +23,15 @@ MOMENTOS_FOTO_VALIDOS = ('inicio', 'mitad', 'fin')
 # (acepta_inscripciones=False) - ver CLAUDE.md, "Corrección de alcance
 # 2026-09-25".
 MAXIMO_MASCOTAS_POR_PASEO = 8
+
+# Ajustes del 19 de octubre, punto 4 - mismo criterio que
+# incidentes.repository._SEGUNDOS_DUPLICADO_INCIDENTE: el botón
+# "Publicar horario" ya se deshabilita mientras se envía (ver
+# base.html), pero esta es la defensa de fondo en el BACKEND para un
+# doble toque que igual llegue a mandar dos POST - sin esto, publicar
+# dos veces el MISMO horario (mismo paseador, mismo horario_desde/
+# horario_hasta) creaba dos documentos 'disponible' idénticos.
+_SEGUNDOS_DUPLICADO_HORARIO = 10
 
 # Las 17 comunas oficiales de Bucaramanga, CON su numero oficial
 # (bucaramanga.gov.co/el-mapa/division-politico-urbana - confirmado ahi
@@ -82,12 +91,32 @@ def crear_disponibilidad(*, id_paseador, horario_desde, horario_hasta, zonas=Non
     puede tener varios documentos 'disponible' al mismo tiempo (varios
     horarios publicados); ya no hay limite de uno solo.
 
-    zonas: 0 a N valores de ZONAS_VALIDAS - se elige CADA VEZ que se
-    publica un horario (no es un dato fijo del perfil del paseador), y es
-    opcional: [] significa "no especifico zona", nunca "todas las zonas".
-    La validacion de que cada valor pertenezca a la lista fija la hace el
-    formulario (PublicarHorarioForm), no esta funcion.
+    zonas: 1 a N valores de ZONAS_VALIDAS (al menos una es obligatoria
+    desde INC-09) - se elige CADA VEZ que se publica un horario (no es
+    un dato fijo del perfil del paseador). La validacion de que cada
+    valor pertenezca a la lista fija la hace el formulario
+    (PublicarHorarioForm), no esta funcion.
+
+    Ajustes del 19 de octubre, punto 4 - si este MISMO paseador ya
+    publicó un horario idéntico (mismo horario_desde/horario_hasta) hace
+    menos de `_SEGUNDOS_DUPLICADO_HORARIO`, se devuelve ESE documento en
+    vez de crear uno nuevo - defensa de backend contra un doble envío del
+    modal "Publicar horario" (el botón ya se deshabilita en el frontend,
+    pero esto cubre un doble POST real). No compara `zonas`: publicar el
+    mismo horario con otras zonas tan rápido no tiene un caso de uso
+    real, y así la protección no depende de que el dueño del doble clic
+    haya tocado las mismas casillas las dos veces.
     """
+    reciente = get_db().paseos.find_one({
+        'id_paseador': id_paseador,
+        'estado': 'disponible',
+        'horario_desde': horario_desde,
+        'horario_hasta': horario_hasta,
+        'fecha': {'$gte': datetime.now(timezone.utc) - timedelta(seconds=_SEGUNDOS_DUPLICADO_HORARIO)},
+    }, sort=[('fecha', -1)])
+    if reciente:
+        return reciente
+
     paseo = {
         'id_paseador': id_paseador,
         'id_mascotas': [],

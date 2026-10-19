@@ -157,7 +157,14 @@ decide el JS según el dispositivo.
     });
   } else {
     mostrarSolo('push-boton-contenedor');
-    document.getElementById('btn-activar-push').addEventListener('click', function () {
+    document.getElementById('btn-activar-push').addEventListener('click', function (event) {
+      // Ajustes del 19 de octubre, punto 4 - esta acción es un fetch
+      // (guardarSuscripcion), no un <form>, así que el listener genérico
+      // de arriba no la alcanza; mismas dos funciones compartidas que el
+      // resto del sitio, no un manejo de "disabled" propio.
+      if (!canigoMarcarCargando(event.currentTarget, 'Activando…')) {
+        return;
+      }
       // CRÍTICO (pedido explícito): Notification.requestPermission() se
       // llama DIRECTO acá, sin ningún await/then previo - Safari exige
       // que el permiso se pida sincrónicamente dentro del gesto de clic,
@@ -173,6 +180,7 @@ decide el JS según el dispositivo.
       }).catch(function () {
         document.getElementById('push-error').hidden = false;
         document.getElementById('push-error').textContent = 'No se pudo activar las notificaciones. Intenta de nuevo.';
+        canigoQuitarCargando(event.currentTarget);
       });
     });
   }
