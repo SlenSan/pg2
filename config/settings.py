@@ -229,24 +229,20 @@ PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.PBKDF2PasswordHasher',
 ]
 
-
-# Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
-
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
-]
+# Ajustes del 19 de octubre, punto 5 (pendiente de reportes anteriores) -
+# AUTH_PASSWORD_VALIDATORS (django.contrib.auth.password_validation) se
+# eliminó: es configuración MUERTA en este proyecto. Esos validadores
+# solo se ejecutan cuando algo llama a validate_password() - función que
+# vive en django.contrib.auth y que ningún archivo del proyecto invoca
+# nunca (confirmado por búsqueda en todo el repo), porque Canigo no usa
+# el modelo User ni los formularios de auth de Django (ver CLAUDE.md:
+# "Corrección de alcance" - autenticación propia sobre la colección
+# `usuarios`). La validación REAL de la contraseña es
+# `min_length=8, max_length=128` en `usuarios/forms.py`
+# (`_RegistroBaseForm.contrasena` para registro,
+# `CambiarContrasenaForzadoForm.nueva_contrasena` para el cambio
+# forzado - cada formulario lo define por su cuenta, no hay una sola
+# función compartida) - no en este setting.
 
 
 # Internationalization

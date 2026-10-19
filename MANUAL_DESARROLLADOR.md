@@ -392,10 +392,12 @@ revisión, 2026-10-12)**: tres ajustes sobre el punto D original, antes
 de seguir con la fase 2.
 
 - **Punto 1 — ya NO se descarta por precisión al guardar**: la versión
-  original descartaba en el backend un punto con `precision` > 50m
-  (`_PRECISION_MAXIMA_ACEPTABLE_METROS` en `coordenadas/views_web.py`).
-  Problema real: una precisión de PRUEBA fija (p.ej. 11m en el
-  emulador/CDP) no representa un celular real en la calle, y descartar
+  original descartaba en el backend un punto con `precision` > 50m, con
+  una constante que en ese entonces vivía en `coordenadas/views_web.py`
+  (esa constante ya no existe ahí - ver más abajo dónde quedó el
+  equivalente actual). Problema real: una precisión de PRUEBA fija
+  (p.ej. 11m en el emulador/CDP) no representa un celular real en la
+  calle, y descartar
   en silencio podía perder puntos válidos sin que nadie se enterara —
   el mapa del dueño se quedaba quieto sin ningún aviso. Ahora
   `registrar_coordenada` guarda TODOS los puntos con lat/lon válidos,
