@@ -82,8 +82,12 @@
       Ajustes del 19 de octubre, punto 1 - valor inicial de la vista
       (mapa_paseo()); el polling de abajo (actualizarTiempo/actualizar,
       cada 8s) lo actualiza con distancia_texto de coordenadas_de_paseo().
+      Corrección del 20 de octubre: "fw-bold" + color normal (sin
+      "text-muted"/"small") para que se distinga de "tiempo-transcurrido"
+      de arriba - pedido explícito, antes los dos se veían igual de
+      apagados y la distancia quedaba perdida debajo de la duración.
       {% endcomment %}
-      <div class="text-muted small" id="distancia-paseo">{{ distancia_texto|default:"" }}</div>
+      <div class="fw-bold" id="distancia-paseo">{{ distancia_texto|default:"" }}</div>
     </div>
   </div>
 </div>

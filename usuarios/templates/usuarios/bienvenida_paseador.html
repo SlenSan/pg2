@@ -37,9 +37,12 @@
     Ajustes del 19 de octubre, punto 1 - mismo patron que "estado-gps":
     el valor inicial lo manda la vista (paseo_activo.distancia_texto);
     cada envio de GPS (base.html, cada 8s) lo actualiza con la respuesta
-    del mismo POST, sin una peticion aparte.
+    del mismo POST, sin una peticion aparte. Corrección del 20 de
+    octubre: el valor en "fw-bold" (sin "text-muted"), mismo criterio
+    que coordenadas/templates/coordenadas/mapa.html, para que se
+    distinga del resto de avisos apagados de esta pantalla.
     {% endcomment %}
-    <p class="text-muted small mb-1">Distancia recorrida: <span id="distancia-paseo">{{ paseo_activo.distancia_texto|default:"" }}</span></p>
+    <p class="text-muted small mb-1">Distancia recorrida: <span class="fw-bold text-dark" id="distancia-paseo">{{ paseo_activo.distancia_texto|default:"" }}</span></p>
     {% comment %}
     Indicador de wake lock (hallazgo de la caminata real, 13 oct - punto
     3): solo visible para el paseador, mientras camina - lo actualiza el

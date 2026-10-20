@@ -1831,6 +1831,26 @@ histórico SIN el campo (simulado) lo calcula en vivo correctamente, y
 uno que YA tiene `distancia_m: None` guardado NO lo recalcula (se
 respeta el valor ya guardado, aunque sea `None`).
 
+**Corrección del 20 de octubre — distancia poco visible**: tras
+desplegar el punto 1, un paseo real de producción (`@gmail.com`
+paseador, 45 puntos, ~9 horas "en_vivo" antes de finalizarse) confirmó
+que el cálculo y el guardado funcionan bien - el reporte inicial de "no
+aparece la distancia" resultó ser de tiempo (se revisó mientras el
+paseo seguía en curso; el panel del paseador solo muestra la distancia
+DURANTE el paseo, no en el historial, y el historial no lista paseos
+que siguen `en_vivo`). Una vez revisado con el paseo ya finalizado, la
+autora pidió que la distancia se distinga mejor de la duración (antes
+las dos usaban `text-muted small`, se veían igual de apagadas, y la
+distancia quedaba "perdida" debajo). Fix: `id="distancia-paseo"` ahora
+usa `fw-bold` (sin `text-muted`/`small`) en `mapa.html`
+(`coordenadas/templates/coordenadas/mapa.html`) y `fw-bold text-dark`
+en el panel del paseador (`bienvenida_paseador.html`) - el historial
+(`historial.html`/`historial_paseador.html`) no se tocó, es un resumen
+compacto de una sola línea donde el mismo problema no aplicaba.
+**Verificado ejecutando** (`canigo_dev`, capturas móviles): "596 m" en
+negrita, claramente diferenciado de "15 min transcurridos" en el mapa y
+de "Distancia recorrida:" en el panel del paseador.
+
 **Ajustes del 19 de octubre, puntos 2 y 3 — fotos/documentos sin la
 opción de grabar video, y cámara + galería donde falte**: diagnóstico -
 inventario completo de los 7 campos de archivo del proyecto:
