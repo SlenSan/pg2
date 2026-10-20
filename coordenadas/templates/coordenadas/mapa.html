@@ -86,8 +86,15 @@
       "text-muted"/"small") para que se distinga de "tiempo-transcurrido"
       de arriba - pedido explícito, antes los dos se veían igual de
       apagados y la distancia quedaba perdida debajo de la duración.
+      Segunda corrección del 20 de octubre: antes el número salía solo,
+      sin ninguna etiqueta - ahora dice "Distancia recorrida:" delante
+      (mismo texto que ya usaba el panel del paseador,
+      bienvenida_paseador.html), para que no quede ambiguo qué significa
+      el número. El `id="distancia-paseo"` se mueve al `<span>` del
+      valor (no al contenedor completo) porque el JS de abajo solo debe
+      reemplazar el número en cada sondeo, nunca la etiqueta.
       {% endcomment %}
-      <div class="fw-bold" id="distancia-paseo">{{ distancia_texto|default:"" }}</div>
+      <div class="fw-bold">Distancia recorrida: <span id="distancia-paseo">{{ distancia_texto|default:"" }}</span></div>
     </div>
   </div>
 </div>

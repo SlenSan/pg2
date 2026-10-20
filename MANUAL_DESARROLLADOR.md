@@ -1851,6 +1851,17 @@ compacto de una sola línea donde el mismo problema no aplicaba.
 negrita, claramente diferenciado de "15 min transcurridos" en el mapa y
 de "Distancia recorrida:" en el panel del paseador.
 
+**Tercera corrección del 20 de octubre — etiqueta en el mapa**: el
+panel del paseador ya decía "Distancia recorrida: X" (con etiqueta); el
+mapa de seguimiento (`mapa.html`) mostraba el número SOLO, sin ninguna
+etiqueta - pedido explícito de la autora para que no quede ambiguo qué
+representa. Fix: mismo texto "Distancia recorrida: " delante del
+`<span id="distancia-paseo">` (el `id` se movió al `<span>` del valor,
+no al contenedor, porque el polling de 8s solo debe reemplazar el
+número, nunca la etiqueta). **Verificado ejecutando** (`canigo_dev`,
+captura móvil): "Distancia recorrida: 596 m" en el mapa, mismo texto
+que ya usaba el panel del paseador.
+
 **Ajustes del 19 de octubre, puntos 2 y 3 — fotos/documentos sin la
 opción de grabar video, y cámara + galería donde falte**: diagnóstico -
 inventario completo de los 7 campos de archivo del proyecto:
