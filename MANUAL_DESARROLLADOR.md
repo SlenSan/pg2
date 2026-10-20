@@ -2465,6 +2465,31 @@ autora lo apruebe).
   en el backend, no solo oculto en la interfaz). Toda la data de prueba
   se eliminó de `canigo_dev` al terminar.
 
+- **Punto A5 — mapa y GPS (confirmación, sin código nuevo)**: la tarea
+  pide reusar el emisor único de GPS de la fase 1 y aplicarle a ese
+  MISMO endpoint JSON el filtro de privacidad de A3, en vez de construir
+  algo nuevo - verificado, no haía nada que escribir:
+
+  - **Un solo emisor de GPS en todo el proyecto**: `core/templates/
+    base.html` (el bloque `{% if id_paseo_en_vivo_del_paseador %}` con
+    `navigator.geolocation.getCurrentPosition()` + `setInterval`) es el
+    ÚNICO lugar de todo el código que llama a la API de geolocalización
+    del navegador - confirmado con una búsqueda en todo el proyecto. A6
+    (seguimiento interrumpido) extendió ESE mismo bloque
+    (`avisarSiHuboInterrupcion()`/`registrarEnvioExitoso()`) en vez de
+    crear uno aparte.
+  - **Un solo endpoint JSON para el mapa**: `coordenadas.views_web.
+    coordenadas_de_paseo()` (fase 1) sigue siendo la única vista que
+    sirve los puntos GPS al `fetch()` de `mapa.html` - A3/A9 le
+    agregaron el filtro de privacidad (`_rango_visible_para_dueno()`)
+    DENTRO de esa misma función, nunca en un endpoint nuevo; A4
+    (duración) y A7 (duración acordada) reusan el mismo `rango` que
+    calcula ahí. No existe un segundo endpoint de coordenadas en todo
+    el proyecto.
+
+  Sin cambios de código ni commit propio para este punto - queda
+  documentado como confirmación explícita, no como "ya se hará solo".
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
