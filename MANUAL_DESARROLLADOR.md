@@ -2855,6 +2855,17 @@ puntos, cada uno con su propio commit.
   (misma función `duraciones_acordadas_disponibles()`, sin necesidad de
   repetir la prueba).
 
+  **Segundo bug real encontrado al capturar las 4 pantallas del dueño
+  para el reporte** (`historial.html`): con "No se pudo recoger",
+  `hora_recogida`/`hora_entrega` nunca se guardan, así que
+  `duracion_real_texto` es `None` - pero `duracion_acordada_etiqueta`
+  SÍ existe (se guarda al inscribir, independiente de si la recogida
+  se concreta), así que la plantilla entraba a la rama que imprime las
+  dos juntas sin chequear la segunda - "Duración real: None" aparecía
+  LITERAL en pantalla. Corregido con un `{% if %}` propio alrededor de
+  esa mitad; la captura corregida (`p20oct_estado4_no_recogida.png`)
+  ya no lo muestra.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

@@ -29,9 +29,18 @@
             Incremento 4 fase 3, punto A7 - con duración acordada (un
             paseo de antes de esta fase no la tiene), se muestran las
             dos juntas; sin ella, se mantiene el "15 min" de siempre.
+
+            Bug real encontrado el 20 de octubre (punto 3, al capturar
+            las pantallas de cada estado): para un "no se pudo
+            recoger", hora_recogida/hora_entrega nunca se guardan -
+            duracion_real_texto es None, y antes se imprimía sin
+            chequeo ("Duración real: None" literal en pantalla). Ahora
+            esa mitad se omite si no hay duración real que mostrar
+            (duracion_acordada_etiqueta solo sin su par).
             {% endcomment %}
             {% if item.duracion_acordada_etiqueta %}
-             · Duración acordada: {{ item.duracion_acordada_etiqueta }} · Duración real: {{ item.duracion_real_texto }}
+             · Duración acordada: {{ item.duracion_acordada_etiqueta }}
+             {% if item.duracion_real_texto %} · Duración real: {{ item.duracion_real_texto }}{% endif %}
             {% elif item.duracion_min is not None %} · {{ item.duracion_min }} min{% endif %}
             {% if item.distancia_texto %} · {{ item.distancia_texto }}{% endif %}
           </div>
