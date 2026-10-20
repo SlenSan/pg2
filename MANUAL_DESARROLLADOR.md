@@ -2202,6 +2202,74 @@ autora lo apruebe).
   paseador siguió recibiendo `paseo.hora_inicio`/`null` (el total del
   paseo, sin ningún cambio respecto a antes de este punto).
 
+- **Punto A7 — duración acordada por dueño**: diagnóstico - antes,
+  `InscribirMascotaForm` no pedía ninguna duración; el dueño inscribía y
+  el paseador decidía cuánto duraba el paseo sin ningún acuerdo previo
+  visible para nadie. `historial.html` (lista de paseos del dueño)
+  seguía mostrando la duración TOTAL del paseo (`item.duracion_min`),
+  el mismo problema de A4 pero en la pantalla de historial en vez del
+  mapa - se dejó señalado al cerrar A4 y se resolvió aquí, junto con la
+  duración acordada, para no tocar el mismo bloque de `historial()` dos
+  veces.
+
+  Fix: nuevas constantes en `paseos/repository.py` -
+  `DURACIONES_ACORDADAS_CON_ETIQUETA` (30/60/90/120/150/180 minutos, con
+  etiqueta legible), `etiqueta_duracion_acordada()` y
+  `duraciones_acordadas_disponibles(horario_desde, horario_hasta)`, que
+  recorta la lista a solo las duraciones que caben en la ventana
+  publicada por el paseador (un horario de 90 min nunca ofrece 120+).
+  `InscribirMascotaForm` gana `duracion_acordada_min`
+  (`TypedChoiceField(coerce=int)`, `choices` armadas con esa función -
+  **nunca una lista fija**, para que el backend rechace automáticamente
+  una duración que no quepa en el horario). `detalle_paseador()` e
+  `inscribir_en_horario()` calculan las mismas `duraciones_disponibles`
+  a partir del `horario_desde`/`horario_hasta` real del paseo - el
+  mismo cálculo en los dos lados (mostrar el formulario y validar el
+  POST), si no coincidieran el backend rechazaría cualquier envío
+  válido. Se guarda en la misma entrada de `recogidas` que A1 (quedó
+  anticipado en el commit de A1, sin necesidad de tocar el esquema de
+  nuevo aquí).
+
+  El panel del paseador (`bienvenida_paseador.html`) calcula
+  `hora_limite_entrega = hora_recogida + duracion_acordada_min` por
+  cada recogida ya `recogida` y compara contra la hora actual
+  (`entrega_vencida`); vencida, la tarjeta completa gana
+  `border-danger border-2` y el texto "Entregar antes de las HH:MM"
+  pasa de `text-muted` a `text-danger fw-bold` - mismo patrón de "avisar
+  con color, nunca bloquear" que ya usa el resto del panel (el botón
+  "Entregado" sigue disponible, vencida o no, porque el sistema no
+  decide responsabilidad legal, solo informa). `mapa.html` (el que ve
+  el dueño) muestra "Duración acordada: X" justo encima del contador de
+  duración real de A4, reusando `duracion_acordada_etiqueta` que ya
+  calcula `mapa_paseo()` a partir del `rango` de A3/A9 - vuelve a
+  buscar la entrada de `recogidas` de ESE dueño para su propio
+  `duracion_acordada_min`, nunca el de otro dueño del mismo paseo.
+
+  `historial()` ahora busca la entrada de `recogidas` de ese dueño; si
+  existe, muestra "Duración acordada: X · Duración real: Y" (duración
+  real calculada entre `hora_recogida`/`hora_entrega` de ESE dueño, vía
+  `coordenadas_repository.distancia_recorrida_m(desde=, hasta=)` para
+  la distancia y una resta simple para el tiempo, formateada con la
+  nueva `paseos.repository.formatear_duracion_real()` - puerto a Python
+  de la misma `formatearDuracion()` que ya usa `mapa.html` en JS, deben
+  mantenerse sincronizadas si una cambia). Un paseo sin `recogidas`
+  (legacy) cae al texto viejo `· 15 min` sin tocar, compatibilidad
+  explícita.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real): confirmado por
+  Python directo que `duraciones_acordadas_disponibles()` recorta bien
+  para ventanas de 20 min (vacío), 2 h (hasta 120) y 4 h (las 6
+  completas); confirmado por HTTP que un horario de 20 min NO ofrece
+  ninguna duración para inscribirse (el formulario la omite) y uno de
+  90 min ofrece solo 30/60/90 (120+ no aparecen); inscripción real con
+  `duracion_acordada_min=90` quedó guardada como entero nativo de Mongo
+  (no string). Con esa recogida marcada "Recogido", el panel mostró
+  "Entregar antes de las 22:04" en gris normal; tras retrasar
+  `hora_recogida` 120 minutos (ventana de 90 min ya vencida), la misma
+  tarjeta pasó a borde rojo y texto rojo en negrita (captura móvil
+  `p20oct_entrega_vencida.png`) sin bloquear el botón "Entregado". Los
+  dos paseos de prueba se eliminaron de `canigo_dev` al terminar.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

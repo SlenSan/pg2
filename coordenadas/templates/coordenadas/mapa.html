@@ -77,6 +77,16 @@
       >
         {{ paseo.estado }}
       </span>
+      {% comment %}
+      Incremento 4 fase 3, punto A7 - "Duración acordada: X" junto a la
+      real (el div de abajo, que ya muestra "Duración: Y" gracias al
+      punto A4 - mismo timer, alimentado con el tramo de ESTE dueño).
+      Solo para un dueño con una recogida ya cerrada o en curso (None
+      para el paseador, o si el paseo no tiene duración acordada).
+      {% endcomment %}
+      {% if duracion_acordada_etiqueta %}
+      <div class="text-muted small mt-1">Duración acordada: {{ duracion_acordada_etiqueta }}</div>
+      {% endif %}
       <div class="text-muted small mt-1" id="tiempo-transcurrido"></div>
       {% comment %}
       Ajustes del 19 de octubre, punto 1 - valor inicial de la vista

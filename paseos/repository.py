@@ -33,6 +33,68 @@ MAXIMO_MASCOTAS_POR_PASEO = 8
 # horario_hasta) creaba dos documentos 'disponible' idénticos.
 _SEGUNDOS_DUPLICADO_HORARIO = 10
 
+# Incremento 4 fase 3, punto A7 - lista CERRADA de duraciones que un
+# dueño puede acordar al inscribir (minutos). "Solo se ofrecen las que
+# caben entre la hora de inicio y la de fin del horario publicado" - ver
+# duraciones_acordadas_disponibles() más abajo, que filtra esta lista
+# según cada horario puntual (no es una elección libre de minutos).
+DURACIONES_ACORDADAS_CON_ETIQUETA = (
+    (30, '30 minutos'),
+    (60, '1 hora'),
+    (90, '1 hora y media'),
+    (120, '2 horas'),
+    (150, '2 horas y media'),
+    (180, '3 horas'),
+)
+DURACIONES_ACORDADAS_VALIDAS = tuple(m for m, _ in DURACIONES_ACORDADAS_CON_ETIQUETA)
+_ETIQUETA_POR_DURACION = dict(DURACIONES_ACORDADAS_CON_ETIQUETA)
+_DURACION_MINIMA_INSCRIBIBLE_MIN = DURACIONES_ACORDADAS_VALIDAS[0]  # 30 - "si la franja dura menos, no se puede inscribir"
+
+
+def etiqueta_duracion_acordada(minutos):
+    """
+    Formato ÚNICO para mostrar una duración acordada ("1 hora y media")
+    - mismo patrón que etiqueta_zona()/etiqueta_tipo_incidente(). Si
+    `minutos` no es uno de los valores válidos (no debería pasar, pero
+    nunca se asume), o es None (paseo de antes de este punto, sin
+    duración acordada), devuelve None - el llamador decide qué mostrar
+    en ese caso.
+    """
+    return _ETIQUETA_POR_DURACION.get(minutos)
+
+
+def formatear_duracion_real(minutos):
+    """
+    Formato de la duración REAL de un paseo/tramo ("1 h 05 min", "58
+    min") - punto A7, para mostrar junto a `etiqueta_duracion_acordada()`
+    en el historial del dueño ("Duración acordada: 1 hora · Duración
+    real: 58 min"). Misma lógica que `formatearDuracion()` en
+    `coordenadas/templates/coordenadas/mapa.html` (el timer en vivo del
+    mapa), reescrita en Python porque el historial es una lista
+    estática, sin JS - las dos deberían verse igual, así que si se
+    ajusta una hay que ajustar la otra. `None` si `minutos` es `None`
+    (todavía no hay una duración real que mostrar).
+    """
+    if minutos is None:
+        return None
+    horas, resto = divmod(minutos, 60)
+    return f'{horas} h {resto:02d} min' if horas else f'{resto} min'
+
+
+def duraciones_acordadas_disponibles(horario_desde, horario_hasta):
+    """
+    Subconjunto de DURACIONES_ACORDADAS_CON_ETIQUETA que cabe entre
+    `horario_desde` y `horario_hasta` de un horario puntual (no son
+    minutos libres - Incremento 4 fase 3, punto A7). Vacío si la franja
+    dura menos de 30 minutos (la más corta de la lista) - el llamador
+    debe tratar eso como "este horario no se puede inscribir", no como
+    "sin duración obligatoria".
+    """
+    minutos_disponibles = (horario_hasta - horario_desde).total_seconds() / 60
+    return tuple(
+        (m, etiqueta) for m, etiqueta in DURACIONES_ACORDADAS_CON_ETIQUETA if m <= minutos_disponibles
+    )
+
 # Las 17 comunas oficiales de Bucaramanga, CON su numero oficial
 # (bucaramanga.gov.co/el-mapa/division-politico-urbana - confirmado ahi
 # antes de escribir esto, Incremento 4 punto G: el numero de cada una

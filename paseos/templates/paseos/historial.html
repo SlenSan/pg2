@@ -25,7 +25,14 @@
           </div>
           <div class="text-muted small mt-2">
             {{ item.paseo.hora_inicio|date:"j \d\e F \d\e Y" }}
-            {% if item.duracion_min is not None %} · {{ item.duracion_min }} min{% endif %}
+            {% comment %}
+            Incremento 4 fase 3, punto A7 - con duración acordada (un
+            paseo de antes de esta fase no la tiene), se muestran las
+            dos juntas; sin ella, se mantiene el "15 min" de siempre.
+            {% endcomment %}
+            {% if item.duracion_acordada_etiqueta %}
+             · Duración acordada: {{ item.duracion_acordada_etiqueta }} · Duración real: {{ item.duracion_real_texto }}
+            {% elif item.duracion_min is not None %} · {{ item.duracion_min }} min{% endif %}
             {% if item.distancia_texto %} · {{ item.distancia_texto }}{% endif %}
           </div>
         </a>

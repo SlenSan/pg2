@@ -347,12 +347,24 @@ def mapa_paseo(request, id_paseo):
     # no se recogió su mascota, no hay nada que mostrar (None - el JS ya
     # sabe mostrar vacío sin un horaInicioIso). Un paseo sin `recogidas`
     # (legacy, `rango is None`) sigue mostrando el total del paseo.
-    if rango is _SIN_PUNTOS_VISIBLES:
-        hora_inicio_duracion, hora_fin_duracion = None, None
-    elif rango is None:
-        hora_inicio_duracion, hora_fin_duracion = paseo.get('hora_inicio'), paseo.get('hora_fin')
-    else:
+    # Punto A7 - "Duración acordada: X" junto a la real (de arriba) en
+    # el detalle del paseo, SOLO para el dueño cuya recogida ya pasó
+    # (si rango es una tupla, ya sabemos que hay una entrada real para
+    # buscarla). None para el paseador y para un paseo sin `recogidas`.
+    duracion_acordada_etiqueta = None
+    if rango is not None and rango is not _SIN_PUNTOS_VISIBLES:
         hora_inicio_duracion, hora_fin_duracion = rango
+        entrada = next(
+            (r for r in paseo.get('recogidas', []) if r['id_dueno'] == ObjectId(id_usuario)), None,
+        )
+        if entrada:
+            duracion_acordada_etiqueta = paseos_repository.etiqueta_duracion_acordada(
+                entrada.get('duracion_acordada_min')
+            )
+    elif rango is _SIN_PUNTOS_VISIBLES:
+        hora_inicio_duracion, hora_fin_duracion = None, None
+    else:
+        hora_inicio_duracion, hora_fin_duracion = paseo.get('hora_inicio'), paseo.get('hora_fin')
 
     return render(request, 'coordenadas/mapa.html', {
         'paseo': paseo,
@@ -361,6 +373,7 @@ def mapa_paseo(request, id_paseo):
         'mascotas': mascotas,
         'mascotas_certificados': mascotas_certificados,
         'paseador': paseador,
+        'duracion_acordada_etiqueta': duracion_acordada_etiqueta,
         'hora_inicio_iso': _fecha_iso_utc(hora_inicio_duracion),
         'hora_fin_iso': _fecha_iso_utc(hora_fin_duracion),
         # None si no hay un incidente real (ver _info_incidente_reciente)

@@ -191,6 +191,11 @@ def detalle_paseador(request, id_paseador):
         # no haya llegado al maximo.
         if h.get('acepta_inscripciones', True) and len(h.get('id_mascotas', [])) < MAXIMO_MASCOTAS_POR_PASEO
         and h.get('horario_hasta') and h['horario_hasta'] >= ahora_utc
+        # Incremento 4 fase 3, punto A7 - "si la franja dura menos de 30
+        # minutos, no se puede inscribir": sin ninguna duración acordada
+        # que ofrecer, no tiene sentido mostrar el horario para inscribir
+        # en absoluto (sería pedirle elegir entre cero opciones).
+        and repository.duraciones_acordadas_disponibles(h['horario_desde'], h['horario_hasta'])
     ]
     if not horarios:
         messages.error(request, 'Este paseador no tiene horarios disponibles en este momento.')
@@ -241,7 +246,16 @@ def detalle_paseador(request, id_paseador):
             # casillas nuevas una vez marcadas tantas como quepan, para
             # que nadie termine seleccionando de mas y se lleve el
             # rechazo recien al enviar (ver inscribir_en_horario()).
-            'form': InscribirMascotaForm(mascotas=mis_mascotas, prefix=id_paseo, initial=initial_recogida),
+            'form': InscribirMascotaForm(
+                mascotas=mis_mascotas, prefix=id_paseo, initial=initial_recogida,
+                # Punto A7 - solo las duraciones que caben en ESTE
+                # horario puntual (ya se filtró arriba que hay al menos
+                # una, pero se recalcula acá porque el form necesita las
+                # choices exactas, no solo saber que existen).
+                duraciones_disponibles=repository.duraciones_acordadas_disponibles(
+                    h['horario_desde'], h['horario_hasta'],
+                ),
+            ),
         })
 
     certificados_paseador = paseador.get('certificados', [])
@@ -280,7 +294,18 @@ def inscribir_en_horario(request, id_paseador, id_paseo):
     mis_mascotas = mascotas_repository.listar_por_dueno(request.session['id_usuario'])
     # Mismo prefix=id_paseo que uso detalle_paseador() al renderizar este
     # formulario, para leer los campos con el nombre namespaced correcto.
-    form = InscribirMascotaForm(request.POST, mascotas=mis_mascotas, prefix=id_paseo)
+    # Punto A7 - MISMAS duraciones disponibles que detalle_paseador() le
+    # ofreció a este horario puntual; sin esto, el ChoiceField no tendría
+    # ninguna choice válida y rechazaría CUALQUIER valor enviado, no solo
+    # uno forjado - la validación real (que un POST manual con una
+    # duración fuera de la franja se rechace) depende de recalcular esto
+    # acá, no solo de confiar en lo que mandó el formulario.
+    form = InscribirMascotaForm(
+        request.POST, mascotas=mis_mascotas, prefix=id_paseo,
+        duraciones_disponibles=repository.duraciones_acordadas_disponibles(
+            paseo['horario_desde'], paseo['horario_hasta'],
+        ),
+    )
     if not form.is_valid():
         messages.error(request, 'Selecciona al menos una mascota válida.')
         return redirect('paseos:detalle_paseador', id_paseador=id_paseador)
@@ -322,6 +347,7 @@ def inscribir_en_horario(request, id_paseador, id_paseo):
         comuna=form.cleaned_data['comuna'],
         indicaciones=form.cleaned_data['indicaciones'],
         telefono=form.cleaned_data['telefono'],
+        duracion_acordada_min=form.cleaned_data['duracion_acordada_min'],
     )
     if not asignado:
         messages.error(request, 'Este horario ya no está disponible.')
@@ -433,9 +459,36 @@ def historial(request):
 
     items = []
     for p in paseos:
-        duracion_min = None
-        if p.get('hora_inicio') and p.get('hora_fin'):
-            duracion_min = int((p['hora_fin'] - p['hora_inicio']).total_seconds() // 60)
+        # Incremento 4 fase 3, puntos A4/A7 - el historial del DUEÑO
+        # mostraba la duración y la distancia del PASEO COMPLETO, nunca
+        # filtradas por su propio tramo (mismo problema de A3/A9, acá en
+        # la lista en vez del mapa). Con una entrada de recogida propia,
+        # se usa SOLO ese tramo (hora_recogida/hora_entrega); un paseo
+        # sin `recogidas` (de antes de esta fase) sigue mostrando el
+        # paseo completo, por compatibilidad.
+        entrada_recogida = next(
+            (r for r in p.get('recogidas', []) if r['id_dueno'] == oid_dueno), None,
+        )
+        if entrada_recogida:
+            hora_recogida = entrada_recogida.get('hora_recogida')
+            hora_entrega = entrada_recogida.get('hora_entrega')
+            duracion_min = (
+                int((hora_entrega - hora_recogida).total_seconds() // 60)
+                if hora_recogida and hora_entrega else None
+            )
+            distancia_texto = coordenadas_repository.formatear_distancia(
+                coordenadas_repository.distancia_recorrida_m(p['_id'], desde=hora_recogida, hasta=hora_entrega)
+            ) if hora_recogida else None
+            duracion_acordada_etiqueta = repository.etiqueta_duracion_acordada(
+                entrada_recogida.get('duracion_acordada_min')
+            )
+        else:
+            duracion_min = None
+            if p.get('hora_inicio') and p.get('hora_fin'):
+                duracion_min = int((p['hora_fin'] - p['hora_inicio']).total_seconds() // 60)
+            distancia_texto = _distancia_texto_de_paseo(p)
+            duracion_acordada_etiqueta = None
+
         calificacion = calificaciones_por_paseo.get(p['_id'])
         mascotas_paseo = mascotas_repository.resolver_lista(p.get('id_mascotas'), mis_mascotas_por_id)
         items.append({
@@ -445,8 +498,10 @@ def historial(request):
             'mascota_avatar': mascotas_paseo[0] if mascotas_paseo else None,
             'mascotas_nombres': mascotas_repository.nombres_unidos(mascotas_paseo),
             'duracion_min': duracion_min,
+            'duracion_real_texto': repository.formatear_duracion_real(duracion_min),
+            'duracion_acordada_etiqueta': duracion_acordada_etiqueta,
             'puntuacion': calificacion['puntuacion'] if calificacion else None,
-            'distancia_texto': _distancia_texto_de_paseo(p),
+            'distancia_texto': distancia_texto,
         })
 
     return render(request, 'paseos/historial.html', {'items': items})

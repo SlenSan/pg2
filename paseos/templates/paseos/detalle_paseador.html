@@ -194,6 +194,18 @@
                 <div class="text-danger small mt-1">{{ error }}</div>
               {% endfor %}
             </div>
+            {% comment %}
+            Incremento 4 fase 3, punto A7 - completa RF9. Las opciones
+            ya vienen acotadas a lo que cabe en ESTE horario puntual
+            (ver item.form en detalle_paseador()) - nunca todas las 6.
+            {% endcomment %}
+            <div class="mb-2">
+              <label class="form-label" for="{{ item.form.duracion_acordada_min.id_for_label }}">{{ item.form.duracion_acordada_min.label }}</label>
+              {{ item.form.duracion_acordada_min }}
+              {% for error in item.form.duracion_acordada_min.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+              {% endfor %}
+            </div>
             <button type="submit" class="btn btn-primary w-100">Inscribir en este horario</button>
           </form>
         </div>

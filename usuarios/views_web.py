@@ -531,10 +531,21 @@ def bienvenida_paseador(request):
         # campo `recogidas` - .get(..., []) lo trata como ninguna
         # recogida pendiente (compatibilidad, ver reglas de trabajo).
         items_recogida = []
+        ahora_utc = datetime.now(timezone.utc).replace(tzinfo=None)
         for r in paseo.get('recogidas', []):
             mascotas_recogida = mascotas_repository.resolver_lista(
                 r.get('id_mascotas', []), mascotas_por_id,
             )
+            # Incremento 4 fase 3, punto A7 - completa RF9. Un paseo de
+            # ANTES de este punto no tiene `duracion_acordada_min`
+            # (None) - sin duración acordada, no hay "hora límite" que
+            # calcular ni resaltar, solo se omite (compatibilidad).
+            duracion_min = r.get('duracion_acordada_min')
+            hora_limite_entrega = None
+            entrega_vencida = False
+            if duracion_min and r.get('hora_recogida'):
+                hora_limite_entrega = r['hora_recogida'] + timedelta(minutes=duracion_min)
+                entrega_vencida = r.get('estado') == 'recogida' and ahora_utc > hora_limite_entrega
             items_recogida.append({
                 'id_dueno': str(r['id_dueno']),
                 'dueno_nombre': (duenos_por_id.get(r['id_dueno']) or {}).get('nombre', 'Dueño'),
@@ -545,6 +556,18 @@ def bienvenida_paseador(request):
                 'telefono': r.get('telefono'),
                 'estado': r.get('estado'),
                 'motivo_no_recogida': r.get('motivo_no_recogida'),
+                'duracion_etiqueta': paseos_repository.etiqueta_duracion_acordada(duracion_min),
+                # Solo tiene sentido mostrar "Entregar antes de las
+                # HH:MM" mientras sigue 'recogida' (ya con el
+                # paseador, todavía sin entregar) - una vez
+                # 'entregada'/'no_recogida', ya pasó. Marcado tzinfo=utc
+                # (mismo cuidado de siempre, ver CLAUDE.md) para que el
+                # filtro |time de la plantilla lo convierta a hora de
+                # Bogotá - es un valor ESTÁTICO (no vive actualizándose
+                # como "tiempo-transcurrido" en el mapa), así que no
+                # hace falta JS para esto.
+                'hora_limite_entrega': hora_limite_entrega.replace(tzinfo=timezone.utc) if hora_limite_entrega else None,
+                'entrega_vencida': entrega_vencida,
             })
 
         paseo_activo = {

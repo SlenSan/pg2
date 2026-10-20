@@ -1,7 +1,7 @@
 from django import forms
 
 from core.validators import validar_telefono_colombiano
-from paseos.repository import ZONAS_VALIDAS, etiqueta_zona
+from paseos.repository import ZONAS_VALIDAS, duraciones_acordadas_disponibles, etiqueta_zona
 
 _INPUT_CLASS = 'form-control'
 
@@ -122,12 +122,26 @@ class InscribirMascotaForm(forms.Form):
         label='Teléfono de contacto',
         widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
     )
+    # Incremento 4 fase 3, punto A7 - completa RF9 ("verificar el
+    # cumplimiento del tiempo acordado"). ChoiceField con choices
+    # armadas en __init__ (no una constante fija): solo se ofrecen las
+    # duraciones que caben entre horario_desde/horario_hasta de ESTE
+    # horario puntual (duraciones_acordadas_disponibles()) - el
+    # paseador.views_web.detalle_paseador() ya filtra los horarios de
+    # menos de 30 minutos ANTES de llegar acá (ni se ofrecen para
+    # inscribir), así que acá siempre hay al menos una opción.
+    duracion_acordada_min = forms.TypedChoiceField(
+        label='Duración acordada',
+        coerce=int,
+        widget=forms.Select(attrs={'class': _INPUT_CLASS}),
+    )
 
-    def __init__(self, *args, mascotas=None, **kwargs):
+    def __init__(self, *args, mascotas=None, duraciones_disponibles=(), **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['ids_mascota'].choices = [
             (str(mascota['_id']), mascota['nombre']) for mascota in (mascotas or [])
         ]
+        self.fields['duracion_acordada_min'].choices = duraciones_disponibles
 
     def clean_telefono(self):
         return validar_telefono_colombiano(self.cleaned_data.get('telefono', ''))
