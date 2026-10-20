@@ -234,6 +234,17 @@ def detalle_paseador(request, id_paseador):
     for h in horarios:
         id_paseo = str(h['_id'])
         cupos_restantes = MAXIMO_MASCOTAS_POR_PASEO - len(h.get('id_mascotas', []))
+        duraciones_de_este_horario = repository.duraciones_acordadas_disponibles(
+            h['horario_desde'], h['horario_hasta'],
+        )
+        # Ajuste del 20 de octubre, punto 1 - "explícalo en la interfaz:
+        # debajo del selector, el texto «Este horario dura N; por eso no
+        # aparecen opciones más largas», cuando la franja limite las
+        # opciones". Se limita cuando no están TODAS las duraciones de la
+        # lista completa (DURACIONES_ACORDADAS_CON_ETIQUETA) - si faltan
+        # algunas es porque la franja de este horario puntual no les
+        # alcanza.
+        duracion_horario_min = int((h['horario_hasta'] - h['horario_desde']).total_seconds() // 60)
         # prefix=id_paseo: hay un InscribirMascotaForm por horario en la
         # misma pagina, y sin un prefijo distinto todos terminarian con
         # los mismos ids="id_ids_mascota_N" (HTML invalido, labels rotos).
@@ -242,6 +253,10 @@ def detalle_paseador(request, id_paseador):
             'horario': h,
             'cupos_restantes': cupos_restantes,
             'cupos_totales': MAXIMO_MASCOTAS_POR_PASEO,
+            'duracion_horario_texto': repository.formatear_duracion_real(duracion_horario_min),
+            'mostrar_aviso_duracion_limitada': (
+                len(duraciones_de_este_horario) < len(repository.DURACIONES_ACORDADAS_CON_ETIQUETA)
+            ),
             # data-cupos-restantes en la plantilla: el JS deshabilita
             # casillas nuevas una vez marcadas tantas como quepan, para
             # que nadie termine seleccionando de mas y se lleve el
@@ -252,9 +267,7 @@ def detalle_paseador(request, id_paseador):
                 # horario puntual (ya se filtró arriba que hay al menos
                 # una, pero se recalcula acá porque el form necesita las
                 # choices exactas, no solo saber que existen).
-                duraciones_disponibles=repository.duraciones_acordadas_disponibles(
-                    h['horario_desde'], h['horario_hasta'],
-                ),
+                duraciones_disponibles=duraciones_de_este_horario,
             ),
         })
 

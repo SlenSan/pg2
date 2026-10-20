@@ -38,17 +38,36 @@ _SEGUNDOS_DUPLICADO_HORARIO = 10
 # caben entre la hora de inicio y la de fin del horario publicado" - ver
 # duraciones_acordadas_disponibles() más abajo, que filtra esta lista
 # según cada horario puntual (no es una elección libre de minutos).
+#
+# Ajuste del 20 de octubre, punto 1 - la autora bajó el máximo de 3 horas
+# a 2 (decisión suya, sin motivo técnico): se QUITARON 150 y 180 de esta
+# lista, así que ya no se ofrecen ni se aceptan en una inscripción nueva
+# (TypedChoiceField en InscribirMascotaForm arma sus choices desde
+# duraciones_acordadas_disponibles() más abajo, que a su vez sale de
+# esta tupla - un valor fuera de ella ya no es una choice válida, el
+# backend la rechaza automáticamente sin código extra).
 DURACIONES_ACORDADAS_CON_ETIQUETA = (
     (30, '30 minutos'),
     (60, '1 hora'),
     (90, '1 hora y media'),
     (120, '2 horas'),
-    (150, '2 horas y media'),
-    (180, '3 horas'),
 )
 DURACIONES_ACORDADAS_VALIDAS = tuple(m for m, _ in DURACIONES_ACORDADAS_CON_ETIQUETA)
-_ETIQUETA_POR_DURACION = dict(DURACIONES_ACORDADAS_CON_ETIQUETA)
 _DURACION_MINIMA_INSCRIBIBLE_MIN = DURACIONES_ACORDADAS_VALIDAS[0]  # 30 - "si la franja dura menos, no se puede inscribir"
+
+# Compatibilidad: una inscripción de ANTES de este ajuste puede tener
+# 150 o 180 guardado en `duracion_acordada_min` - "las inscripciones que
+# ya tengan 150 o 180 se siguen mostrando con su valor" (pedido
+# explícito). Esas etiquetas YA NO se ofrecen (no están en
+# DURACIONES_ACORDADAS_CON_ETIQUETA de arriba, así que
+# duraciones_acordadas_disponibles() nunca las incluye), pero
+# etiqueta_duracion_acordada() debe seguir reconociéndolas donde ya
+# existan - de ahí esta tabla aparte, nunca fusionada con la de arriba.
+_ETIQUETAS_DURACION_DESCONTINUADAS = {
+    150: '2 horas y media',
+    180: '3 horas',
+}
+_ETIQUETA_POR_DURACION = {**dict(DURACIONES_ACORDADAS_CON_ETIQUETA), **_ETIQUETAS_DURACION_DESCONTINUADAS}
 
 
 def etiqueta_duracion_acordada(minutos):

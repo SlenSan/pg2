@@ -197,7 +197,8 @@
             {% comment %}
             Incremento 4 fase 3, punto A7 - completa RF9. Las opciones
             ya vienen acotadas a lo que cabe en ESTE horario puntual
-            (ver item.form en detalle_paseador()) - nunca todas las 6.
+            (ver item.form en detalle_paseador()) - nunca todas las 4
+            (ajuste del 20 de octubre, punto 1: el máximo bajó de 3h a 2h).
             {% endcomment %}
             <div class="mb-2">
               <label class="form-label" for="{{ item.form.duracion_acordada_min.id_for_label }}">{{ item.form.duracion_acordada_min.label }}</label>
@@ -205,6 +206,11 @@
               {% for error in item.form.duracion_acordada_min.errors %}
                 <div class="text-danger small mt-1">{{ error }}</div>
               {% endfor %}
+              {% if item.mostrar_aviso_duracion_limitada %}
+              <div class="text-muted small mt-1">
+                Este horario dura {{ item.duracion_horario_texto }}; por eso no aparecen opciones más largas.
+              </div>
+              {% endif %}
             </div>
             <button type="submit" class="btn btn-primary w-100">Inscribir en este horario</button>
           </form>

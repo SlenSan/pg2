@@ -187,7 +187,12 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
     comuna: String,         // uno de ZONAS_VALIDAS
     indicaciones: String,   // opcional, "" si no se dio ninguna
     telefono: String,       // celular colombiano del dueño, de contacto para ESTE paseo
-    duracion_acordada_min: Number, // punto A7 - 30|60|90|120|150|180, null en paseos de antes de A7
+    duracion_acordada_min: Number, // punto A7 - 30|60|90|120 (maximo bajado de 3h a 2h el 20 de
+                                    // octubre: 150|180 ya NO se ofrecen ni se aceptan en una
+                                    // inscripcion nueva, pero una inscripcion que ya los tenga
+                                    // de antes de ese ajuste se sigue mostrando con su valor -
+                                    // paseos/repository.py::_ETIQUETAS_DURACION_DESCONTINUADAS).
+                                    // null en paseos de antes de A7
     estado: String,         // "pendiente" | "recogida" | "no_recogida" | "entregada"
     hora_recogida: Date,    // null hasta que el paseador marca "Recogido"
     hora_entrega: Date,     // null hasta que el paseador marca "Entregado"

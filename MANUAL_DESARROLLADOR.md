@@ -2599,6 +2599,44 @@ autora lo apruebe).
     por prolijidad conviene revertir entre paseos, no a mitad de uno con
     recogidas activas.
 
+**Ajustes a la fase 3 después de la prueba del 20 de octubre** - tres
+puntos, cada uno con su propio commit.
+
+- **Punto 1 — duración máxima 2h (antes 3h)**: diagnóstico - A7 ofrecía
+  6 duraciones (30 a 180 min); la autora decidió bajar el máximo a 2h,
+  sin motivo técnico (decisión de producto). `DURACIONES_ACORDADAS_CON_ETIQUETA`
+  (`paseos/repository.py`) ahora solo tiene 30/60/90/120 - como
+  `duraciones_acordadas_disponibles()` (las choices que ofrece el
+  formulario) sale de esa misma tupla, una inscripción nueva con 150 o
+  180 ya no es una choice válida y Django la rechaza automáticamente,
+  sin código de validación extra. **Compatibilidad**: una inscripción
+  YA GUARDADA con 150/180 (de antes de este ajuste) debe seguir
+  mostrando su valor - `etiqueta_duracion_acordada()` ahora combina la
+  tupla de arriba con `_ETIQUETAS_DURACION_DESCONTINUADAS` (un dict
+  aparte, solo para mostrar, nunca para ofrecer) en vez de derivar todo
+  de una sola fuente.
+
+  **Aviso en la interfaz** (pedido explícito): `detalle_paseador()`
+  calcula, por cada horario, si `duraciones_acordadas_disponibles()`
+  devolvió MENOS opciones que la lista completa (4) - si es así, pasa
+  `mostrar_aviso_duracion_limitada=True` y la duración total de ESE
+  horario ya formateada (`duracion_horario_texto`, reusa
+  `formatear_duracion_real()` de A7). La plantilla muestra "Este
+  horario dura 45 min; por eso no aparecen opciones más largas."
+  debajo del selector, solo cuando corresponde.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real): un horario de 45
+  min ofreció SOLO "30 minutos" en el `<select>` (confirmado por
+  `value`, no solo por el texto) y mostró el aviso con "45 min" exacto;
+  un POST manual forjado con `duracion_acordada_min=150` contra ese
+  mismo horario se rechazó (form inválido, mismo mensaje genérico de
+  "mascota válida" que ya usaba el resto de validaciones de este
+  formulario). **Solo leído en código**: que una ventana de 3h+ nunca
+  ofrece 150/180 (se confirmó con una prueba unitaria directa de
+  `duraciones_acordadas_disponibles()`, sin pasar por HTTP) y que
+  `etiqueta_duracion_acordada(150)`/`(180)` siguen devolviendo su
+  etiqueta de siempre.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
