@@ -2270,6 +2270,115 @@ autora lo apruebe).
   `p20oct_entrega_vencida.png`) sin bloquear el botón "Entregado". Los
   dos paseos de prueba se eliminaron de `canigo_dev` al terminar.
 
+- **Punto A6 — seguimiento interrumpido (limitación de iOS)**: diagnóstico -
+  Safari/las apps de pantalla de inicio suspenden el JS cuando la
+  pantalla se bloquea o la app pasa a segundo plano (ver "Wake Lock" más
+  abajo, que ya mitiga el caso más común pero no lo garantiza) - el
+  emisor de GPS se corta sin aviso, y antes de este punto nada en la
+  interfaz lo hacía notar: el mapa del dueño mostraba "Esperando la
+  ubicación del paseador…" sin decir desde cuándo, la ruta se dibujaba
+  como una sola línea sólida (un hueco de varios minutos parecía un
+  tramo caminado en línea recta) y el paseador no se enteraba de cuánto
+  tiempo había estado sin transmitir al volver.
+
+  Fix (cuatro cambios, un solo commit - los cuatro son la misma
+  limitación de iOS vista desde los dos lados, dueño y paseador):
+
+  1. **Ruta punteada en los huecos**: `mapa.html` ya no dibuja un único
+     `L.polyline` - mantiene una lista de segmentos (`segmentos`), cada
+     uno su propio `L.polyline` sólido o punteado (`dashArray`). Un
+     hueco mayor a `GAP_PUNTEADO_MS` (2 min) entre dos puntos
+     DIBUJADOS (no entre dos puntos recibidos - uno descartado por mala
+     precisión no cuenta para este cálculo, pero el tiempo real
+     transcurrido sí importa) cierra el segmento sólido actual, dibuja
+     un segmento punteado de 2 puntos que une el hueco, y abre un
+     segmento sólido nuevo. `bordesDeLaRuta()` reemplaza a
+     `linea.getBounds()` para que el primer `fitBounds()` siga
+     funcionando con varios segmentos en vez de uno solo.
+
+     **Bug real encontrado y corregido de paso**: `coordenadas.
+     repository.a_json()` mandaba `fecha_captura` con `.isoformat()` a
+     secas (sin sufijo "Z") - pymongo devuelve esa fecha naive en UTC,
+     así que un futuro `new Date(p.fecha_captura)` en JS la habría
+     interpretado como hora LOCAL del navegador, desfasando el cálculo
+     del hueco 5 horas en Bogotá. Antes no importaba (ningún JS parseaba
+     ese campo como `Date`, solo se reenviaba como string en
+     `?desde=`) - A6 es el primer caso real que necesita la fecha
+     parseada, así que se corrigió ahí mismo (mismo criterio que
+     `_fecha_iso_utc()` en `coordenadas/views_web.py`).
+
+  2. **"Última ubicación: hace N min"**: el `<span id="ultima-ubicacion-hace">`
+     dentro de "Esperando la ubicación del paseador…" se llena con el
+     tiempo transcurrido desde `fecha_captura` del último punto conocido
+     (`ultimaFechaCapturaConocida`, ya existía para el polling
+     incremental - A6 solo lo reutiliza). Calculado DESPUÉS del bloque
+     que procesa los puntos nuevos de cada vuelta del polling (no antes,
+     como estaba "esperando-ubicacion" originalmente) para que use el
+     valor recién actualizado de esta vuelta, no el de la anterior.
+
+  3. **Marcador atenuado**: mientras `!hay_punto_reciente` y el paseo
+     sigue `en_vivo`, `marcadorActual.setOpacity(0.5)` - sigue mostrando
+     la última posición conocida (ocultarla dejaría al dueño sin ningún
+     punto de referencia), pero a simple vista se nota que no es una
+     posición fresca. Vuelve a opacidad 1 apenas llega un punto nuevo.
+
+  4. **Aviso al paseador "al volver a Canigo"**: el emisor de GPS
+     (`base.html`) es global y no tiene estado propio entre una página y
+     la siguiente (cada navegación es una carga nueva) - la hora del
+     último envío EXITOSO se guarda en `localStorage`
+     (`canigo_ultimo_envio_gps_ms`, try/catch por si no está disponible)
+     en vez de en una variable JS, para que sobreviva justo a la
+     navegación/el bloqueo de pantalla que se quiere detectar. Al
+     cargar cualquier página con un paseo `en_vivo`,
+     `avisarSiHuboInterrupcion()` compara esa marca contra "ahora" ANTES
+     de la primera captura de esta carga; si pasaron más de 2 minutos,
+     llena `#aviso-interrupcion-gps` (solo existe en
+     `bienvenida_paseador.html`, mismo patrón `null` que "estado-gps")
+     con "Tu ubicación no se compartió durante N min.".
+
+  **Toques accidentales** (celular en el bolsillo con la pantalla
+  encendida por el Wake Lock de la fase 2): "Finalizar paseo",
+  "Entregado" y "No se pudo recoger" ahora piden confirmación
+  (`onsubmit="return confirm(...)"`) antes de enviarse - "Recogido" NO
+  la pide (así lo pide la tarea explícitamente). El mensaje de
+  "Entregado"/"No se pudo recoger" incluye el nombre de la mascota
+  (`r.mascotas_nombres|escapejs`) para que el paseador sepa a cuál se
+  refiere si lleva varias. `confirm()` corre en el evento `submit`, DESPUÉS
+  de que el navegador ya validó los `required` del formulario (el motivo
+  de "No se pudo recoger" vacío ni llega a mostrar el diálogo) - cancelar
+  el diálogo cancela el envío sin tocar el backend.
+
+  **Decisión sin especificar en la tarea**: el umbral de "hueco" (ruta
+  punteada) y el de "no se compartió durante N min" (aviso al volver)
+  son el MISMO valor (`GAP_PUNTEADO_MS`/`UMBRAL_AVISO_INTERRUPCION_MS`,
+  2 minutos) a propósito - la tarea los describe como dos reglas
+  separadas pero ambas existen para la misma limitación real; usar el
+  mismo número evita que la ruta se vea punteada en un tramo que el
+  aviso no consideró "interrumpido", o viceversa.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real + Chrome vía CDP,
+  D1/P1): con 8 puntos GPS reales (4 antes de un hueco de 3 min, 4
+  después) inscritos tras una recogida real, el DOM mostró exactamente
+  UN `<path>` con `stroke-dasharray: "6, 10"` (el tramo que cierra el
+  hueco) y el resto sin punteado; el marcador de posición actual quedó
+  con `opacity: 0.5` mientras no llegaban puntos nuevos; "Esperando la
+  ubicación del paseador… Última ubicación: hace 8 min." se mostró
+  correctamente (captura móvil adjunta). El aviso de interrupción se
+  probó fijando `localStorage` a "hace 6 minutos" antes de recargar
+  `bienvenida_paseador.html`: apareció "Tu ubicación no se compartió
+  durante 6 min.". Los diálogos de confirmación se probaron disparando
+  el `submit` real de los formularios vía Chrome DevTools Protocol
+  (`Page.javascriptDialogOpening`/`handleJavaScriptDialog`): "Entregado"
+  con el diálogo ACEPTADO completó la entrega normalmente (la recogida
+  pasó a `entregada`); "Finalizar paseo" con el diálogo CANCELADO no
+  envió el formulario (el paseo quedó `en_vivo`, confirmado leyendo
+  Mongo directamente) y, aceptado después, sí finalizó (`historico`).
+  "No se pudo recoger" usa el mismo mecanismo exacto (`onsubmit="return
+  confirm(...)"`) y se verificó por código, no se repitió la prueba en
+  vivo (ya no quedaba una recogida en `pendiente` en el paseo de
+  prueba). Toda la data de prueba (2 paseos, cuentas y mascotas de
+  prueba) se eliminó de `canigo_dev` al terminar.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

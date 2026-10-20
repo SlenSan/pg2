@@ -219,11 +219,24 @@ def formatear_distancia(metros):
 
 
 def a_json(punto):
+    """
+    Incremento 4 fase 3, punto A6 - `fecha_captura` ahora se manda con
+    sufijo "Z" explícito (mismo criterio que _fecha_iso_utc() en
+    coordenadas/views_web.py), no `.isoformat()` a secas: pymongo
+    devuelve la fecha naive en UTC, y un `new Date("...sin Z...")` en JS
+    la interpreta como hora LOCAL del navegador - el cálculo de huecos
+    entre puntos (mapa.html) quedaría desfasado 5 horas en Bogotá. Antes
+    no importaba porque ningún JS parseaba este campo como Date (solo se
+    reenviaba como string en "?desde="); A6 es el primer caso real.
+    """
     fecha_captura = punto.get('fecha_captura')
     return {
         'latitud': punto['latitud'],
         'longitud': punto['longitud'],
         'altitud': punto.get('altitud'),
         'precision': punto.get('precision'),
-        'fecha_captura': fecha_captura.isoformat() if isinstance(fecha_captura, datetime) else fecha_captura,
+        'fecha_captura': (
+            fecha_captura.replace(tzinfo=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+            if isinstance(fecha_captura, datetime) else fecha_captura
+        ),
     }

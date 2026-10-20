@@ -218,6 +218,13 @@ alarma).
   {% if paseo.estado != 'en_vivo' or hay_punto_reciente %}hidden{% endif %}
 >
   Esperando la ubicación del paseador…
+  {% comment %}
+  Incremento 4 fase 3, punto A6 - "Última ubicación: hace N min" con la
+  hora del último punto real (no solo "esperando", que no dice desde
+  cuándo). Vacío al cargar la página (el JS lo llena en el primer
+  "actualizar()", igual que "estado-wakelock" en bienvenida_paseador.html).
+  {% endcomment %}
+  <span id="ultima-ubicacion-hace"></span>
 </p>
 
 {% if paseo.fotos %}
@@ -331,7 +338,40 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
   // puntos viejos no se tocan. Sirve igual para el historial (sin
   // polling: se procesa todo de una sola vez en la unica llamada sin
   // "desde", mismo codigo).
-  var linea = L.polyline([], { color: '#D9703A' }).addTo(mapa);
+  //
+  // Incremento 4 fase 3, punto A6 - un solo L.polyline ya no alcanza: un
+  // hueco mayor a GAP_PUNTEADO_MS entre dos puntos seguidos debe verse
+  // PUNTEADO (para no parecer un tramo caminado en linea recta cuando en
+  // realidad el paseador perdio señal - limitacion de iOS, ver base.html).
+  // "segmentos" guarda cada tramo dibujado (solido o punteado) como su
+  // propio L.polyline; "segmentoSolidoActual" es el que se sigue
+  // extendiendo con addLatLng mientras no aparezca un hueco.
+  var GAP_PUNTEADO_MS = 2 * 60 * 1000;
+  var segmentos = [];
+  var segmentoSolidoActual = null;
+  var ultimoPuntoDibujado = null; // {latlng, fecha: Date}
+
+  function nuevoSegmento(punteado) {
+    var seg = L.polyline([], {
+      color: '#D9703A',
+      dashArray: punteado ? '6, 10' : null,
+    }).addTo(mapa);
+    segmentos.push(seg);
+    return seg;
+  }
+  segmentoSolidoActual = nuevoSegmento(false);
+
+  function bordesDeLaRuta() {
+    var bounds = null;
+    segmentos.forEach(function (seg) {
+      if (seg.getLatLngs().length === 0) {
+        return;
+      }
+      bounds = bounds ? bounds.extend(seg.getBounds()) : L.latLngBounds(seg.getLatLngs());
+    });
+    return bounds;
+  }
+
   var capaPuntos = L.layerGroup().addTo(mapa);
   var marcadorInicio = null;
   var marcadorActual = null;
@@ -465,14 +505,6 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
         // cada vez que una vuelta del polling no trae nada nuevo.
         document.getElementById('sin-puntos').hidden = data.hay_puntos_historicos;
 
-        // "Esperando la ubicación del paseador…" (punto 1) - calculado
-        // en el BACKEND (hora del servidor, no el reloj del navegador
-        // del dueño - ver _hay_punto_reciente) y solo mientras sigue
-        // "en_vivo": en "historico" el ultimo punto siempre es "viejo",
-        // eso es normal, no una alarma.
-        var elEsperando = document.getElementById('esperando-ubicacion');
-        elEsperando.hidden = !(data.hay_puntos_historicos && data.estado === 'en_vivo' && !data.hay_punto_reciente);
-
         if (puntos.length > 0) {
           var vistaYaAjustadaAntes = vistaAjustada;
           // "nuevos" ya viene incremental desde el backend (ver
@@ -483,7 +515,20 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
               return; // mala precision: no entra a la ruta (si al marcador de posicion actual, mas abajo)
             }
             var latlng = [p.latitud, p.longitud];
-            linea.addLatLng(latlng);
+            var fechaPunto = new Date(p.fecha_captura);
+            // Punto A6 - un hueco mayor a GAP_PUNTEADO_MS desde el
+            // ÚLTIMO punto DIBUJADO (sin importar si fue descartado de
+            // la ruta por mala precisión, ese hueco en el tiempo es
+            // real igual) se cierra con un tramo punteado aparte, y
+            // arranca un segmento sólido nuevo desde este punto.
+            if (ultimoPuntoDibujado && (fechaPunto - ultimoPuntoDibujado.fecha) > GAP_PUNTEADO_MS) {
+              var segPunteado = nuevoSegmento(true);
+              segPunteado.addLatLng(ultimoPuntoDibujado.latlng);
+              segPunteado.addLatLng(latlng);
+              segmentoSolidoActual = nuevoSegmento(false);
+            }
+            segmentoSolidoActual.addLatLng(latlng);
+            ultimoPuntoDibujado = { latlng: latlng, fecha: fechaPunto };
             // Punto pequeño por cada lectura GPS (D2) - radio chico para
             // no tapar la linea ni el mapa de fondo. Ajuste del punto 4
             // (caminata del 13 de octubre): solo se dibuja si quedo a
@@ -538,6 +583,15 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
             marcadorActual.setLatLng(latlngActual).setTooltipContent(etiquetaActual);
           }
 
+          // Punto A6 - mientras no llegan puntos nuevos (!hay_punto_reciente,
+          // en_vivo), el marcador de la última posición se ve atenuado:
+          // sigue ahí (no se oculta, el dueño necesita saber dónde fue lo
+          // último que se supo), pero a simple vista se nota que no es
+          // una posición "fresca".
+          marcadorActual.setOpacity(
+            data.estado === 'en_vivo' && !data.hay_punto_reciente ? 0.5 : 1
+          );
+
           if (circuloIncertidumbre) {
             mapa.removeLayer(circuloIncertidumbre);
             circuloIncertidumbre = null;
@@ -559,13 +613,15 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
           ultimaFechaCapturaConocida = nuevos[nuevos.length - 1].fecha_captura;
 
           if (!vistaYaAjustadaAntes) {
-            // linea.getBounds() solo es valido si ya tiene al menos un
-            // punto "bueno" adentro - si el paseo recien empezo con mala
-            // señal (todos los puntos descartados de la ruta), se centra
-            // igual en la posicion actual cruda, para no dejar el mapa
-            // en el valor por defecto de Bucaramanga sin motivo.
-            if (linea.getLatLngs().length > 0) {
-              mapa.fitBounds(linea.getBounds(), { maxZoom: 16 });
+            // bordesDeLaRuta() solo es valido si algun segmento ya tiene
+            // al menos un punto "bueno" adentro - si el paseo recien
+            // empezo con mala señal (todos los puntos descartados de la
+            // ruta), se centra igual en la posicion actual cruda, para
+            // no dejar el mapa en el valor por defecto de Bucaramanga
+            // sin motivo.
+            var bordes = bordesDeLaRuta();
+            if (bordes) {
+              mapa.fitBounds(bordes, { maxZoom: 16 });
             } else {
               mapa.setView(latlngActual, 16);
             }
@@ -573,6 +629,34 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
           } else if (data.estado === 'en_vivo') {
             mapa.panTo(latlngActual);
           }
+        }
+
+        // "Esperando la ubicación del paseador…" (punto 1) - calculado
+        // en el BACKEND (hora del servidor, no el reloj del navegador
+        // del dueño - ver _hay_punto_reciente) y solo mientras sigue
+        // "en_vivo": en "historico" el ultimo punto siempre es "viejo",
+        // eso es normal, no una alarma. Movido a DESPUES del bloque de
+        // arriba (punto A6) porque "ultima-ubicacion-hace", mas abajo,
+        // necesita el "ultimaFechaCapturaConocida" ya actualizado de
+        // ESTA vuelta del polling, no el de la anterior.
+        var elEsperando = document.getElementById('esperando-ubicacion');
+        elEsperando.hidden = !(data.hay_puntos_historicos && data.estado === 'en_vivo' && !data.hay_punto_reciente);
+
+        // Punto A6 - "Última ubicación: hace N min" con la hora del
+        // último punto conocido (persiste entre vueltas del polling
+        // aunque esta en particular no haya traido puntos nuevos, a
+        // diferencia de "ultimoCrudo" de arriba que solo existe dentro
+        // del "if (puntos.length > 0)"). Solo tiene sentido mientras
+        // "esperando-ubicacion" esta visible - en cualquier otro caso se
+        // deja vacio.
+        var elUltimaHace = document.getElementById('ultima-ubicacion-hace');
+        if (!elEsperando.hidden && ultimaFechaCapturaConocida) {
+          var minutosDesdeUltimoPunto = Math.max(
+            0, Math.round((Date.now() - new Date(ultimaFechaCapturaConocida)) / 60000)
+          );
+          elUltimaHace.textContent = ' Última ubicación: hace ' + minutosDesdeUltimoPunto + ' min.';
+        } else {
+          elUltimaHace.textContent = '';
         }
 
         if (data.estado === 'historico' && intervalo) {
