@@ -62,12 +62,67 @@
 </div>
 
 {% if incidente.latitud and incidente.longitud %}
-<div class="card" style="overflow: hidden;">
+<div class="card mb-3" style="overflow: hidden;">
   <div class="card-body p-0">
     <div id="mapa-incidente" style="height: 40vh; min-height: 280px;"></div>
   </div>
 </div>
 {% endif %}
+
+{% comment %}
+Incremento 4 fase 3, punto A8 - el reporte de arriba queda inmutable
+(no hay ninguna forma de editarlo); esto es lo único que se puede
+agregar después, en orden cronológico. Visible para el dueño de la
+mascota afectada y para el paseador (misma regla de privacidad que ya
+protege todo el incidente - ver _incidente_accesible_o_none()), pero
+solo el paseador puede agregar uno nuevo (form_complemento es None
+para el dueño).
+{% endcomment %}
+<div class="card mb-3">
+  <div class="card-body">
+    <h2 class="h6 mb-3">Información agregada</h2>
+    {% if complementos %}
+    {% for c in complementos %}
+    <div class="{% if not forloop.first %}border-top pt-2 mt-2{% endif %}">
+      <p class="card-text small mb-1">{{ c.texto }}</p>
+      {% if c.foto %}
+      <img src="{{ c.foto }}" alt="Foto adicional" class="img-fluid rounded mb-1" style="max-height: 200px;">
+      {% endif %}
+      <p class="card-text text-muted small mb-0">{{ c.fecha }}</p>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="text-muted small mb-0">Todavía no se agregó información adicional.</p>
+    {% endif %}
+
+    {% if form_complemento %}
+    {% if puede_agregar_complemento %}
+    <form
+      method="post"
+      action="{% url 'incidentes:agregar_complemento_incidente' id_incidente %}"
+      enctype="multipart/form-data"
+      class="mt-3 pt-3 border-top"
+    >
+      {% csrf_token %}
+      <div class="mb-2">
+        <label class="form-label" for="{{ form_complemento.texto.id_for_label }}">{{ form_complemento.texto.label }}</label>
+        {{ form_complemento.texto }}
+      </div>
+      <div class="mb-2">
+        <label class="form-label" for="{{ form_complemento.foto.id_for_label }}">{{ form_complemento.foto.label }}</label>
+        {{ form_complemento.foto }}
+      </div>
+      <button type="submit" class="btn btn-outline-danger btn-sm">Agregar información</button>
+    </form>
+    {% else %}
+    <p class="text-muted small mt-3 pt-3 border-top mb-0">
+      Ya no se puede agregar información a este incidente (el plazo de
+      {{ horas_limite_complemento }} horas después de finalizado ya pasó).
+    </p>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}

@@ -13,4 +13,9 @@ urlpatterns = [
         name='reportar_incidente',
     ),
     path('<str:id_incidente>/', views_web.detalle_incidente, name='detalle_incidente'),
+    path(
+        '<str:id_incidente>/complementos/',
+        views_web.agregar_complemento_incidente,
+        name='agregar_complemento_incidente',
+    ),
 ]

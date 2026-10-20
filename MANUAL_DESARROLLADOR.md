@@ -2379,6 +2379,92 @@ autora lo apruebe).
   prueba). Toda la data de prueba (2 paseos, cuentas y mascotas de
   prueba) se eliminó de `canigo_dev` al terminar.
 
+- **Punto A8 — incidentes: solo agregar información, nunca modificar el
+  original**: **diagnóstico primero (contradicción real encontrada con
+  la tarea)** - la tarea afirma que "en la prueba con un usuario final
+  se vio que el paseador podía editar un incidente ya reportado". Leído
+  todo `incidentes/` (`views_web.py`, `urls_web.py`, `repository.py`,
+  `templates/incidentes/`) antes de tocar nada: **no existe, ni existió,
+  ningún endpoint ni formulario para editar un incidente**.
+  `urls_web.py` solo tenía 4 rutas (`lista`, `lista_paseador`,
+  `reportar_incidente`, `detalle_incidente`); `detalle.html` era
+  puramente de lectura (ningún `<form>`); `repository.py` solo tenía
+  `crear()` (inserta) y `marcar_notificado()` (un solo campo booleano,
+  ajeno al contenido del reporte) - ninguna función de "actualizar" los
+  campos originales. Por pedido explícito de la tarea ("si un punto
+  contradice lo que encuentres en el código, detente y repórtalo"), se
+  reporta esto tal cual en vez de inventar un bug de edición para
+  "corregirlo": la inmutabilidad del reporte original YA era cierta
+  antes de este punto, no por una regla que la impusiera, sino porque
+  nunca se construyó una forma de romperla. Posible explicación de lo
+  que vio la autora: volver a tocar "Reportar emergencia" para el MISMO
+  paseo con datos distintos crea un incidente NUEVO y separado (no edita
+  el anterior) - pudo percibirse como "edición" sin serlo. Se reportó
+  esto explícitamente antes de seguir.
+
+  Aun así, el resto del punto (A8 describe un "Comportamiento esperado"
+  con valor real e independiente de si había o no un bug que corregir)
+  se implementó completo:
+
+  - **`@require_GET` en `detalle_incidente`** (antes aceptaba cualquier
+    método sin más, aunque nunca leyera `request.POST`): hace explícito
+    y testeable el rechazo de "un POST manual a esta URL" - ahora
+    responde 405 en vez de depender de que la vista simplemente ignore
+    el body.
+  - **"Agregar información"**: `incidentes.repository.
+    agregar_complemento(id_incidente, texto, foto)` - un solo `$push` a
+    la lista nueva `incidentes.complementos` (ver CLAUDE.md), nunca
+    toca los campos originales (no hay otra función que lo haga). Vista
+    nueva `agregar_complemento_incidente` (`@require_POST`,
+    `@requiere_paseador`), con dos guardas en el BACKEND, no solo en la
+    plantilla: `_incidente_accesible_o_none()` (reusada tal cual de
+    `detalle_incidente()` - con `@requiere_paseador` ya aplicado, solo
+    deja pasar al paseador ASIGNADO a ese paseo) y
+    `_puede_agregar_complemento()` (nueva - `en_vivo`, o `historico`
+    dentro de `HORAS_LIMITE_COMPLEMENTO_INCIDENTE` horas desde
+    `hora_fin`; **constante con nombre**, pedido explícito de la tarea).
+    Las DOS son la misma fuente de verdad que ya usa `detalle_incidente()`
+    para decidir si mostrar el formulario, así que un POST forjado
+    después del plazo (o a un incidente ajeno) se rechaza igual aunque
+    el botón ya no estuviera visible.
+  - **Privacidad del detalle**: no hizo falta ningún filtro nuevo - los
+    `complementos` son un campo más del MISMO documento `incidentes`,
+    ya protegido por `_incidente_accesible_o_none()` (mismas reglas de
+    INC-01, pedido explícito de la tarea). Solo el PASEADOR ve el
+    formulario para agregar uno (`form_complemento` es `None` para el
+    dueño en la vista, antes incluso de llegar a la plantilla) - "el
+    paseador solo puede Agregar información" es literal, el dueño nunca
+    tiene esa opción.
+  - **Notificación**: tipo `emergencia` (existente, "no crees un tipo
+    nuevo" - pedido explícito). Si el incidente afecta a una mascota
+    concreta, el texto es literal el de la tarea ("Se agregó información
+    al incidente de `<mascota>`"), solo al dueño de esa mascota - mismo
+    criterio de privacidad que `reportar_incidente()`. **Decisión sin
+    especificar en la tarea**: para "accidente_paseador" (`id_mascota`
+    `None`, no involucra a ninguna mascota en particular - ver
+    CLAUDE.md) no hay un "`<mascota>`" que nombrar; se notifica a TODOS
+    los `id_duenos` del paseo con un texto genérico, mismo criterio que
+    ya usa `reportar_incidente()` para decidir a quién notificar en ese
+    mismo caso (documentado explícitamente, no asumido en silencio).
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, D1/P1): reportado
+  un incidente real con foto; un POST manual con `tipo`/`descripcion`
+  forjados a `/incidentes/<id>/` (con CSRF válido, para probar el guard
+  nuevo y no solo la protección CSRF) devolvió **405**; el dueño vio el
+  detalle pero SIN el formulario de complemento, y un POST suyo a
+  `/complementos/` no agregó nada (bloqueado por `@requiere_paseador`);
+  el paseador agregó un complemento real con foto (subida a Cloudinary
+  confirmada) - visible tanto para él como para el dueño; los campos
+  originales del incidente (`tipo`, `descripcion`, `evidencia_foto`,
+  `latitud`, `longitud`, `fecha_hora`) quedaron **byte a byte idénticos**
+  antes y después, comparados directamente en Mongo; un complemento con
+  texto vacío se rechazó (0 complementos agregados, el único exitoso
+  siguió siendo 1); y, forzando el paseo a `historico` con
+  `hora_fin` hace 25 horas (fuera del plazo de 24h), el formulario dejó
+  de mostrarse Y un POST directo al endpoint no agregó nada (rechazado
+  en el backend, no solo oculto en la interfaz). Toda la data de prueba
+  se eliminó de `canigo_dev` al terminar.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

@@ -283,7 +283,16 @@ Retención: ~90 días (trazabilidad y validación, no almacenamiento permanente 
                                    // "Aproximada" porque viene de un servicio externo, no de
                                    // un dato que el paseador haya escrito.
   fecha_hora: Date,
-  notificado: Boolean      // si el dueño ya fue notificado
+  notificado: Boolean,     // si el dueño ya fue notificado
+  complementos: [{            // Incremento 4 fase 3, punto A8 - tipo, descripcion, evidencia_foto,
+                                // latitud, longitud, direccion_aproximada y fecha_hora de ARRIBA
+                                // quedan inmutables (ningun codigo los modifica despues de crear() -
+                                // ver incidentes/repository.py); esto es lo UNICO que se puede
+                                // agregar despues. Ausente/[] en un incidente de antes de A8
+    texto: String,              // obligatorio, maximo 500 caracteres
+    foto: String,                // opcional, null si no se adjunto
+    fecha: Date
+  }]
 }
 ```
 

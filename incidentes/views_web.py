@@ -4,20 +4,20 @@ Vistas web:
 - Paseador: botón de emergencia en su dashboard (RF12).
 """
 
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
 from bson.errors import InvalidId
 from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from core.geocoding import direccion_aproximada as geocodificar_direccion
 from core.media import ErrorSubidaImagen, ErrorValidacionImagen, subir_imagen
 from coordenadas import repository as coordenadas_repository
 from incidentes import repository
-from incidentes.forms import ReportarIncidenteForm
+from incidentes.forms import ComplementoIncidenteForm, ReportarIncidenteForm
 from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository as paseos_repository
@@ -294,6 +294,28 @@ def _incidente_accesible_o_none(request, id_incidente):
     return None, None
 
 
+def _puede_agregar_complemento(paseo):
+    """
+    Punto A8 - "mientras el paseo esté en_vivo y hasta
+    HORAS_LIMITE_COMPLEMENTO_INCIDENTE horas después de finalizado".
+    `hora_fin` es naive en UTC (pymongo) - se marca aware antes de
+    comparar, mismo cuidado de siempre (ver CLAUDE.md). Un paseo
+    "historico" sin `hora_fin` (no debería pasar, pero nunca se asume)
+    no habilita el plazo, en vez de fallar con un TypeError al comparar
+    contra None.
+    """
+    if paseo['estado'] == 'en_vivo':
+        return True
+    if paseo['estado'] == 'historico' and paseo.get('hora_fin'):
+        limite = (
+            paseo['hora_fin'].replace(tzinfo=timezone.utc)
+            + timedelta(hours=repository.HORAS_LIMITE_COMPLEMENTO_INCIDENTE)
+        )
+        return datetime.now(timezone.utc) <= limite
+    return False
+
+
+@require_GET
 @requiere_autenticacion
 def detalle_incidente(request, id_incidente):
     """
@@ -302,6 +324,21 @@ def detalle_incidente(request, id_incidente):
     coordenadas si no hay), mapa de Leaflet con un marcador en el punto,
     y el teléfono del paseador SOLO mientras el paseo sigue activo
     (mismo criterio del punto B - oculto en historial).
+
+    Punto A8 - debajo del reporte original (inmutable, ver
+    agregar_complemento_incidente()) se muestran sus `complementos` en
+    orden cronológico; el formulario para agregar uno nuevo solo se
+    ofrece al PASEADOR (nunca al dueño - "el paseador solo puede
+    Agregar información", pedido explícito de la tarea) y solo mientras
+    _puede_agregar_complemento() lo permita.
+
+    `@require_GET` (nuevo en A8): esta vista nunca escribió nada en
+    `request.POST` (siempre fue de solo lectura), pero antes aceptaba
+    cualquier método sin más - un POST llegaba hasta acá y se ignoraba
+    en silencio. Con `@require_GET`, un intento de "editar" el incidente
+    con un POST manual a esta URL (el reporte original es inmutable, ver
+    CLAUDE.md) se rechaza explícitamente con 405, en vez de depender de
+    que la vista simplemente no lea el body.
     """
     incidente, paseo = _incidente_accesible_o_none(request, id_incidente)
     if not incidente:
@@ -321,14 +358,98 @@ def detalle_incidente(request, id_incidente):
     # patrón que notificaciones/views.py y usuarios/views_web.py.
     if incidente.get('fecha_hora'):
         incidente['fecha_hora'] = incidente['fecha_hora'].replace(tzinfo=timezone.utc)
+    complementos = incidente.get('complementos', [])
+    for c in complementos:
+        if c.get('fecha'):
+            c['fecha'] = c['fecha'].replace(tzinfo=timezone.utc)
+
+    es_paseador = request.session.get('rol') == 'paseador'
 
     return render(request, 'incidentes/detalle.html', {
         'incidente': incidente,
         'id_incidente': str(incidente['_id']),
         'mascota': mascota,
         'paseador': paseador,
+        'complementos': complementos,
+        'form_complemento': ComplementoIncidenteForm() if es_paseador else None,
+        'puede_agregar_complemento': es_paseador and _puede_agregar_complemento(paseo),
+        'horas_limite_complemento': repository.HORAS_LIMITE_COMPLEMENTO_INCIDENTE,
         # Teléfono visible solo mientras el paseo está activo (punto B,
         # mismo criterio que el resto de la plataforma) - oculto si ya
         # es "historico".
         'mostrar_telefono_paseador': paseo['estado'] in ('disponible', 'en_vivo'),
     })
+
+
+@require_POST
+@requiere_paseador
+def agregar_complemento_incidente(request, id_incidente):
+    """
+    Punto A8 - "Agregar información": el ÚNICO cambio que el paseador
+    puede hacerle a un incidente ya reportado. Reusa
+    _incidente_accesible_o_none() para el control de acceso (con
+    @requiere_paseador ya aplicado, esa función solo devuelve un
+    resultado si además ES el paseador asignado a ese paseo) y
+    _puede_agregar_complemento() para el plazo - las dos son la MISMA
+    fuente de verdad que ya usa detalle_incidente() para decidir si
+    mostrar el formulario, así que un POST manual después de que el
+    plazo venció (o a un incidente ajeno) se rechaza igual, aunque el
+    botón ya no estuviera visible.
+    """
+    incidente, paseo = _incidente_accesible_o_none(request, id_incidente)
+    if not incidente:
+        messages.error(request, 'No tienes acceso a ese incidente.')
+        return redirect('usuarios:bienvenida_paseador')
+
+    if not _puede_agregar_complemento(paseo):
+        messages.error(
+            request,
+            'Ya no se puede agregar información a este incidente '
+            f'(solo se permite durante el paseo o hasta {repository.HORAS_LIMITE_COMPLEMENTO_INCIDENTE} '
+            'horas después de finalizado).',
+        )
+        return redirect('incidentes:detalle_incidente', id_incidente=id_incidente)
+
+    form = ComplementoIncidenteForm(request.POST, request.FILES)
+    if not form.is_valid():
+        primer_error = next(iter(form.errors.values()))[0]
+        messages.error(request, f'No se pudo agregar la información: {primer_error}')
+        return redirect('incidentes:detalle_incidente', id_incidente=id_incidente)
+
+    foto_url = None
+    if form.cleaned_data.get('foto'):
+        try:
+            foto_url = subir_imagen(form.cleaned_data['foto'], carpeta='incidentes')
+        except (ErrorValidacionImagen, ErrorSubidaImagen) as exc:
+            messages.error(request, f'No se pudo subir la foto: {exc}')
+            return redirect('incidentes:detalle_incidente', id_incidente=id_incidente)
+
+    repository.agregar_complemento(incidente['_id'], texto=form.cleaned_data['texto'], foto=foto_url)
+
+    # Mismo criterio de privacidad que reportar_incidente(): si el
+    # incidente afecta a una mascota concreta, SOLO se notifica al
+    # dueño de esa mascota ("...de <mascota>", pedido explícito de la
+    # tarea); "accidente_paseador" (id_mascota=None) no involucra a
+    # ninguna mascota en particular, así que no hay un "<mascota>" que
+    # nombrar - se notifica a TODOS los id_duenos del paseo con un texto
+    # genérico, mismo criterio que ya usa reportar_incidente() para
+    # decidir a quién notificar en este mismo caso. Tipo `emergencia`
+    # (existente, pedido explícito: "no crees un tipo nuevo").
+    if incidente.get('id_mascota'):
+        mascota = mascotas_repository.obtener_varias_por_id([incidente['id_mascota']]).get(incidente['id_mascota'])
+        if mascota:
+            notificaciones_repository.crear(
+                id_usuario=mascota['id_dueno'],
+                tipo='emergencia',
+                mensaje=f'Se agregó información al incidente de {mascota["nombre"]}.',
+            )
+    else:
+        for id_dueno in paseo.get('id_duenos', []):
+            notificaciones_repository.crear(
+                id_usuario=id_dueno,
+                tipo='emergencia',
+                mensaje='Se agregó información al incidente reportado durante el paseo.',
+            )
+
+    messages.success(request, 'Se agregó la información al incidente.')
+    return redirect('incidentes:detalle_incidente', id_incidente=id_incidente)
