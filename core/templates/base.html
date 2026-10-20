@@ -530,6 +530,49 @@
   ninguno en absoluto), no hace nada; nunca lanza ni bloquea el resto de
   la página.
 
+  Ajuste del 20 de octubre, punto 2 - diagnóstico del `NotAllowedError`
+  real que vio la autora: el `pedirWakeLock()` de la versión anterior se
+  llamaba SIN NINGÚN GESTO del usuario de por medio (una vez al cargar
+  la página, fuera de cualquier manejador de evento). Fuentes
+  consultadas (citadas en el reporte, no solo de memoria):
+  - MDN, "WakeLock: request() method" (https://developer.mozilla.org/docs/Web/API/WakeLock/request):
+    documenta que `request()` rechaza con `NotAllowedError` cuando una
+    Permissions Policy bloquea la función, el documento no está
+    "fully active", el documento está oculto (`visibilityState`
+    distinto de "visible"), o la plataforma no puede conceder el lock -
+    "por ejemplo, esto puede pasar si el dispositivo tiene poca
+    batería" (traducido) - el modo de bajo consumo/ahorro de batería
+    que preguntó la autora encaja exactamente en esta última causa
+    documentada.
+  - WebKit Bugzilla #254545 y #255363 (https://bugs.webkit.org/show_bug.cgi?id=254545,
+    https://bugs.webkit.org/show_bug.cgi?id=255363): el Wake Lock no
+    funcionaba en iOS cuando la página está agregada a la pantalla de
+    inicio (modo standalone/PWA) - rechazaba con `NotAllowedError` al
+    volver de verla desde el ícono de inicio. Corregido recién en iOS
+    18.4 según documentación de compatibilidad de terceros - una
+    versión de iOS anterior a esa, usando la app de la pantalla de
+    inicio (no Safari directo), explica el síntoma sin que haga falta
+    ningún otro cambio de código.
+  - NO se encontró, en el spec del W3C (Screen Wake Lock API) ni en MDN,
+    un requisito formal de "gesto/activación transitoria del usuario"
+    documentado para `wakeLock.request()` (a diferencia de, por
+    ejemplo, la API de pantalla completa) - así que la causa más
+    probable del `NotAllowedError` real es el modo de bajo consumo/
+    ahorro de batería (documentado por MDN) o, si se usó la app de la
+    pantalla de inicio, el bug de WebKit de arriba - NO una falta de
+    gesto en sí. Aun así, pedirlo dentro de un toque es una mitigación
+    razonable de bajo costo (evita además el caso, también documentado,
+    de que el documento esté oculto justo cuando se evalúa la solicitud)
+    y es lo que pide este ajuste explícitamente.
+
+  Por eso `pedirWakeLock()` ya NO se llama al cargar la página sin más:
+  se llama dentro de un listener de `click` delegado en `document`
+  (cualquier toque del paseador en la página, mientras el paseo sigue
+  activo) y en `visibilitychange` al volver a estar visible - nunca en
+  un bucle/temporizador. Si ya está concedido, un toque nuevo no vuelve
+  a pedirlo (innecesario); si el sistema lo libera después (evento
+  `release`), el próximo toque SÍ vuelve a intentarlo.
+
   Diagnóstico de la caminata real del 13 oct (punto 3 del hallazgo): la
   pantalla del iPhone se apagó a los ~5s con el modo de ahorro de
   batería activado - sin saber si `wakeLock.request()` había fallado ahí
@@ -545,6 +588,7 @@
   <script>
   (function () {
     var wakeLockActual = null;
+    var yaConcedido = false;
 
     function actualizarIndicador(texto) {
       var el = document.getElementById('estado-wakelock');
@@ -553,7 +597,28 @@
       }
     }
 
+    // Punto 2 (20 oct) - mensaje útil en vez de solo "no (NotAllowedError)":
+    // distingue el caso en que SÍ hay soporte pero la plataforma lo
+    // rechazó (modo de bajo consumo/ahorro de batería, el más probable
+    // según MDN - ver el comentario de arriba) de "navegador sin
+    // soporte", donde este mensaje no aplica (reintentar no cambia nada).
+    function mostrarAvisoAyuda(texto) {
+      var el = document.getElementById('aviso-wakelock-ayuda');
+      if (!el) {
+        return;
+      }
+      if (texto) {
+        el.textContent = texto;
+        el.classList.remove('d-none');
+      } else {
+        el.classList.add('d-none');
+      }
+    }
+
     function pedirWakeLock() {
+      if (yaConcedido) {
+        return; // ya esta activo, un toque nuevo no tiene nada que hacer
+      }
       if (!('wakeLock' in navigator)) {
         console.warn('[Canigo] navigator.wakeLock no existe en este navegador.');
         actualizarIndicador('no disponible (navegador sin soporte)');
@@ -561,14 +626,19 @@
       }
       navigator.wakeLock.request('screen').then(function (lock) {
         wakeLockActual = lock;
+        yaConcedido = true;
         console.log('[Canigo] wakeLock.request("screen") -> concedido.');
         actualizarIndicador('sí');
+        mostrarAvisoAyuda(null);
         lock.addEventListener('release', function () {
           // El SO puede liberar el lock por su cuenta (poca batería,
           // modo de ahorro de energía, etc.) sin que el JS haga nada -
           // el indicador tiene que reflejar ese cambio tambien, no solo
-          // el resultado del pedido inicial.
+          // el resultado del pedido inicial. yaConcedido vuelve a false
+          // para que el PROXIMO toque intente pedirlo de nuevo (sin
+          // bucle: nada lo reintenta solo, hace falta un toque real).
           console.warn('[Canigo] wakeLock liberado por el sistema (release).');
+          yaConcedido = false;
           actualizarIndicador('no (el sistema lo liberó)');
         });
       }).catch(function (error) {
@@ -579,6 +649,12 @@
         // distinguir la causa (p.ej. "NotAllowedError").
         console.warn('[Canigo] wakeLock.request("screen") falló:', error.name, error.message);
         actualizarIndicador('no (' + error.name + ')');
+        if (error.name === 'NotAllowedError') {
+          mostrarAvisoAyuda(
+            'La pantalla podría apagarse. Desactiva el modo de bajo consumo o el ' +
+            'ahorro de batería y toca la pantalla para reintentar.'
+          );
+        }
       });
     }
 
@@ -588,7 +664,11 @@
       }
     });
 
-    pedirWakeLock();
+    // "dentro del manejador de un toque del usuario: Iniciar ruta,
+    // Recogido, o cualquier toque en la página durante un paseo activo"
+    // - un solo listener delegado en document cubre cualquier click,
+    // boton o no, en vez de cablear uno por cada formulario especifico.
+    document.addEventListener('click', pedirWakeLock);
   })();
   </script>
   {% endif %}

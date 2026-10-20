@@ -157,7 +157,15 @@
     llena apenas carga, no hay un estado "default" razonable antes de
     eso).
     {% endcomment %}
-    <p class="text-muted small mb-3" id="estado-wakelock"></p>
+    <p class="text-muted small mb-1" id="estado-wakelock"></p>
+    {% comment %}
+    Ajuste del 20 de octubre, punto 2 - mensaje útil cuando
+    wakeLock.request() falla con NotAllowedError (lo llena base.html,
+    mismo patrón null-check que el resto de estos indicadores). Oculto
+    por defecto; nunca aparece para "navegador sin soporte" (ese caso no
+    tiene nada que "reintentar").
+    {% endcomment %}
+    <p class="text-warning small mb-3 d-none" id="aviso-wakelock-ayuda"></p>
 
     {% if paseo_activo.mascotas_certificados %}
     <div class="mb-3">

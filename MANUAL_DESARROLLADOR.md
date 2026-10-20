@@ -2637,6 +2637,76 @@ puntos, cada uno con su propio commit.
   `etiqueta_duracion_acordada(150)`/`(180)` siguen devolviendo su
   etiqueta de siempre.
 
+- **Punto 2 — Wake Lock: `NotAllowedError`**: diagnóstico - el bloque de
+  Wake Lock (`core/templates/base.html`) llamaba a `pedirWakeLock()` una
+  vez al cargar la página (línea suelta al final de la IIFE), fuera de
+  cualquier manejador de evento - sin ningún gesto del usuario de por
+  medio. Investigado contra fuentes actuales (no de memoria):
+  - [MDN, "WakeLock: request() method"](https://developer.mozilla.org/docs/Web/API/WakeLock/request):
+    documenta que `request()` rechaza con `NotAllowedError` cuando una
+    Permissions Policy bloquea la función, el documento no está "fully
+    active", el documento está oculto, o **la plataforma no puede
+    conceder el lock - "por ejemplo, esto puede pasar si el dispositivo
+    tiene poca batería"**. El modo de bajo consumo (iPhone)/ahorro de
+    batería (Android) que preguntó la autora encaja en esta causa
+    documentada, no en una falta de gesto.
+  - [WebKit Bugzilla #254545](https://bugs.webkit.org/show_bug.cgi?id=254545)
+    y [#255363](https://bugs.webkit.org/show_bug.cgi?id=255363): el
+    Wake Lock no funcionaba en iOS cuando la página está agregada a la
+    pantalla de inicio (modo standalone) - rechazaba con
+    `NotAllowedError` al volver de verla desde ese ícono. Según
+    documentación de compatibilidad de terceros, esto se corrigió
+    recién en iOS 18.4 - una versión anterior usando la app de la
+    pantalla de inicio (no Safari directo) también explica el síntoma.
+  - **No se encontró**, ni en el spec del W3C (Screen Wake Lock API) ni
+    en MDN, un requisito formal de gesto/activación transitoria del
+    usuario para `wakeLock.request()` (a diferencia de, por ejemplo, la
+    API de pantalla completa) - se reporta esto explícitamente en vez
+    de asumirlo. Aun así, pedirlo dentro de un toque es una mitigación
+    razonable (evita además el caso, también documentado por MDN, de
+    que el documento esté oculto justo cuando se evalúa la solicitud) y
+    es lo que pide este punto.
+
+  Fix: `pedirWakeLock()` ya no se llama al cargar la página. Se llama
+  dentro de un listener de `click` delegado en `document` (cualquier
+  toque del paseador en la página, mientras el paseo sigue activo -
+  cubre "Iniciar ruta"/"Recogido" como casos particulares de "cualquier
+  toque", sin cablear un listener por cada botón) y en `visibilitychange`
+  al volver a estar visible - igual que antes. Una bandera `yaConcedido`
+  evita pedirlo de nuevo si ya está activo; si el sistema lo libera
+  (evento `release`), la bandera vuelve a `false` para que el PRÓXIMO
+  toque lo reintente - nunca un `setInterval` ni ningún reintento
+  automático ("sin repetir en bucle", pedido explícito).
+
+  **Mensaje útil**: nuevo elemento `#aviso-wakelock-ayuda`
+  (`bienvenida_paseador.html`, mismo patrón `null`-check que el resto)
+  - se llena SOLO cuando `error.name === 'NotAllowedError'` con "La
+  pantalla podría apagarse. Desactiva el modo de bajo consumo o el
+  ahorro de batería y toca la pantalla para reintentar." - nunca para
+  "navegador sin soporte" (ahí reintentar no cambia nada, el mensaje
+  existente ya es suficiente). **No se agregó** ninguna técnica
+  alternativa (video invisible en bucle u otras) - no se pidió, y el
+  punto explícitamente pide proponerlas antes, con su costo en batería,
+  no implementarlas directamente.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real + Chrome vía CDP,
+  simulando `navigator.wakeLock` con `Object.defineProperty` para
+  controlar la respuesta exacta - una asignación directa no alcanza,
+  Chrome ya trae una implementación real que la ignora en modo no
+  estricto): confirmado que NO se pide nada al cargar la página (antes
+  de cualquier click, el indicador queda vacío); un primer click con el
+  mock rechazando con `NotAllowedError` mostró "no (NotAllowedError)" y
+  el aviso de ayuda con el texto exacto esperado; un segundo click
+  mientras ya estaba concedido NO volvió a llamar a `request()`
+  (contador de llamadas verificado, se quedó en 1); simulado el evento
+  `release` del sistema, el siguiente click SÍ volvió a pedirlo
+  (contador subió a 2) - confirma el reintento en el próximo toque sin
+  bucle automático. **Solo leído en código**: la rama "navegador sin
+  soporte" (`!('wakeLock' in navigator)`) es la misma lógica de antes,
+  sin cambios - no se pudo simular una ausencia total de la API en
+  Chrome (el operador `in` sigue viendo la clave aunque se la
+  sobreescriba con `undefined`), pero el código de esa rama no se tocó.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
