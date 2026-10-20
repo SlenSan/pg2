@@ -340,6 +340,20 @@ def mapa_paseo(request, id_paseo):
     # usuario (None para el paseador: sin filtro, siempre ve todo).
     rango = _rango_visible_para_dueno(paseo, id_usuario) if es_dueno else None
 
+    # Incremento 4 fase 3, punto A4 (RF9) - el paseador ve la duración
+    # TOTAL del paseo (hora_fin - hora_inicio, sin cambios); cada dueño
+    # ve la duración de SU tramo (hora_entrega - hora_recogida, mismo
+    # `rango` que ya filtra el mapa y la distancia en A3/A9). Si todavía
+    # no se recogió su mascota, no hay nada que mostrar (None - el JS ya
+    # sabe mostrar vacío sin un horaInicioIso). Un paseo sin `recogidas`
+    # (legacy, `rango is None`) sigue mostrando el total del paseo.
+    if rango is _SIN_PUNTOS_VISIBLES:
+        hora_inicio_duracion, hora_fin_duracion = None, None
+    elif rango is None:
+        hora_inicio_duracion, hora_fin_duracion = paseo.get('hora_inicio'), paseo.get('hora_fin')
+    else:
+        hora_inicio_duracion, hora_fin_duracion = rango
+
     return render(request, 'coordenadas/mapa.html', {
         'paseo': paseo,
         'id_paseo': str(paseo['_id']),
@@ -347,8 +361,8 @@ def mapa_paseo(request, id_paseo):
         'mascotas': mascotas,
         'mascotas_certificados': mascotas_certificados,
         'paseador': paseador,
-        'hora_inicio_iso': _fecha_iso_utc(paseo.get('hora_inicio')),
-        'hora_fin_iso': _fecha_iso_utc(paseo.get('hora_fin')),
+        'hora_inicio_iso': _fecha_iso_utc(hora_inicio_duracion),
+        'hora_fin_iso': _fecha_iso_utc(hora_fin_duracion),
         # None si no hay un incidente real (ver _info_incidente_reciente)
         # - esto es lo unico que decide si el banner se muestra, no
         # paseo.emergencia por si solo. Con mascotas propias (dueño) o

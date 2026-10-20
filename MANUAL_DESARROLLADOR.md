@@ -2177,6 +2177,31 @@ autora lo apruebe).
   dueño los 5 puntos completos, sin filtrar - compatibilidad
   confirmada, no solo asumida.
 
+- **Punto A4 — duración (RF9), por rol**: diagnóstico - `mapa.html` ya
+  calculaba y mostraba una duración (`actualizarTiempo()`, "Duración: X"
+  o "X transcurridos"), pero siempre con `paseo.hora_inicio`/`hora_fin` -
+  la duración TOTAL del paseo, sin importar el rol. RF9 pide que cada
+  dueño vea la duración de SU tramo (`hora_entrega - hora_recogida`), no
+  la del paseo completo.
+
+  Fix: reusa el MISMO `rango` que ya calcula A3/A9 para el mapa y la
+  distancia - si es un tramo real (`(hora_recogida, hora_entrega)`), se
+  lo pasa a `actualizarTiempo()` en vez de `paseo.hora_inicio`/
+  `hora_fin`; el paseador (`rango is None` siempre) sigue viendo el
+  total, sin cambios. Si la mascota de ese dueño todavía no se recogió
+  (`_SIN_PUNTOS_VISIBLES`), no se muestra ninguna duración. Cero
+  cambios de JS - la función ya sabía calcular "entre estas dos fechas,
+  o hasta ahora si la segunda es null", solo hacía falta pasarle las
+  fechas correctas según quién mira.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, un paseo con D1
+  recogido pero SIN entregar todavía, y D2 ya recogido Y entregado): D1
+  recibió su propia `hora_recogida` como inicio y `null` como fin (el
+  contador sigue corriendo en vivo, sobre SU tramo); D2 recibió su
+  propia `hora_recogida`/`hora_entrega` (duración fija, ya cerrada); el
+  paseador siguió recibiendo `paseo.hora_inicio`/`null` (el total del
+  paseo, sin ningún cambio respecto a antes de este punto).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
