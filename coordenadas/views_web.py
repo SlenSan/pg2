@@ -252,6 +252,7 @@ def _certificados_de_mascotas_para_paseador(id_paseador, mascotas):
         if not paseos_repository.paseador_tiene_acceso_a_mascota(id_paseador, m['_id']):
             continue
         resultado.append({
+            'id_mascota': str(m['_id']),
             'nombre': m['nombre'],
             'estado_salud': mascotas_repository.estado_certificado_salud(m.get('certificado_salud')),
             'url_certificado_salud': (m.get('certificado_salud') or {}).get('url'),

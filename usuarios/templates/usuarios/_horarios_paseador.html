@@ -31,7 +31,15 @@ alcance 2026-09-25".
       <p class="banner-paseo-detalle mb-1">Certificados (Ley Kiara):</p>
       {% for m in h.mascotas_certificados %}
       <div class="d-flex justify-content-between align-items-center small mb-1">
-        <span>{{ m.nombre }}</span>
+        {% comment %}
+        Punto 4 (ajustes del 20 de octubre) - el nombre abre el perfil
+        de solo lectura de la mascota (foto, raza, edad, peso,
+        observaciones destacadas, certificado con fecha, carné) - el
+        control de acceso real es el de la vista
+        (paseador_tiene_acceso_a_mascota(), 404 si no corresponde), esto
+        es solo el enlace.
+        {% endcomment %}
+        <a href="{% url 'mascotas:perfil_paseador' m.id_mascota %}" class="banner-paseo-detalle">{{ m.nombre }}</a>
         <span>
           <span class="badge badge-certificado-{{ m.estado_salud.clave }}">{{ m.estado_salud.texto }}</span>
           {% if m.url_certificado_salud %}

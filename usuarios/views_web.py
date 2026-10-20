@@ -498,6 +498,7 @@ def _certificados_de_mascotas_para_paseador(id_paseador, mascotas):
         if not paseos_repository.paseador_tiene_acceso_a_mascota(id_paseador, m['_id']):
             continue
         resultado.append({
+            'id_mascota': str(m['_id']),
             'nombre': m['nombre'],
             'estado_salud': mascotas_repository.estado_certificado_salud(m.get('certificado_salud')),
             'url_certificado_salud': (m.get('certificado_salud') or {}).get('url'),
@@ -592,6 +593,11 @@ def bienvenida_paseador(request):
                 'id_dueno': str(r['id_dueno']),
                 'dueno_nombre': (duenos_por_id.get(r['id_dueno']) or {}).get('nombre', 'Dueño'),
                 'mascotas_nombres': mascotas_repository.nombres_unidos(mascotas_recogida),
+                # Punto 4 (ajustes del 20 de octubre) - cada mascota
+                # individual (no solo el nombre ya unido en texto, como
+                # mascotas_nombres de arriba), para que la plantilla
+                # pueda enlazar CADA una a su perfil de solo lectura.
+                'mascotas': [{'id': str(m['_id']), 'nombre': m['nombre']} for m in mascotas_recogida],
                 'direccion': r.get('direccion'),
                 'comuna_etiqueta': paseos_repository.etiqueta_zona(r['comuna']) if r.get('comuna') else None,
                 'indicaciones': r.get('indicaciones'),

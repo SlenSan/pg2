@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% load l10n %}
+
+{% block title %}{{ mascota.nombre }} — Canigo{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-6 col-lg-5">
+    <div class="card">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          {% if mascota.foto %}
+          <img src="{{ mascota.foto }}" alt="{{ mascota.nombre }}" class="mascota-avatar" style="width: 72px; height: 72px;">
+          {% else %}
+          <span class="mascota-avatar-vacio" style="width: 72px; height: 72px; font-size: 1.5rem;">{{ mascota.nombre|default:"?"|slice:":1" }}</span>
+          {% endif %}
+          <div>
+            <h1 class="h4 mb-0">{{ mascota.nombre }}</h1>
+            <div class="text-muted small">{{ mascota.raza }} · {{ mascota.edad }} años · {{ mascota.peso|unlocalize }} kg</div>
+          </div>
+        </div>
+
+        {% comment %}
+        Punto 4 (ajustes del 20 de octubre) - "observaciones destacadas":
+        alergias/comportamiento (ver CLAUDE.md) son justo el dato que un
+        paseador necesita ver de un vistazo, no al final de la página -
+        de ahí el estilo de aviso en vez de un párrafo más.
+        {% endcomment %}
+        {% if mascota.observaciones %}
+        <div class="alert alert-warning small mb-3" role="alert">
+          <strong>Observaciones:</strong> {{ mascota.observaciones }}
+        </div>
+        {% endif %}
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="fw-bold small">Certificado de salud</span>
+          <span class="badge badge-certificado-{{ estado_salud.clave }}">{{ estado_salud.texto }}</span>
+        </div>
+        {% if fecha_expedicion %}
+        <p class="text-muted small mb-2">Expedido el {{ fecha_expedicion|date:"d/m/Y" }}</p>
+        {% endif %}
+        {% if url_certificado_salud %}
+        <p class="mb-3"><a href="{{ url_certificado_salud }}" target="_blank" rel="noopener">Ver certificado de salud</a></p>
+        {% endif %}
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="fw-bold small">Carné de vacunación</span>
+          <span class="badge {% if url_carne_vacunacion %}badge-certificado-vigente{% else %}badge-certificado-sin_certificado{% endif %}">
+            {% if url_carne_vacunacion %}Cargado{% else %}Sin carné cargado{% endif %}
+          </span>
+        </div>
+        {% if url_carne_vacunacion %}
+        <p class="mb-0"><a href="{{ url_carne_vacunacion }}" target="_blank" rel="noopener">Ver carné de vacunación</a></p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

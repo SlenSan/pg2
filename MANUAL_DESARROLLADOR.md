@@ -2866,6 +2866,75 @@ puntos, cada uno con su propio commit.
   esa mitad; la captura corregida (`p20oct_estado4_no_recogida.png`)
   ya no lo muestra.
 
+- **Punto 4 — perfil de la mascota para el paseador**: diagnóstico -
+  `3d13851` ya le muestra al paseador, en 3 pantallas (`usuarios.
+  views_web._horarios_disponibles_paseador` - horarios "disponible" con
+  mascota ya asignada; `usuarios.views_web.bienvenida_paseador` - paseo
+  "en_vivo"; `coordenadas.views_web.mapa_paseo` - "en_vivo" e
+  "historico", mismo template), un badge por mascota con SOLO: nombre,
+  estado del certificado de salud (badge), link "Ver" (certificado) y
+  link "Carné" - nunca foto, raza, edad, peso, observaciones, ni la
+  fecha de expedición, y sin ninguna pantalla de perfil dedicada (es una
+  fila más dentro de una lista). El control de acceso YA es
+  `paseos_repository.paseador_tiene_acceso_a_mascota(id_paseador,
+  id_mascota)` (única función, vive en `paseos/repository.py`): True si
+  existe AL MENOS UN paseo, **en cualquier estado, sin límite de
+  tiempo**, con ese `id_paseador` y esa mascota en `id_mascotas` - esta
+  es la regla que ya aplicaba en `historico` desde `3d13851` (pedido
+  explícito "dime cuál es"): no hay un plazo que venza, "alguna vez la
+  llevó" es para siempre, porque `id_mascotas` nunca se modifica después
+  de la inscripción. Por eso el punto 4 **no necesitó ninguna regla de
+  acceso nueva** - solo faltaba la pantalla y los 3 enlaces.
+
+  Fix: `mascotas.repository.obtener_por_id(id_mascota)` (nueva, sin
+  filtro de dueño - el paseador no es el dueño, así que
+  `obtener_por_id_y_dueno()` no sirve acá; el control de acceso real
+  sigue siendo `paseador_tiene_acceso_a_mascota()`, nunca esta función).
+  Vista nueva `mascotas.views.perfil_mascota_paseador()`
+  (`@requiere_paseador` + `Http404` si la mascota no existe O si este
+  paseador no tiene acceso - mismo criterio que `requiere_admin()` en
+  `usuarios/decorators.py`: nunca se revela cuál de los dos casos fue,
+  ni que la mascota/URL existe, a un paseador ajeno). Plantilla nueva
+  de solo lectura (`mascotas/perfil_paseador.html`): foto, nombre, raza,
+  edad, peso, observaciones en un recuadro destacado (alergias/
+  comportamiento - exactamente lo que un paseador necesita ver de un
+  vistazo), certificado de salud con su badge + fecha de expedición +
+  link, carné de vacunación con su link. **No agrega datos del dueño**
+  (dirección/indicaciones/teléfono siguen existiendo solo en la entrada
+  de `recogidas`, nunca se pasan a este template).
+
+  **Los 3 enlaces**: se agregó `id_mascota` (string) al diccionario que
+  ya arma `_certificados_de_mascotas_para_paseador()` (duplicada entre
+  `usuarios/views_web.py` y `coordenadas/views_web.py` desde `3d13851`,
+  mismo motivo de siempre) - el nombre de la mascota, antes texto
+  suelto, ahora es un link a `mascotas:perfil_paseador`. La "lista de
+  recogidas" de `bienvenida_paseador.html` no usaba esa función (viene
+  de `items_recogida` en `usuarios.views_web.bienvenida_paseador()`,
+  que ya tenía las mascotas RESUELTAS como documentos - solo les
+  faltaba llegar hasta la plantilla): se agregó una clave `mascotas`
+  (lista de `{id, nombre}`) junto a `mascotas_nombres` (que se queda,
+  la sigue usando el mensaje de `confirm()` de "Entregado"/"No se pudo
+  recoger", donde un link no tendría sentido).
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, P1/P2/D1): una
+  mascota con certificado de salud (PDF real subido), carné (imagen
+  real) y observaciones, inscrita en un horario de P1 - P1 ve el link
+  desde las 3 pantallas (`disponible`, lista de recogidas en `en_vivo`,
+  y el mapa) y el perfil muestra nombre/raza/edad/peso/observaciones/
+  estado del certificado ("Vigente (vence el ...)")/fecha de expedición
+  ("01/09/2026")/los 2 links - y NO muestra ni la dirección de recogida
+  ("Calle Max") ni el teléfono de contacto, confirmando que el perfil
+  no agrega datos del dueño. P2 (paseador sin ninguna relación con esa
+  mascota) recibe **404** por URL directa; una URL con un
+  `id_mascota` inexistente también da 404 (nunca 500); el dueño sigue
+  viendo la mascota en "Mis mascotas" y pudiendo abrir "Editar mascota"
+  sin cambios; un dueño que intenta abrir `/perfil-paseador/` es
+  redirigido (`requiere_paseador`, rol incorrecto). Captura móvil:
+  `p20oct_perfil_mascota_paseador.png`.
+
+  **Solo leído en código**: ninguno - todo lo relevante para este
+  punto se verificó con HTTP real.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

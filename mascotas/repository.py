@@ -52,6 +52,22 @@ def listar_por_dueno(id_dueno):
     return list(get_db().mascotas.find({'id_dueno': oid}).sort('fecha_registro', -1))
 
 
+def obtener_por_id(id_mascota):
+    """
+    Punto 4 (perfil de la mascota para el paseador) - SIN filtro de
+    dueño: el paseador no es el dueño de la mascota, así que
+    `obtener_por_id_y_dueno()` (de abajo) no le sirve. El control de
+    acceso real para un paseador es otro (`paseos_repository.
+    paseador_tiene_acceso_a_mascota()`, ya existente desde 3d13851) -
+    esta función solo resuelve el documento, nunca decide permisos.
+    """
+    try:
+        oid = ObjectId(id_mascota)
+    except (InvalidId, TypeError):
+        return None
+    return get_db().mascotas.find_one({'_id': oid})
+
+
 def obtener_por_id_y_dueno(id_mascota, id_dueno):
     """
     None si la mascota no existe O no es de ese dueño - la vista usa el

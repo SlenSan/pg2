@@ -115,7 +115,11 @@
     <p class="small text-muted mb-2">Certificados (Ley Kiara):</p>
     {% for m in mascotas_certificados %}
     <div class="d-flex justify-content-between align-items-center small mb-1">
-      <span>{{ m.nombre }}</span>
+      {% comment %}
+      Punto 4 (ajustes del 20 de octubre) - mismo enlace al perfil de
+      solo lectura que en _horarios_paseador.html.
+      {% endcomment %}
+      <a href="{% url 'mascotas:perfil_paseador' m.id_mascota %}">{{ m.nombre }}</a>
       <span>
         <span class="badge badge-certificado-{{ m.estado_salud.clave }}">{{ m.estado_salud.texto }}</span>
         {% if m.url_certificado_salud %}

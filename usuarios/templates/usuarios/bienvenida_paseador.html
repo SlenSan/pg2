@@ -48,7 +48,18 @@
       <div class="p-2 rounded-3 mb-2 {% if r.entrega_vencida %}border border-danger border-2{% endif %}" style="background-color: var(--color-muted);">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div>
-            <div class="fw-bold small">{{ r.mascotas_nombres }} <span class="text-muted fw-normal">(de {{ r.dueno_nombre }})</span></div>
+            {% comment %}
+            Punto 4 (ajustes del 20 de octubre) - cada mascota abre su
+            perfil de solo lectura (foto, raza, edad, peso,
+            observaciones, certificado con fecha, carné) - antes era
+            solo el nombre ya unido en texto (r.mascotas_nombres, que
+            sigue existiendo para el mensaje de confirmación de abajo,
+            donde un enlace no tendría sentido).
+            {% endcomment %}
+            <div class="fw-bold small">
+              {% for m in r.mascotas %}<a href="{% url 'mascotas:perfil_paseador' m.id %}" class="text-reset">{{ m.nombre }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+              <span class="text-muted fw-normal">(de {{ r.dueno_nombre }})</span>
+            </div>
             <div class="small">{{ r.direccion }}{% if r.comuna_etiqueta %} · {{ r.comuna_etiqueta }}{% endif %}</div>
             {% if r.indicaciones %}<div class="small text-muted">{{ r.indicaciones }}</div>{% endif %}
             <div class="small"><a href="tel:{{ r.telefono }}">{{ r.telefono }}</a></div>

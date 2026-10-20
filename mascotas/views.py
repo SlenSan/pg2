@@ -1,13 +1,14 @@
 from datetime import datetime
 
 from django.contrib import messages
+from django.http import Http404
 from django.shortcuts import redirect, render
 
 from core.media import ErrorArchivoInvalido, ErrorSubidaImagen, eliminar_archivo, eliminar_imagen, subir_certificado, subir_imagen
 from mascotas import repository
 from mascotas.forms import MascotaForm
 from paseos import repository as paseos_repository
-from usuarios.decorators import requiere_dueno
+from usuarios.decorators import requiere_dueno, requiere_paseador
 
 
 @requiere_dueno
@@ -195,4 +196,45 @@ def editar_mascota(request, id_mascota):
         'id_mascota': id_mascota,
         'estado_salud': repository.estado_certificado_salud(mascota.get('certificado_salud')),
         'tiene_carne': bool(mascota.get('carne_vacunacion')),
+    })
+
+
+@requiere_paseador
+def perfil_mascota_paseador(request, id_mascota):
+    """
+    Punto 4 (ajustes del 20 de octubre) - perfil de SOLO LECTURA de una
+    mascota, para el paseador que la tiene asignada. Enlazado desde 3
+    pantallas: la lista de horarios "disponible" con mascota ya asignada
+    (`usuarios.views_web._horarios_disponibles_paseador`), la lista de
+    recogidas de un paseo "en_vivo" (`usuarios.views_web.
+    bienvenida_paseador`) y el detalle/mapa del paseo
+    (`coordenadas.views_web.mapa_paseo`, "en_vivo" u "historico").
+
+    Control de acceso: `paseos_repository.paseador_tiene_acceso_a_mascota()`
+    - la MISMA función que ya usa el badge de certificados desde 3d13851
+    (sin filtrar por estado: "alguna vez la llevó o la va a llevar" es
+    "aparece en algún paseo con ese id_paseador", para siempre - esa es
+    la regla que ya aplicaba en `historico`, no se agregó ninguna nueva
+    acá). `Http404` (no 403) para una mascota que no existe O a la que
+    este paseador no tiene acceso - mismo criterio que `requiere_admin()`
+    en `usuarios/decorators.py`: no se revela cuál de los dos casos fue,
+    ni que la URL/mascota existe, a un paseador ajeno.
+
+    El perfil NO agrega datos del dueño (dirección/teléfono siguen
+    existiendo solo en la entrada de `recogidas` del paseo) - solo
+    campos propios de la mascota.
+    """
+    mascota = repository.obtener_por_id(id_mascota)
+    if not mascota:
+        raise Http404()
+    id_paseador = request.session['id_usuario']
+    if not paseos_repository.paseador_tiene_acceso_a_mascota(id_paseador, mascota['_id']):
+        raise Http404()
+
+    return render(request, 'mascotas/perfil_paseador.html', {
+        'mascota': mascota,
+        'estado_salud': repository.estado_certificado_salud(mascota.get('certificado_salud')),
+        'fecha_expedicion': (mascota.get('certificado_salud') or {}).get('fecha_expedicion'),
+        'url_certificado_salud': (mascota.get('certificado_salud') or {}).get('url'),
+        'url_carne_vacunacion': (mascota.get('carne_vacunacion') or {}).get('url'),
     })
