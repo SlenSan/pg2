@@ -1,6 +1,9 @@
 from django import forms
 
+from core.validators import validar_telefono_colombiano
 from paseos.repository import ZONAS_VALIDAS, etiqueta_zona
+
+_INPUT_CLASS = 'form-control'
 
 
 class PublicarHorarioForm(forms.Form):
@@ -80,11 +83,44 @@ class InscribirMascotaForm(forms.Form):
     mascotas del mismo dueño juntas (ver CLAUDE.md). required=True (el
     default de MultipleChoiceField) ya rechaza una seleccion vacia sin
     necesitar un clean() aparte.
+
+    Incremento 4 fase 3, punto A1 - además de elegir mascota(s), este
+    MISMO formulario pide los datos de recogida (dirección, comuna,
+    indicaciones, teléfono de contacto): se piden juntos porque la
+    inscripción y la recogida son la misma acción del dueño, no dos
+    pantallas separadas. `paseos.views_web.inscribir_en_horario()` los
+    prellena con `usuarios.ultima_recogida` (o `usuarios.direccion`/
+    `telefono` la primera vez) vía `initial=`.
     """
     ids_mascota = forms.MultipleChoiceField(
         label='Elige tu(s) mascota(s)',
         widget=forms.CheckboxSelectMultiple,
         error_messages={'required': 'Elige al menos una mascota.'},
+    )
+    direccion = forms.CharField(
+        min_length=5,
+        max_length=150,
+        label='Dirección de recogida',
+        widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
+    )
+    comuna = forms.ChoiceField(
+        label='Comuna',
+        choices=[(z, etiqueta_zona(z)) for z in ZONAS_VALIDAS],
+        widget=forms.Select(attrs={'class': _INPUT_CLASS}),
+    )
+    indicaciones = forms.CharField(
+        required=False,
+        max_length=200,
+        label='Indicaciones (opcional)',
+        widget=forms.TextInput(attrs={
+            'class': _INPUT_CLASS,
+            'placeholder': 'Ej. apto 302, timbre dañado',
+        }),
+    )
+    telefono = forms.CharField(
+        max_length=20,
+        label='Teléfono de contacto',
+        widget=forms.TextInput(attrs={'class': _INPUT_CLASS}),
     )
 
     def __init__(self, *args, mascotas=None, **kwargs):
@@ -92,3 +128,6 @@ class InscribirMascotaForm(forms.Form):
         self.fields['ids_mascota'].choices = [
             (str(mascota['_id']), mascota['nombre']) for mascota in (mascotas or [])
         ]
+
+    def clean_telefono(self):
+        return validar_telefono_colombiano(self.cleaned_data.get('telefono', ''))

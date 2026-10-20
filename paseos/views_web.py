@@ -199,6 +199,21 @@ def detalle_paseador(request, id_paseador):
     mis_mascotas = mascotas_repository.listar_por_dueno(request.session['id_usuario'])
     tiene_mascotas = bool(mis_mascotas)
 
+    # Incremento 4 fase 3, punto A1 - prellena el formulario de
+    # inscripción con la última recogida de este dueño; la primera vez
+    # (sin `ultima_recogida` todavía) cae a `direccion`/`telefono` del
+    # propio perfil, que ya existen (`direccion` es opcional en el
+    # registro del dueño - puede venir vacía).
+    usuario_dueno = usuarios_repository.obtener_por_id(request.session['id_usuario'])
+    ultima_recogida = usuario_dueno.get('ultima_recogida') if usuario_dueno else None
+    if ultima_recogida:
+        initial_recogida = ultima_recogida
+    else:
+        initial_recogida = {
+            'direccion': (usuario_dueno or {}).get('direccion', ''),
+            'telefono': (usuario_dueno or {}).get('telefono', ''),
+        }
+
     calificaciones_con_comentario = [
         c for c in calificaciones_repository.listar_por_paseador(oid_paseador) if c.get('comentario')
     ][:5]
@@ -226,7 +241,7 @@ def detalle_paseador(request, id_paseador):
             # casillas nuevas una vez marcadas tantas como quepan, para
             # que nadie termine seleccionando de mas y se lleve el
             # rechazo recien al enviar (ver inscribir_en_horario()).
-            'form': InscribirMascotaForm(mascotas=mis_mascotas, prefix=id_paseo),
+            'form': InscribirMascotaForm(mascotas=mis_mascotas, prefix=id_paseo, initial=initial_recogida),
         })
 
     certificados_paseador = paseador.get('certificados', [])
@@ -303,10 +318,24 @@ def inscribir_en_horario(request, id_paseador, id_paseo):
         id_paseo=id_paseo,
         id_dueno=request.session['id_usuario'],
         ids_mascota=ids_mascota,
+        direccion=form.cleaned_data['direccion'],
+        comuna=form.cleaned_data['comuna'],
+        indicaciones=form.cleaned_data['indicaciones'],
+        telefono=form.cleaned_data['telefono'],
     )
     if not asignado:
         messages.error(request, 'Este horario ya no está disponible.')
         return redirect('paseos:detalle_paseador', id_paseador=id_paseador)
+
+    # Incremento 4 fase 3, punto A1 - prellena la PRÓXIMA inscripción de
+    # este dueño con estos mismos datos de recogida.
+    usuarios_repository.guardar_ultima_recogida(
+        request.session['id_usuario'],
+        direccion=form.cleaned_data['direccion'],
+        comuna=form.cleaned_data['comuna'],
+        indicaciones=form.cleaned_data['indicaciones'],
+        telefono=form.cleaned_data['telefono'],
+    )
 
     paseador = usuarios_repository.obtener_por_id(id_paseador)
     nombres = mascotas_repository.nombres_unidos(mascotas_elegidas)

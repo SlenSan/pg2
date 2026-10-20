@@ -2020,6 +2020,48 @@ sobre-bloquear).
 `data-canigo-carga-manual` (confirmado por inspección, no se probó
 cada uno manualmente en el navegador).
 
+**Incremento 4, fase 3 — dirección de recogida y flujo de recogida y
+entrega por mascota**: la fase más grande de las tres, en la rama
+`fase3-recogida` (no fusionada a `master` todavía - se fusiona y se
+despliega solo cuando todo el punto A esté verificado en local y la
+autora lo apruebe).
+
+- **Punto A1 — datos de recogida al inscribir**: diagnóstico - antes,
+  `InscribirMascotaForm` solo pedía elegir mascota(s)
+  (`paseos/forms.py`); la inscripción (`paseos.views_web.
+  inscribir_en_horario()` → `paseos.repository.inscribir_mascotas()`)
+  solo sumaba a `id_mascotas`/`id_duenos`, sin ningún dato de recogida.
+  No había ningún `direccion`/`comuna`/`indicaciones`/`telefono` de
+  contacto por dueño en todo el esquema.
+
+  Fix: `InscribirMascotaForm` ahora pide, junto con la(s) mascota(s),
+  `direccion` (5-150 caracteres), `comuna` (una de `ZONAS_VALIDAS`),
+  `indicaciones` (opcional, máx. 200) y `telefono` (celular colombiano
+  - reutiliza el mismo validador que `usuarios/forms.py`, movido a
+  `core/validators.py` porque ahora lo necesitan dos apps). Se guarda
+  en `paseos.recogidas`, **una entrada por dueño** (no una por
+  inscripción): `paseos.repository.inscribir_mascotas()` intenta
+  primero actualizar una entrada ya existente de ese dueño
+  (`array_filters`, fusiona mascotas nuevas y actualiza los datos de
+  contacto a los recién enviados) y, si no existía ninguna, agrega una
+  entrada nueva - dos intentos porque Mongo no tiene un "upsert sobre
+  un elemento de un array" en una sola operación, mismo filtro `$expr`
+  de cupo en los dos. Se prellena con `usuarios.ultima_recogida`
+  (`usuarios.repository.guardar_ultima_recogida()`, se sobreescribe
+  cada vez que el dueño inscribe con éxito) o, la primera vez, con
+  `usuarios.direccion`/`telefono` del perfil.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, dos rondas con el
+  mismo dueño en el mismo horario): la primera inscripción prellenó el
+  teléfono con el del perfil (`"300"`, dato de prueba) y creó una
+  entrada en `recogidas` con `estado: "pendiente"`; la segunda (otra
+  mascota, otros datos de contacto) **no duplicó** la entrada - la
+  fusionó (`id_mascotas` con las dos mascotas, datos de contacto
+  actualizados a los de la segunda ronda) y `id_duenos` siguió con un
+  solo elemento. Validación de backend confirmada por separado
+  (dirección de 3 caracteres, comuna inventada, indicaciones de 250
+  caracteres y teléfono inválido - los 4 se rechazan).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

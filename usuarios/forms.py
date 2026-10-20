@@ -1,8 +1,9 @@
-import re
 from datetime import date
 
 from django import forms
 
+from core.validators import limpiar_telefono as _limpiar_telefono
+from core.validators import validar_telefono_colombiano as _validar_telefono_colombiano
 from core.widgets import CamaraOArchivoWidget
 
 _INPUT_CLASS = 'form-control'
@@ -15,27 +16,12 @@ TIPOS_CERTIFICADO_PASEADOR = (
     ('Otro certificado relacionado', 'Otro certificado relacionado'),
 )
 
-# Celular colombiano: 10 digitos, empieza en 3 (operadores moviles) - ver
-# CLAUDE.md, teléfono es obligatorio para los dos roles y ahora se
-# muestra como link "tel:" (Incremento 4, punto B), asi que vale la pena
-# que lo que se guarda sea realmente marcable. Antes esto NO se validaba
-# (CharField libre) - Incremento 4, punto B lo agrega.
-_PATRON_TELEFONO_COLOMBIANO = re.compile(r'^3\d{9}$')
-
-
-def _limpiar_telefono(telefono):
-    """Quita espacios y guiones antes de validar - '300 123 4567' y
-    '300-123-4567' son formas comunes de escribir el mismo numero."""
-    return re.sub(r'[\s-]', '', telefono or '')
-
-
-def _validar_telefono_colombiano(telefono):
-    telefono = _limpiar_telefono(telefono)
-    if not _PATRON_TELEFONO_COLOMBIANO.match(telefono):
-        raise forms.ValidationError(
-            'Ingresa un celular colombiano válido: 10 dígitos que empiecen en 3 (ej. 3001234567).'
-        )
-    return telefono
+# _limpiar_telefono()/_validar_telefono_colombiano() se movieron a
+# core/validators.py (Incremento 4 fase 3, punto A1) - paseos/forms.py
+# también los necesita ahora (teléfono de contacto de la recogida), así
+# que dejaron de ser exclusivos de este archivo. Se re-importan con el
+# mismo nombre (alias) para no tocar ningún otro lugar de este archivo
+# que ya los usa.
 
 
 def _normalizar_correo(correo):

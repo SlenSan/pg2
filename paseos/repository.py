@@ -243,7 +243,10 @@ def obtener_por_id(id_paseo):
     return get_db().paseos.find_one({'_id': oid})
 
 
-def inscribir_mascotas(*, id_paseo, id_dueno, ids_mascota):
+def inscribir_mascotas(
+    *, id_paseo, id_dueno, ids_mascota, direccion, comuna, indicaciones, telefono,
+    duracion_acordada_min=None,
+):
     """
     Suma una o varias mascotas (de UN dueño, ya validadas por el
     llamador) a un paseo 'disponible' - a las que ya haya de este u OTROS
@@ -264,6 +267,19 @@ def inscribir_mascotas(*, id_paseo, id_dueno, ids_mascota):
     dueño reenvia el mismo formulario dos veces (doble clic, o inscribe
     una mascota, y despues vuelve a este horario a sumar otra), una
     mascota que ya estaba no se duplica ni infla el conteo de cupos.
+
+    Incremento 4 fase 3, punto A1 - además de id_mascotas/id_duenos,
+    mantiene `paseos.recogidas`: UNA entrada por dueño (no una por
+    inscripción - "vuelve a este horario a sumar otra" de arriba sigue
+    siendo el mismo caso real). Como Mongo no tiene un "upsert sobre un
+    elemento de un array" en una sola operación, son DOS intentos:
+    primero intenta ACTUALIZAR una entrada ya existente de este dueño
+    (`array_filters`) con los datos de contacto recién enviados (puede
+    haber cambiado la dirección desde la última vez) y sumarle las
+    mascotas nuevas; si no modificó nada (este dueño no tenía entrada
+    todavía), el segundo intento agrega una entrada nueva. Mismo filtro
+    $expr de cupo en los dos intentos - un doble envío nunca se cuela
+    por la segunda rama si la primera ya lo cubrió.
     """
     try:
         oid_paseo = ObjectId(id_paseo)
@@ -274,22 +290,59 @@ def inscribir_mascotas(*, id_paseo, id_dueno, ids_mascota):
     if not oids_mascota:
         return False
 
+    filtro_base = {
+        '_id': oid_paseo,
+        'estado': 'disponible',
+        'acepta_inscripciones': True,
+        '$expr': {
+            '$lte': [
+                {'$add': [{'$size': '$id_mascotas'}, len(oids_mascota)]},
+                MAXIMO_MASCOTAS_POR_PASEO,
+            ],
+        },
+    }
+
     resultado = get_db().paseos.update_one(
+        {**filtro_base, 'recogidas.id_dueno': oid_dueno},
         {
-            '_id': oid_paseo,
-            'estado': 'disponible',
-            'acepta_inscripciones': True,
-            '$expr': {
-                '$lte': [
-                    {'$add': [{'$size': '$id_mascotas'}, len(oids_mascota)]},
-                    MAXIMO_MASCOTAS_POR_PASEO,
-                ],
+            '$addToSet': {
+                'id_mascotas': {'$each': oids_mascota},
+                'recogidas.$[entrada].id_mascotas': {'$each': oids_mascota},
+            },
+            '$set': {
+                'recogidas.$[entrada].direccion': direccion,
+                'recogidas.$[entrada].comuna': comuna,
+                'recogidas.$[entrada].indicaciones': indicaciones,
+                'recogidas.$[entrada].telefono': telefono,
+                'recogidas.$[entrada].duracion_acordada_min': duracion_acordada_min,
             },
         },
+        array_filters=[{'entrada.id_dueno': oid_dueno}],
+    )
+    if resultado.modified_count == 1:
+        return True
+
+    resultado = get_db().paseos.update_one(
+        filtro_base,
         {
             '$addToSet': {
                 'id_mascotas': {'$each': oids_mascota},
                 'id_duenos': oid_dueno,
+            },
+            '$push': {
+                'recogidas': {
+                    'id_dueno': oid_dueno,
+                    'id_mascotas': oids_mascota,
+                    'direccion': direccion,
+                    'comuna': comuna,
+                    'indicaciones': indicaciones,
+                    'telefono': telefono,
+                    'duracion_acordada_min': duracion_acordada_min,
+                    'estado': 'pendiente',
+                    'hora_recogida': None,
+                    'hora_entrega': None,
+                    'motivo_no_recogida': None,
+                },
             },
         },
     )
