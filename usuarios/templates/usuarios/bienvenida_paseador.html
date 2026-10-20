@@ -106,29 +106,33 @@
     {% endif %}
 
     {% comment %}
-    Punto A6 - "Finalizar paseo" también pide confirmación (toque
-    accidental). Se suma al "disabled" de abajo, no lo reemplaza: un
-    botón disabled no dispara submit ni confirm en absoluto.
+    Ajuste del 20 de octubre, punto 3 - "el botón manual Finalizar
+    paseo desaparece" para un paseo CON recogidas: ya no hace falta
+    (se finaliza solo cuando ninguna sigue pendiente/recogida, ver
+    paseos.views_web._autofinalizar_si_corresponde()) y "si el
+    paseador necesita cerrar un paseo con recogidas pendientes por
+    fuerza mayor, solo puede hacerlo marcando cada una como No se pudo
+    recoger o Entregado" - no hay ninguna otra puerta de salida. Un
+    paseo SIN recogidas (de antes de esta fase) mantiene el botón de
+    siempre, con su confirmación (punto A6).
     {% endcomment %}
+    {% if paseo_activo.recogidas %}
+    <p class="text-muted small mb-3">
+      El paseo se finaliza automáticamente cuando entregues (o marques "No se
+      pudo recoger") a todas las mascotas.
+    </p>
+    {% else %}
     <form
       method="post"
       action="{% url 'paseos:finalizar_paseo' paseo_activo.id_paseo %}"
       onsubmit="return confirm('¿Confirmas que quieres finalizar el paseo?');"
     >
       {% csrf_token %}
-      {% comment %}
-      Punto A2, punto 5 - deshabilitado en el frontend mientras quede
-      alguna recogida 'pendiente'/'recogida' (el backend lo exige de
-      verdad - ver paseos.repository.finalizar_paseo()). Un paseo sin
-      `recogidas` (de antes de esta fase) siempre puede finalizarse.
-      {% endcomment %}
-      <button type="submit" class="btn btn-primary w-100" {% if not paseo_activo.puede_finalizar %}disabled{% endif %}>
+      <button type="submit" class="btn btn-primary w-100">
         Finalizar paseo
       </button>
-      {% if not paseo_activo.puede_finalizar %}
-      <p class="text-muted small mt-1 mb-0">Entrega todas las recogidas pendientes antes de finalizar.</p>
-      {% endif %}
     </form>
+    {% endif %}
     {% comment %}
     Incremento 4 fase 3, punto A6 - aviso de interrupción del GPS "al
     volver a Canigo" (limitación de iOS: la pantalla bloqueada o la app

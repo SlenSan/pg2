@@ -31,21 +31,39 @@ el aviso breve.
         </div>
       </div>
       <div class="text-end">
+        {% comment %}
+        Ajuste del 20 de octubre, punto 3 - el badge ya no es solo
+        `paseo.estado` (que para un paseo con recogidas puede seguir
+        "en_vivo" para otro dueño mientras para ESTE ya no hay nada que
+        hacer acá - esos ya salieron de esta lista, ver
+        _items_mis_paseos()). `item.estado_recogida` es None en un
+        paseo legacy (sin recogidas) - ahí se mantiene el badge de
+        siempre.
+        {% endcomment %}
+        {% if item.estado_recogida == 'pendiente' %}
+        <span class="badge bg-secondary">Esperando la recogida</span>
+        {% elif item.estado_recogida == 'recogida' %}
+        <span class="badge bg-success">En paseo</span>
+        {% else %}
         <span class="badge
           {% if item.paseo.estado == 'disponible' %}bg-secondary
           {% else %}bg-success{% endif %}">
           {{ item.paseo.estado }}
         </span>
+        {% endif %}
         {% comment %}
-        "Ver mapa" (seguimiento en vivo) ya existia para esta pantalla -
-        solo aparece una vez que el paseo tiene hora_inicio, que recien se
-        registra al pasar a 'en_vivo' (ver paseos.repository.iniciar_paseo)
-        - un paseo todavia 'disponible' (agendado, sin empezar) no la
-        tiene, asi que naturalmente no muestra este link. Al pasar a
-        en_vivo, el siguiente sondeo ya trae hora_inicio y el boton
-        aparece solo, sin logica extra en el JS.
+        "Ver mapa" (seguimiento en vivo): antes alcanzaba con
+        `paseo.hora_inicio` (el paseo entero ya en_vivo). Punto 3 -
+        privacidad de A3 ("antes de la recogida ve... sin mapa ni
+        ubicación del paseador"): para un paseo CON recogidas, además
+        hay que esperar a que la de ESTE dueño ya esté 'recogida' (o
+        más adelante) - mientras diga 'pendiente', no se ofrece el
+        link en absoluto, en vez de dejar que el dueño entre a una
+        pantalla que de todas formas le mostraría "Esperando la
+        recogida" sin nada más. Legacy (`estado_recogida` None): se
+        mantiene el criterio de siempre, solo `hora_inicio`.
         {% endcomment %}
-        {% if item.paseo.hora_inicio %}
+        {% if item.paseo.hora_inicio and item.estado_recogida != 'pendiente' %}
         <div class="mt-1">
           <a href="{% url 'coordenadas:mapa_paseo' item.id_paseo %}" class="btn btn-outline-primary">Ver mapa</a>
         </div>

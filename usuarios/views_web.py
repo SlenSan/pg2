@@ -309,20 +309,40 @@ def autorizar_datos(request):
 
 def _paseo_activo_dueno(id_dueno, paseos_dueno=None):
     """
-    Paseo en_vivo actual del dueño, con los datos que necesita el banner
+    Paseo "activo ahora" del dueño, con los datos que necesita el banner
     naranja del dashboard. None si no tiene ninguno en curso ahora mismo.
     Compartida por bienvenida() (carga completa de la pagina) y
     estado_bienvenida() (polling) para que ambas calculen exactamente lo
     mismo. Si el llamador ya tiene `paseos_dueno` cargado (bienvenida lo
     necesita ademas para otras secciones), se reutiliza en vez de volver
     a consultar Mongo.
+
+    Ajuste del 20 de octubre, punto 3 - "activo ahora" para ESTE dueño
+    ya no es simplemente `paseo.estado == 'en_vivo'`: un paseo
+    multi-dueño puede seguir en_vivo para OTRO dueño mientras que para
+    este ya se resolvió (entregada/no_recogida, ver
+    dueno_recogida_resuelta()) - ahí el banner no debe seguir diciendo
+    "paseo activo ahora" (eso vive en su historial). Tampoco antes de
+    la recogida ("pendiente" - sin mapa ni minutos reales que mostrar
+    todavía, privacidad de A3): el banner solo tiene sentido una vez
+    que la mascota de ESTE dueño está efectivamente con el paseador
+    ('recogida'). Legacy (sin recogidas): regla vieja, estado del
+    paseo completo.
     """
     if paseos_dueno is None:
         paseos_dueno = paseos_repository.listar_por_dueno(id_dueno)
 
-    paseo_en_vivo = next((p for p in paseos_dueno if p['estado'] == 'en_vivo'), None)
+    paseo_en_vivo = None
+    for p in paseos_dueno:
+        if p['estado'] != 'en_vivo':
+            continue
+        entrada = paseos_repository.recogida_de_dueno(p, id_dueno)
+        if entrada is None or entrada['estado'] == 'recogida':
+            paseo_en_vivo = p
+            break
     if not paseo_en_vivo:
         return None
+    entrada_dueno = paseos_repository.recogida_de_dueno(paseo_en_vivo, id_dueno)
 
     # SOLO las mascotas de ESTE dueño - el paseo en vivo puede llevar
     # mascotas de OTROS dueños tambien (hasta 8, Ley Kiara - ver
@@ -338,9 +358,14 @@ def _paseo_activo_dueno(id_dueno, paseos_dueno=None):
     if paseo_en_vivo.get('id_paseador'):
         paseador = repository.obtener_por_id(paseo_en_vivo['id_paseador'])
 
+    # Punto 3 - los minutos son desde la RECOGIDA de este dueño (su
+    # propio tramo, RF9 por dueño), no desde `paseo.hora_inicio` (cuando
+    # el paseador arrancó la ruta completa, que puede ser bastante antes
+    # de llegar a ESTE dueño en particular). Legacy: sigue siendo
+    # `hora_inicio` del paseo, como siempre.
     ahora = datetime.now(timezone.utc).replace(tzinfo=None)
-    hora_inicio = paseo_en_vivo.get('hora_inicio')
-    minutos = int((ahora - hora_inicio).total_seconds() // 60) if hora_inicio else 0
+    hora_desde = entrada_dueno['hora_recogida'] if entrada_dueno else paseo_en_vivo.get('hora_inicio')
+    minutos = int((ahora - hora_desde).total_seconds() // 60) if hora_desde else 0
     return {
         'id_paseo': str(paseo_en_vivo['_id']),
         'mascota_nombre': mascotas_repository.nombres_unidos(mascotas) or 'tu mascota',
@@ -360,37 +385,54 @@ def bienvenida(request):
     paseo_activo = _paseo_activo_dueno(id_dueno, paseos_dueno=paseos_dueno)
 
     # --- "Mis mascotas" (maximo 3 tarjetas) ---
-    ids_mascotas_en_paseo = {
-        mid for p in paseos_dueno if p['estado'] == 'en_vivo' for mid in p.get('id_mascotas', [])
-    }
+    # Ajuste del 20 de octubre, punto 3 - "en paseo" y "último paseo" ya
+    # no pueden mirar solo `paseo.estado` (un paseo multi-dueño puede
+    # seguir 'en_vivo' para OTRO dueño mientras para ESTE ya se
+    # resolvió - ver dueno_recogida_resuelta()/recogida_de_dueno()).
+    ids_mascotas_en_paseo = set()
     ultimo_paseo_por_mascota = {}
+    fecha_fin_por_mascota = {}
     for p in paseos_dueno:  # ya viene ordenado por fecha desc
-        if p['estado'] != 'historico':
-            continue
-        for mid in p.get('id_mascotas', []):
-            if mid not in ultimo_paseo_por_mascota:
-                ultimo_paseo_por_mascota[mid] = p
+        entrada = paseos_repository.recogida_de_dueno(p, id_dueno)
+        if p['estado'] == 'en_vivo' and (entrada is None or entrada['estado'] == 'recogida'):
+            # "en paseo ahora" para ESTE dueño: legacy en_vivo, o
+            # recogida ya en curso (entregada/no_recogida ya no cuenta,
+            # aunque el documento siga en_vivo para otro dueño).
+            ids_mascotas_en_paseo.update(p.get('id_mascotas', []))
+        elif p['estado'] == 'historico' or (entrada and entrada['estado'] in ('entregada', 'no_recogida')):
+            # "Último paseo" - resuelto para ESTE dueño (con o sin
+            # recogidas). Las mascotas de la recogida (no
+            # `paseo.id_mascotas`, que puede no tenerlas más si hubo un
+            # "no se pudo recoger" - ver marcar_no_recogida()).
+            ids_mascotas_item = entrada['id_mascotas'] if entrada else p.get('id_mascotas', [])
+            fecha_fin_item = entrada.get('hora_entrega') if entrada else p.get('hora_fin')
+            for mid in ids_mascotas_item:
+                if mid not in ultimo_paseo_por_mascota:
+                    ultimo_paseo_por_mascota[mid] = p
+                    fecha_fin_por_mascota[mid] = fecha_fin_item
 
     mascotas_tarjetas = [
         {
             'mascota': m,
             'en_paseo': m['_id'] in ids_mascotas_en_paseo,
-            'fecha_ultimo_paseo': (ultimo_paseo_por_mascota.get(m['_id']) or {}).get('hora_fin'),
+            'fecha_ultimo_paseo': fecha_fin_por_mascota.get(m['_id']),
         }
         for m in mascotas_dueno[:3]
     ]
 
-    # --- accion rapida "Calificar paseo": el historico mas reciente sin calificar ---
-    ids_historico = [p['_id'] for p in paseos_dueno if p['estado'] == 'historico']
-    # "Calificado" es siempre relativo a ESTE dueño (id_dueno=oid_dueno) -
-    # un paseo compartido (hasta 8 mascotas, Ley Kiara) puede tener la
-    # calificacion de OTRO dueño sin que este haya calificado todavia.
+    # --- accion rapida "Calificar paseo": el mas reciente sin calificar ---
+    # Ajuste del 20 de octubre, punto 3 - "puede calificar de inmediato"
+    # ya no espera a que el paseo completo sea 'historico' - usa
+    # dueno_puede_calificar() (entregada para ESTE dueño, o legacy
+    # historico), mismo criterio que calificaciones.views_web.
+    # calificar_paseo() y coordenadas.views_web._pendiente_calificar().
     oid_dueno = ObjectId(id_dueno)
+    ids_calificables = [p['_id'] for p in paseos_dueno if paseos_repository.dueno_puede_calificar(p, id_dueno)]
     ids_calificados = {
-        c['id_paseo'] for c in calificaciones_repository.listar_por_paseos(ids_historico)
+        c['id_paseo'] for c in calificaciones_repository.listar_por_paseos(ids_calificables)
         if c['id_dueno'] == oid_dueno
     }
-    id_paseo_sin_calificar = next((pid for pid in ids_historico if pid not in ids_calificados), None)
+    id_paseo_sin_calificar = next((pid for pid in ids_calificables if pid not in ids_calificados), None)
 
     # --- estadisticas (calculo simple, sobre los paseos ya cargados) ---
     paseos_este_mes = sum(
@@ -586,12 +628,6 @@ def bienvenida_paseador(request):
                 coordenadas_repository.distancia_recorrida_m(paseo['_id'])
             ),
             'recogidas': items_recogida,
-            # "Finalizar paseo" se deshabilita en el frontend mientras
-            # quede alguna recogida sin cerrar (backend lo exige de
-            # verdad, ver paseos.repository.finalizar_paseo()).
-            'puede_finalizar': not any(
-                r['estado'] in ('pendiente', 'recogida') for r in paseo.get('recogidas', [])
-            ),
         }
         # mascotas=mascotas_paseo: si el paseo lleva mas de una, el form
         # agrega el radio "¿a cual mascota afecta?" (ver ReportarIncidenteForm);

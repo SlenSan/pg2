@@ -48,7 +48,15 @@ alcance 2026-09-25".
     <div class="d-flex flex-column gap-2">
       <form method="post" action="{% url 'paseos:iniciar_paseo' h.id_paseo %}">
         {% csrf_token %}
-        <button type="submit" class="btn btn-light w-100 fw-bold">Iniciar paseo</button>
+        {% comment %}
+        Ajuste del 20 de octubre, punto 3 - "Iniciar paseo" pasa a
+        llamarse "Iniciar ruta" (el paseo completo ya no se cierra con
+        un botón manual - ver bienvenida_paseador.html; "ruta" distingue
+        esta acción, que solo arranca el GPS y la lista de recogidas,
+        de "el paseo" como concepto completo). La vista/URL/nombre
+        internos (paseos:iniciar_paseo) no cambian, solo la etiqueta.
+        {% endcomment %}
+        <button type="submit" class="btn btn-light w-100 fw-bold">Iniciar ruta</button>
       </form>
       {% if h.acepta_inscripciones and h.cupos_ocupados < h.cupos_totales %}
       <form method="post" action="{% url 'paseos:cancelar_disponibilidad' h.id_paseo %}">

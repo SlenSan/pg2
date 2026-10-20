@@ -500,6 +500,70 @@ def marcar_no_recogida(*, id_paseo, id_paseador, id_dueno, motivo):
     )
 
 
+def recogida_de_dueno(paseo, id_dueno):
+    """
+    Ajuste del 20 de octubre, punto 3 - entrada de `paseo['recogidas']`
+    de ESE dueño, o `None` si el paseo es legacy (sin el campo) o si ese
+    dueño no tiene ninguna entrada (no debería pasar para un
+    `id_duenos` real, pero nunca se asume). Función PÚBLICA y
+    compartida: a diferencia de los helpers `_privados` de cada app
+    (que duplican a propósito este mismo recorrido para no cruzar
+    imports entre apps - ver `_recogida_de_dueno()` en este mismo
+    archivo, `views_web.py`), esta sí la necesitan otras apps
+    (`coordenadas`, `usuarios`, `calificaciones`) para decidir el
+    estado de ESE dueño sin repetir el array-scan cuatro veces - vive
+    en `repository.py` como función pura (sin acceso a Mongo), mismo
+    criterio que `etiqueta_duracion_acordada()`.
+    """
+    if 'recogidas' not in paseo:
+        return None
+    oid_dueno = id_dueno if isinstance(id_dueno, ObjectId) else ObjectId(id_dueno)
+    return next((r for r in paseo['recogidas'] if r['id_dueno'] == oid_dueno), None)
+
+
+def dueno_puede_calificar(paseo, id_dueno):
+    """
+    Punto 3 (20 oct) - "la calificación se habilita por dueño cuando su
+    recogida está entregada, no cuando el paseo completo pasa a
+    historico". Un paseo legacy (sin `recogidas`) mantiene la regla
+    vieja: todo el paseo debe estar 'historico'. `no_recogida` NUNCA
+    habilita calificar (pedido explícito: "no se puede calificar").
+    """
+    entrada = recogida_de_dueno(paseo, id_dueno)
+    if entrada is None:
+        return paseo['estado'] == 'historico'
+    return entrada['estado'] == 'entregada'
+
+
+def dueno_recogida_resuelta(paseo, id_dueno):
+    """
+    Punto 3 (20 oct) - True si para ESTE dueño ya no queda nada
+    pendiente en este paseo ('entregada' O 'no_recogida' - los dos
+    "se resuelven", aunque solo 'entregada' se pueda calificar, ver
+    dueno_puede_calificar()) - usado para decidir si este paseo va en
+    "Paseos activos" o en el historial de ESE dueño, que ya no depende
+    de `paseo.estado` completo. Legacy: regla vieja, el paseo entero
+    'historico'.
+    """
+    entrada = recogida_de_dueno(paseo, id_dueno)
+    if entrada is None:
+        return paseo['estado'] == 'historico'
+    return entrada['estado'] in ('entregada', 'no_recogida')
+
+
+def todas_las_recogidas_resueltas(paseo):
+    """
+    Punto 3 (20 oct) - True si NINGUNA recogida sigue 'pendiente' ni
+    'recogida' - MISMO criterio que el filtro atómico de
+    finalizar_paseo() (`$not`/`$elemMatch`), pero evaluado en Python
+    sobre un documento ya en memoria (se usa para decidir si vale la
+    pena INTENTAR el auto-finalizado tras marcar_entrega()/
+    marcar_no_recogida(), sin otra consulta a Mongo de por medio - la
+    condición real, atómica, sigue siendo la de finalizar_paseo()).
+    """
+    return not any(r['estado'] in ('pendiente', 'recogida') for r in paseo.get('recogidas', []))
+
+
 def marcar_entrega(*, id_paseo, id_paseador, id_dueno):
     """
     "Entregado": la recogida de ESE dueño pasa de 'recogida' a

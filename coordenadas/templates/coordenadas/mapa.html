@@ -194,6 +194,23 @@ solo ocultarla con CSS, para no exponerle un link que lo rebotaria.
 </a>
 {% endif %}
 
+{% comment %}
+Ajuste del 20 de octubre, punto 3 - "antes de la recogida ve «Esperando
+la recogida», sin mapa ni ubicación del paseador": mientras
+`recogida_pendiente` sea True (solo puede serlo para un dueño, nunca el
+paseador - ver coordenadas.views_web.mapa_paseo()), se reemplaza TODO
+el bloque del mapa por este aviso - ni el div de Leaflet se renderiza,
+ni los mensajes de "sin puntos"/"esperando ubicación" de abajo (que no
+aplican: antes de la recogida no hay nada que "esperar ver", el
+paseador puede estar perfectamente activo con OTRO dueño).
+{% endcomment %}
+{% if recogida_pendiente %}
+<div class="card mb-3">
+  <div class="card-body text-center py-5">
+    <p class="text-muted mb-0">Esperando la recogida…</p>
+  </div>
+</div>
+{% else %}
 <div class="card mb-3" style="overflow: hidden;">
   <div class="card-body p-0">
     <div id="mapa" style="height: 60vh; min-height: 400px;"></div>
@@ -226,6 +243,7 @@ alarma).
   {% endcomment %}
   <span id="ultima-ubicacion-hace"></span>
 </p>
+{% endif %}
 
 {% if paseo.fotos %}
 <div class="mt-4">
@@ -298,6 +316,30 @@ lista.html, pero acotado a ESTE paseo en vez de todos los del usuario.
 <script>
 (function () {
   var urlDatos = "{% url 'coordenadas:datos_paseo' id_paseo %}";
+
+  // Ajuste del 20 de octubre, punto 3 - mientras se espera la
+  // recogida no hay NADA que inicializar acá (el "#mapa" de Leaflet ni
+  // siquiera está en el DOM - ver la condición "recogida_pendiente" de
+  // arriba): un sondeo liviano cada 8s (mismo intervalo que el resto
+  // del polling de esta pantalla) solo para detectar el momento en que
+  // el paseador marca "Recogido" y recargar la página UNA vez - más
+  // simple y menos riesgoso que reconstruir el mapa/temporizador en
+  // caliente sin un recargado de por medio.
+  var recogidaPendienteInicial = {% if recogida_pendiente %}true{% else %}false{% endif %};
+  if (recogidaPendienteInicial) {
+    function revisarSiYaRecogieron() {
+      fetch(urlDatos)
+        .then(function (resp) { return resp.json(); })
+        .then(function (data) {
+          if (!data.recogida_pendiente) {
+            location.reload();
+          }
+        });
+    }
+    setInterval(revisarSiYaRecogieron, 8000);
+    return;
+  }
+
   // Placeholder reemplazado en JS (mismo patrón que formFoto en
   // bienvenida_paseador.html) - Django arma la URL real en tiempo de
   // render, el id del incidente recién se sabe en cada respuesta del

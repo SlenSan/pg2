@@ -118,18 +118,24 @@ def _hay_punto_reciente(id_paseo):
 
 def _pendiente_calificar(paseo, id_dueno):
     """
-    True si este paseo ya termino y ESTE dueño (uno de posiblemente
-    varios en el mismo paseo - ver CLAUDE.md, "Corrección de alcance
-    2026-09-25") TODAVIA no lo califico. Independiente de si otro dueño
-    del mismo paseo ya calificó - cada uno tiene su propia calificación
-    (indice unico compuesto id_paseo+id_dueno, ver calificaciones/
-    repository.py). Sirve tanto para la carga inicial del mapa como para
-    el polling, para que el aviso "El paseo finalizó, califícalo ahora"
-    aparezca solo cuando corresponde, en los dos casos que pidio el
-    dueño (pagina ya abierta cuando el paseador termina, o entrando
-    despues a un paseo recien terminado).
+    True si ESTE dueño (uno de posiblemente varios en el mismo paseo -
+    ver CLAUDE.md, "Corrección de alcance 2026-09-25") ya puede calificar
+    y TODAVIA no lo hizo. Independiente de si otro dueño del mismo paseo
+    ya calificó - cada uno tiene su propia calificación (indice unico
+    compuesto id_paseo+id_dueno, ver calificaciones/repository.py).
+    Sirve tanto para la carga inicial del mapa como para el polling,
+    para que el aviso "El paseo finalizó, califícalo ahora" aparezca
+    solo cuando corresponde, en los dos casos que pidio el dueño (pagina
+    ya abierta cuando se resuelve su propia recogida, o entrando después
+    a un paseo ya resuelto para él).
+
+    Ajuste del 20 de octubre, punto 3 - ya NO exige `paseo['estado'] ==
+    'historico'`: paseos_repository.dueno_puede_calificar() mira la
+    recogida de ESTE dueño (entregada), no el estado del paseo
+    completo - puede calificar aunque el paseo siga 'en_vivo' para
+    otro dueño. Un paseo legacy (sin recogidas) sigue la regla vieja.
     """
-    if paseo['estado'] != 'historico':
+    if not paseos_repository.dueno_puede_calificar(paseo, id_dueno):
         return False
     return calificaciones_repository.obtener_por_paseo_y_dueno(paseo['_id'], id_dueno) is None
 
@@ -373,6 +379,14 @@ def mapa_paseo(request, id_paseo):
         'mascotas': mascotas,
         'mascotas_certificados': mascotas_certificados,
         'paseador': paseador,
+        # Ajuste del 20 de octubre, punto 3 - "antes de la recogida ve
+        # «Esperando la recogida», sin mapa ni ubicación del paseador":
+        # True SOLO para un dueño cuya mascota todavía no fue recogida
+        # en un paseo CON recogidas (rango is _SIN_PUNTOS_VISIBLES, ver
+        # A3) - nunca para el paseador, y nunca para un paseo legacy
+        # (rango None, sin ese concepto). La plantilla reemplaza TODO
+        # el bloque del mapa por este aviso mientras sea True.
+        'recogida_pendiente': es_dueno and rango is _SIN_PUNTOS_VISIBLES,
         'duracion_acordada_etiqueta': duracion_acordada_etiqueta,
         'hora_inicio_iso': _fecha_iso_utc(hora_inicio_duracion),
         'hora_fin_iso': _fecha_iso_utc(hora_fin_duracion),
@@ -455,6 +469,14 @@ def coordenadas_de_paseo(request, id_paseo):
     return JsonResponse({
         'estado': paseo['estado'],
         'emergencia': paseo.get('emergencia', False),
+        # Ajuste del 20 de octubre, punto 3 - mismo criterio que
+        # mapa_paseo(): True mientras la mascota de ESTE dueño todavía
+        # no fue recogida. mapa.html compara esto contra el valor con el
+        # que se renderizó la página (recogida_pendiente_inicial) - si
+        # pasó de True a False (el paseador acaba de marcar "Recogido"
+        # mientras el dueño tenía esta pantalla abierta), recarga la
+        # página una vez en vez de reconstruir el mapa en caliente.
+        'recogida_pendiente': es_dueno and rango is _SIN_PUNTOS_VISIBLES,
         # None si no hay un incidente real (ver _info_incidente_reciente)
         # - el JS decide si mostrar el banner segun esto, no segun
         # "emergencia".

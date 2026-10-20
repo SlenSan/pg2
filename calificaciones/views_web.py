@@ -22,12 +22,23 @@ def calificar_paseo(request, id_paseo):
     es_dueno_del_paseo = paseo and ObjectId(id_dueno) in paseo.get('id_duenos', [])
     # Los 3 redirect de este archivo que mencionan "no se puede/ya se
     # calificó" van a Historial, no a "Paseos activos" (antes "Mis
-    # paseos") - un paseo calificable es SIEMPRE 'historico', y desde el
-    # cambio de alcance del punto (d) del reporte de hallazgos, "Paseos
-    # activos" ya no muestra NUNCA paseos 'historico' (solo
-    # disponible/en_vivo) - mandar ahi dejaria al dueño sin ver el paseo
-    # del que se le esta hablando.
-    if not es_dueno_del_paseo or paseo['estado'] != 'historico':
+    # paseos") - un paseo calificable ya aparece en el historial de ESE
+    # dueño (ver paseos.views_web.historial(), mismo criterio que
+    # paseos_repository.dueno_puede_calificar() de abajo), y "Paseos
+    # activos" nunca muestra un paseo ya resuelto para este dueño -
+    # mandar ahi dejaria al dueño sin ver el paseo del que se le esta
+    # hablando.
+    #
+    # Ajuste del 20 de octubre, punto 3 - "la calificación se habilita
+    # por dueño cuando su recogida está entregada, no cuando el paseo
+    # completo pasa a historico": ya NO se exige `paseo['estado'] ==
+    # 'historico'` (un paseo multi-dueño puede seguir 'en_vivo' para
+    # otro dueño mientras ESTE ya entregó) - paseos_repository.
+    # dueno_puede_calificar() mira la recogida de ESTE dueño puntual
+    # (entregada - nunca no_recogida, "no se puede calificar" es
+    # explícito para ese caso); un paseo legacy (sin recogidas) sigue
+    # la regla vieja, todo el paseo 'historico'.
+    if not es_dueno_del_paseo or not paseos_repository.dueno_puede_calificar(paseo, id_dueno):
         messages.error(request, 'Este paseo no se puede calificar.')
         return redirect('paseos:historial')
 

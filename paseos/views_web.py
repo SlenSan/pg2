@@ -391,8 +391,24 @@ def _items_mis_paseos(id_dueno):
     10s desde mis_paseos.html, ver RNF2) calcule exactamente lo mismo que
     la carga completa - mismo patron que _paseo_activo_dueno() o
     _horarios_disponibles_paseador().
+
+    Ajuste del 20 de octubre, punto 3 - "Paseos activos" ya no se puede
+    filtrar solo por `paseo.estado` (Mongo): un paseo puede seguir
+    'en_vivo' (otros dueños todavía caminando) mientras que PARA ESTE
+    dueño su propia recogida ya está 'entregada'/'no_recogida' - ese
+    paseo debe desaparecer de acá y pasar a SU historial, aunque el
+    documento siga 'en_vivo' para el resto. Por eso ya no se usa
+    listar_activos_por_dueno() (filtro Mongo por estado del PASEO
+    completo) - se usa listar_por_dueno() (todos, sin filtrar) y se
+    filtra en Python con dueno_recogida_resuelta(), que sí mira la
+    recogida de ESTE dueño puntual. 'historico' nunca aparece aquí
+    (ya resuelto para todos, por definición).
     """
-    paseos = repository.listar_activos_por_dueno(id_dueno)
+    oid_dueno = ObjectId(id_dueno)
+    paseos = [
+        p for p in repository.listar_por_dueno(id_dueno)
+        if p['estado'] != 'historico' and not repository.dueno_recogida_resuelta(p, id_dueno)
+    ]
     paseadores_por_id = usuarios_repository.obtener_varios_por_id(
         [p['id_paseador'] for p in paseos]
     )
@@ -405,17 +421,35 @@ def _items_mis_paseos(id_dueno):
     # Sin "calificado"/ids_calificados aca: esta pantalla ya no muestra
     # NUNCA paseos 'historico' (los unicos que se pueden calificar), asi
     # que esa pregunta dejo de aplicar - vive en historial().
-    return [
-        {
+    items = []
+    for p in paseos:
+        entrada = repository.recogida_de_dueno(p, id_dueno)
+        if entrada:
+            # Punto 3 - nombres de las mascotas de ESTE dueño, no de
+            # paseo.id_mascotas completo (si otro dueño en el mismo
+            # paseo ya tuvo un "no se pudo recoger", sus mascotas salen
+            # de ahí - ver marcar_no_recogida() - pero eso no debe
+            # afectar el nombre que ve ESTE dueño de las SUYAS).
+            mascotas_nombres = _nombres_mascotas_de_recogida(p, id_dueno)
+            # Punto 3 - texto que ve el dueño según el estado de SU
+            # propia recogida: "Esperando la recogida" (sin mapa, ver
+            # A3) o "En paseo" (ya recogida, con mapa/duración/distancia
+            # en vivo - la plantilla decide si mostrar "Ver mapa" según
+            # este mismo estado).
+            estado_recogida = entrada['estado']
+        else:
+            mascotas_nombres = mascotas_repository.nombres_unidos(
+                mascotas_repository.resolver_lista(p.get('id_mascotas'), mis_mascotas_por_id)
+            )
+            estado_recogida = None  # legacy - sin concepto de recogida, "Ver mapa" siempre disponible
+        items.append({
             'id_paseo': str(p['_id']),
             'paseo': p,
             'paseador': paseadores_por_id.get(p['id_paseador']),
-            'mascotas_nombres': mascotas_repository.nombres_unidos(
-                mascotas_repository.resolver_lista(p.get('id_mascotas'), mis_mascotas_por_id)
-            ),
-        }
-        for p in paseos
-    ]
+            'mascotas_nombres': mascotas_nombres,
+            'estado_recogida': estado_recogida,
+        })
+    return items
 
 
 @requiere_dueno
@@ -449,13 +483,21 @@ def estado_mis_paseos(request):
 @requiere_dueno
 def historial(request):
     """
-    Historial de paseos COMPLETADOS (solo estado='historico'), con el
-    patron de tarjetas del dashboard. Distinto de mis_paseos (que
-    muestra cualquier estado y sirve para rastrear un paseo agendado o
-    en curso - se deja intacta esa vista, esta es nueva).
+    Historial de paseos COMPLETADOS para ESTE dueño, con el patron de
+    tarjetas del dashboard. Distinto de mis_paseos (que muestra
+    cualquier estado y sirve para rastrear un paseo agendado o en curso
+    - se deja intacta esa vista, esta es nueva).
+
+    Ajuste del 20 de octubre, punto 3 - ya NO filtra por `paseo.estado
+    == 'historico'` a secas: "desde Entregado su paseo se ve
+    finalizado: pasa a su historial", aunque el documento siga 'en_vivo'
+    para otros dueños (multi-dueño, Ley Kiara). `dueno_recogida_resuelta()`
+    mira la recogida de ESTE dueño (entregada o no_recogida), no el
+    estado del paseo completo - un paseo legacy (sin recogidas) sigue la
+    regla vieja (todo el paseo 'historico').
     """
     id_dueno = request.session['id_usuario']
-    paseos = [p for p in repository.listar_por_dueno(id_dueno) if p['estado'] == 'historico']
+    paseos = [p for p in repository.listar_por_dueno(id_dueno) if repository.dueno_recogida_resuelta(p, id_dueno)]
     paseadores_por_id = usuarios_repository.obtener_varios_por_id(
         [p['id_paseador'] for p in paseos if p.get('id_paseador')]
     )
@@ -503,7 +545,20 @@ def historial(request):
             duracion_acordada_etiqueta = None
 
         calificacion = calificaciones_por_paseo.get(p['_id'])
-        mascotas_paseo = mascotas_repository.resolver_lista(p.get('id_mascotas'), mis_mascotas_por_id)
+        # Punto 3 (20 oct) - las mascotas de la entrada de recogida de
+        # ESTE dueño, NO `paseo.id_mascotas` completo: si la recogida
+        # terminó en "no se pudo recoger", esas mascotas ya se quitaron
+        # de `paseo.id_mascotas` (ver marcar_no_recogida() - $pullAll),
+        # así que resolverlas desde ahí dejaría esta tarjeta sin nombre
+        # ni foto. `entrada_recogida['id_mascotas']` es la ÚNICA lista
+        # que conserva esto aunque la mascota ya no esté caminando.
+        # Legacy (sin recogidas): se mantiene el criterio de siempre.
+        ids_mascotas_item = entrada_recogida['id_mascotas'] if entrada_recogida else p.get('id_mascotas')
+        mascotas_paseo = mascotas_repository.resolver_lista(ids_mascotas_item, mis_mascotas_por_id)
+        # "No realizado" (pedido explícito) - con "no se pudo recoger",
+        # ese dueño no puede calificar (dueno_puede_calificar() ya lo
+        # excluye) y no tiene sentido ofrecerle "Pendiente de calificar".
+        recogida_no_realizada = bool(entrada_recogida and entrada_recogida['estado'] == 'no_recogida')
         items.append({
             'id_paseo': str(p['_id']),
             'paseo': p,
@@ -515,6 +570,8 @@ def historial(request):
             'duracion_acordada_etiqueta': duracion_acordada_etiqueta,
             'puntuacion': calificacion['puntuacion'] if calificacion else None,
             'distancia_texto': distancia_texto,
+            'recogida_no_realizada': recogida_no_realizada,
+            'motivo_no_recogida': entrada_recogida.get('motivo_no_recogida') if entrada_recogida else None,
         })
 
     return render(request, 'paseos/historial.html', {'items': items})
@@ -657,10 +714,11 @@ def finalizar_paseo(request, id_paseo):
 
 
 def _recogida_de_dueno(paseo, id_dueno):
-    """Entrada de `paseo.recogidas` de ese dueño, o None - helper compartido
-    por las 3 vistas de abajo para armar el mensaje/la notificación."""
-    oid_dueno = ObjectId(id_dueno)
-    return next((r for r in paseo.get('recogidas', []) if r['id_dueno'] == oid_dueno), None)
+    """Alias local de `repository.recogida_de_dueno()` (ajuste del 20 de
+    octubre, punto 3 - esa función pasó a ser pública y compartida entre
+    apps). Se mantiene este nombre para no tocar los 3 llamadores de
+    abajo, que ya la usaban con esta firma."""
+    return repository.recogida_de_dueno(paseo, id_dueno)
 
 
 def _nombres_mascotas_de_recogida(paseo, id_dueno):
@@ -699,6 +757,36 @@ def marcar_recogida(request, id_paseo, id_dueno):
     return redirect('usuarios:bienvenida_paseador')
 
 
+def _autofinalizar_si_corresponde(paseo, id_paseador):
+    """
+    Ajuste del 20 de octubre, punto 3 - "cuando ya no queda ninguna
+    recogida en pendiente ni en recogida, el paseo se finaliza
+    automáticamente: pasa a historico, se guardan hora_fin y
+    distancia_m, y se detiene el GPS" (el GPS se detiene solo porque el
+    emisor global de base.html está condicionado a
+    `id_paseo_en_vivo_del_paseador`, que deja de existir en cuanto el
+    paseo ya no es 'en_vivo' - nada que hacer acá para eso).
+
+    Se llama desde marcar_entrega()/marcar_no_recogida() justo después
+    de que ESA recogida puntual se actualizó con éxito - repository.
+    todas_las_recogidas_resueltas() es un chequeo barato en Python
+    sobre el documento ya en memoria, para no llamar a
+    repository.finalizar_paseo() (un find_one_and_update real) en cada
+    recogida resuelta si todavía faltan otras. La condición ATÓMICA de
+    verdad sigue siendo la de finalizar_paseo() (reusada tal cual, la
+    MISMA que ya usaba el botón manual "Finalizar paseo" - no se
+    duplica esa regla en dos lugares); si por una condición de carrera
+    ya no aplica (p.ej. otra entrada cambió justo entre medio),
+    finalizar_paseo() simplemente no hace nada y devuelve None.
+    """
+    if not repository.todas_las_recogidas_resueltas(paseo):
+        return
+    paseo_final = repository.finalizar_paseo(id_paseo=paseo['_id'], id_paseador=id_paseador)
+    if paseo_final:
+        distancia_m = coordenadas_repository.distancia_recorrida_m(paseo_final['_id'])
+        repository.guardar_distancia(paseo_final['_id'], distancia_m)
+
+
 @require_POST
 @requiere_paseador
 def marcar_no_recogida(request, id_paseo, id_dueno):
@@ -723,6 +811,13 @@ def marcar_no_recogida(request, id_paseo, id_dueno):
         tipo='emergencia',
         mensaje=f'{request.session.get("nombre")} no pudo recoger a {nombres}: {form.cleaned_data["motivo"]}',
     )
+    # Ajuste del 20 de octubre, punto 3 - "No se pudo recoger" también
+    # cuenta como "resuelta" para efectos de auto-finalizar (pedido
+    # explícito: "si el paseador necesita cerrar un paseo con recogidas
+    # pendientes por fuerza mayor, solo puede hacerlo marcando cada una
+    # como No se pudo recoger o Entregado" - las dos son el mismo
+    # mecanismo de cierre).
+    _autofinalizar_si_corresponde(paseo, id_paseador)
     messages.success(request, 'Registrado - esas mascotas ya no hacen parte de este paseo.')
     return redirect('usuarios:bienvenida_paseador')
 
@@ -746,6 +841,9 @@ def marcar_entrega(request, id_paseo, id_dueno):
         tipo='fin_paseo',
         mensaje=f'{request.session.get("nombre")} entregó a {nombres}.',
     )
+    # Ajuste del 20 de octubre, punto 3 - auto-finalizar si esta era la
+    # última recogida pendiente/recogida (ver _autofinalizar_si_corresponde()).
+    _autofinalizar_si_corresponde(paseo, id_paseador)
     messages.success(request, 'Entrega registrada.')
     return redirect('usuarios:bienvenida_paseador')
 

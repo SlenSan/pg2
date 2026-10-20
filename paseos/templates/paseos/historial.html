@@ -37,6 +37,15 @@
           </div>
         </a>
         <div class="d-flex flex-wrap gap-2">
+          {% comment %}
+          Ajuste del 20 de octubre, punto 3 - "con No se pudo recoger,
+          su paseo se ve como No realizado, con el motivo, y no se
+          puede calificar" (pedido explícito): reemplaza por completo
+          la fila de puntuación/calificar, nunca convive con ella.
+          {% endcomment %}
+          {% if item.recogida_no_realizada %}
+          <span class="badge bg-danger">No realizado</span>
+          {% else %}
           {% if item.puntuacion %}
           <span class="badge bg-success">{{ item.puntuacion }} / 5</span>
           {% else %}
@@ -44,10 +53,14 @@
             Pendiente de calificar
           </a>
           {% endif %}
+          {% endif %}
           {% if item.paseo.emergencia %}
           <span class="badge bg-danger">Incidente reportado</span>
           {% endif %}
         </div>
+        {% if item.recogida_no_realizada and item.motivo_no_recogida %}
+        <p class="text-muted small mt-2 mb-0">Motivo: {{ item.motivo_no_recogida }}</p>
+        {% endif %}
       </div>
     </div>
   </div>

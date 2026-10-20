@@ -2707,6 +2707,154 @@ puntos, cada uno con su propio commit.
   Chrome (el operador `in` sigue viendo la clave aunque se la
   sobreescriba con `undefined`), pero el código de esa rama no se tocó.
 
+- **Punto 3 — inicio y fin del paseo por dueño**: diagnóstico - antes de
+  este ajuste, el dueño veía (en `bienvenida_paseador.html` solo como
+  paseador, pero el DUEÑO no tenía una pantalla propia de "detalle de MI
+  recogida") el estado `pendiente`/`recogida`/`entregada`/`no_recogida`
+  SOLO indirectamente: `_rango_visible_para_dueno()` (A3) ya distinguía
+  "sin recoger todavía" de "con mapa real", pero el mapa, "Paseos
+  activos" e "historial" seguían leyendo `paseo.estado` (del documento
+  COMPLETO) para decidir dónde mostrar cada paseo, nunca la recogida de
+  ESE dueño puntual. Consecuencias concretas antes del ajuste: (1) un
+  paseo multi-dueño donde D1 ya fue entregado pero D2 sigue en curso
+  seguía apareciendo en "Paseos activos" de D1 (no en su historial) y
+  D1 NO podía calificar todavía, porque el documento seguía `en_vivo`;
+  (2) "Finalizar paseo" era un botón manual que el paseador debía
+  recordar pulsar incluso con todas las recogidas ya cerradas; (3) antes
+  de la recogida, el mapa de un dueño mostraba mensajes genéricos
+  ("Todavía no hay puntos...", pensados para "sin GPS todavía", no para
+  "tu mascota ni siquiera salió"). Se confirmó esto releyendo
+  `calificaciones.views_web.calificar_paseo()` (gate `paseo['estado'] !=
+  'historico'`), `paseos.views_web.historial()`/`_items_mis_paseos()`
+  (filtro `p['estado']`), y `coordenadas.views_web._pendiente_calificar()`
+  (mismo gate) antes de tocar nada.
+
+  **Helpers compartidos nuevos** (`paseos/repository.py`, funciones
+  puras, sin acceso a Mongo - mismo criterio que `etiqueta_duracion_acordada()`):
+  `recogida_de_dueno(paseo, id_dueno)` (la entrada de ESE dueño, o
+  `None` en un paseo legacy), `dueno_puede_calificar()` (entregada, o
+  legacy historico - NUNCA no_recogida, pedido explícito),
+  `dueno_recogida_resuelta()` (entregada O no_recogida - ambas "ya no
+  hay nada pendiente para este dueño", aunque solo la primera se pueda
+  calificar), `todas_las_recogidas_resueltas()` (ninguna
+  pendiente/recogida en todo el paseo - mismo criterio que el filtro
+  atómico de `finalizar_paseo()`, pero en Python sobre un documento ya
+  en memoria). El helper `_recogida_de_dueno()` privado de
+  `paseos/views_web.py` (de A2) ahora delega en la versión pública, en
+  vez de duplicar el recorrido del array.
+
+  **Auto-finalizado**: `_autofinalizar_si_corresponde(paseo, id_paseador)`
+  (nueva, `paseos/views_web.py`) se llama desde `marcar_entrega()` Y
+  `marcar_no_recogida()` justo después de que esa recogida puntual se
+  actualizó con éxito - si `todas_las_recogidas_resueltas()` da `True`,
+  llama a `repository.finalizar_paseo()` (la MISMA función atómica que
+  ya usaba el botón manual, nunca una regla nueva) y guarda la
+  distancia, igual que hacía la vista manual. El GPS se corta solo
+  (nada que hacer ahí): el emisor global de `base.html` depende de
+  `id_paseo_en_vivo_del_paseador`, que deja de existir en cuanto el
+  paseo ya no es `en_vivo`.
+
+  **"Iniciar paseo" → "Iniciar ruta"**: solo la etiqueta del botón
+  (`usuarios/templates/usuarios/_horarios_paseador.html`) - la
+  URL/vista/nombre interno `paseos:iniciar_paseo` no cambian.
+
+  **"Finalizar paseo" desaparece para un paseo con `recogidas`**
+  (`bienvenida_paseador.html`): se reemplaza por un texto informativo
+  ("El paseo se finaliza automáticamente..."); un paseo SIN `recogidas`
+  (legacy) conserva el botón de siempre, con su confirmación (punto A6).
+  La defensa de BACKEND de que un POST forjado a esta URL no finalice
+  con recogidas pendientes YA EXISTÍA desde A2 (`repository.
+  finalizar_paseo()`) - no hizo falta agregar nada ahí, solo ocultar el
+  botón en la interfaz para el caso en que ya no aplica.
+
+  **Mapa y "Paseos activos" por dueño**: `mapa_paseo()`/`coordenadas_de_paseo()`
+  agregan `recogida_pendiente` (`True` solo para un dueño cuya mascota
+  todavía no fue recogida, `rango is _SIN_PUNTOS_VISIBLES` de A3) - la
+  plantilla reemplaza TODO el bloque del mapa (ni el `<div id="mapa">`
+  de Leaflet se renderiza) por "Esperando la recogida…", y el JS se
+  reduce a un sondeo liviano de 8s que solo recarga la página una vez
+  cuando detecta que `recogida_pendiente` pasó a `False` (más simple y
+  menos riesgoso que reconstruir el mapa/temporizador en caliente sin
+  un recargado de por medio). `_lista_paseos_activos.html` muestra
+  "Esperando la recogida"/"En paseo" en vez del badge de
+  `paseo.estado`, y "Ver mapa" solo aparece una vez que la recogida de
+  ESE dueño ya es `recogida` (antes, bastaba con `hora_inicio` del
+  paseo completo).
+
+  **Calificar por dueño**: `calificaciones.views_web.calificar_paseo()`
+  y `coordenadas.views_web._pendiente_calificar()` cambian su gate de
+  `paseo['estado'] != 'historico'` a `not dueno_puede_calificar(...)` -
+  el índice único compuesto `(id_paseo, id_dueno)` ya existía (A2), así
+  que no hizo falta ningún cambio de esquema para permitir calificar
+  mientras el paseo sigue `en_vivo` para otro dueño.
+
+  **Historial por dueño**: `historial()` filtra con
+  `dueno_recogida_resuelta()` en vez de `p['estado']=='historico'` -
+  un paseo multi-dueño aparece en el historial de CADA dueño en el
+  momento en que SU PROPIA recogida se resuelve, no cuando el
+  documento completo llega a `historico`. "No realizado" (nuevo badge,
+  reemplaza por completo la fila de puntuación/calificar, nunca
+  convive con ella) + el motivo, para una recogida `no_recogida`.
+  **Bug de datos encontrado de paso**: tanto `historial()` como la
+  tarjeta "Mis mascotas"/el "Finalizar paseo" manual de A2 resolvían
+  las mascotas de una recogida leyendo `paseo.id_mascotas` (el array
+  completo del paseo) - para una recogida `no_recogida`, esas mascotas
+  YA se quitaron de ahí (`$pullAll`, ver `marcar_no_recogida()`), así
+  que esa tarjeta se habría quedado sin nombre ni foto. Corregido para
+  usar `entrada_recogida['id_mascotas']` (el snapshot propio de la
+  recogida, nunca tocado por el `$pullAll`) en los tres lugares que
+  ahora necesitan mostrar una recogida ya resuelta: `historial()`, la
+  tarjeta "Mis mascotas" y la acción rápida "Calificar" del dashboard
+  del dueño (`usuarios.views_web.bienvenida()`), que de paso también se
+  actualizaron para usar `dueno_puede_calificar()`/`dueno_recogida_resuelta()`
+  en vez de `paseo.estado`, por la misma razón que `historial()`.
+
+  **Banner "Paseo activo ahora"** (`usuarios.views_web._paseo_activo_dueno()`,
+  dashboard del dueño): solo se muestra mientras la recogida de ESE
+  dueño está `recogida` (no antes - privacidad de A3, nada que mostrar
+  todavía -, ni después de `entregada`/`no_recogida` - ya es "activo"
+  para otro dueño, no para este). Los minutos transcurridos ahora se
+  cuentan desde `hora_recogida` de ESE dueño (su propio tramo, RF9 por
+  dueño), no desde `paseo.hora_inicio` (cuándo arrancó la ruta
+  completa, que puede ser bastante antes de llegar a este dueño en
+  particular). Legacy: sigue siendo `paseo.hora_inicio`, sin cambios.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, D1/D2/P1 - guion
+  completo): inscripción de D1 y D2 en el MISMO horario → iniciar ruta
+  → D1 ve "Esperando la recogida" sin `<div id="mapa">` en el HTML →
+  intento de calificar antes de tiempo rechazado → recoger D1 → D1 YA
+  ve el mapa real, D2 SIGUE viendo "Esperando la recogida" (confirma
+  que la recogida de D1 no afecta a D2) → recoger D2 → POST manual
+  forjado a "Finalizar paseo" con D2 todavía `recogida` NO finaliza el
+  paseo (sigue `en_vivo`, confirmado en Mongo) → entregar D1 → el
+  paseo SIGUE `en_vivo` (D2 pendiente) PERO D1 ya pudo calificar con
+  éxito (POST real, 1-5 estrellas) y ya ve el paseo en SU historial,
+  ya NO en "Paseos activos" → entregar D2 (la última pendiente) → el
+  paseo se auto-finalizó solo (`historico`, `hora_fin` y `distancia_m`
+  guardados) y D2 también pudo calificar. Por separado: un paseo de un
+  solo dueño con "No se pudo recoger" se auto-finalizó de inmediato
+  (era la única recogida), mostró "No realizado" + el motivo en el
+  historial, y el intento de calificarlo se rechazó. Compatibilidad
+  legacy (paseo sin `recogidas`, clonado del mismo paseo real de
+  producción `6acda740…`) re-verificada completa: aparece en "Paseos
+  activos" mientras `en_vivo`, NO se puede calificar hasta
+  `historico`, el botón manual "Finalizar paseo" sigue funcionando, y
+  tras finalizarlo pasa a historial y YA se puede calificar - sin
+  errores 500 en ningún paso. **Bug real encontrado y corregido antes
+  de poder ejecutar nada de esto**: un comentario JS en `mapa.html`
+  mencionaba literalmente `{% if recogida_pendiente %}` como texto
+  explicativo - Django parsea cualquier `{% %}` en todo el archivo,
+  sin importar que esté dentro de un comentario `//` de JavaScript, así
+  que esa prosa se interpretó como una etiqueta de plantilla real sin
+  cierre, rompiendo TODO el archivo con `TemplateSyntaxError` (500 en
+  cualquier mapa). Corregido reescribiendo el comentario sin esa
+  sintaxis literal.
+
+  **Solo leído en código**: duraciones de franjas de 45 min, 1 h 30 y
+  3h - ya verificadas por completo en el punto 1 de este mismo reporte
+  (misma función `duraciones_acordadas_disponibles()`, sin necesidad de
+  repetir la prueba).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
