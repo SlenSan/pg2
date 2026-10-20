@@ -71,6 +71,32 @@ def marcar_notificado(id_incidente):
     get_db().incidentes.update_one({'_id': id_incidente}, {'$set': {'notificado': True}})
 
 
+# Incremento 4 fase 3, punto A8 - "se puede agregar información mientras
+# el paseo esté en_vivo y hasta 24 horas después de finalizado. Ese
+# plazo es una constante con nombre" (pedido explícito de la tarea).
+HORAS_LIMITE_COMPLEMENTO_INCIDENTE = 24
+
+
+def agregar_complemento(id_incidente, *, texto, foto):
+    """
+    Punto A8 - el reporte original (tipo, descripción, foto, ubicación,
+    dirección, fecha) queda inmutable: esta función NUNCA modifica esos
+    campos, solo agrega (`$push`) una entrada nueva a `complementos`. No
+    existe ninguna función en este archivo que actualice esos campos
+    originales - la inmutabilidad no depende de que esta función se use
+    "bien", es que no hay otra forma de tocarlos desde el código.
+    """
+    complemento = {
+        'texto': texto,
+        'foto': foto,  # None si no se adjuntó (ver ComplementoIncidenteForm)
+        'fecha': datetime.now(timezone.utc),
+    }
+    get_db().incidentes.update_one(
+        {'_id': id_incidente}, {'$push': {'complementos': complemento}},
+    )
+    return complemento
+
+
 _SEGUNDOS_DUPLICADO_INCIDENTE = 10
 
 

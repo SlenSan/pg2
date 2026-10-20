@@ -52,3 +52,22 @@ class ReportarIncidenteForm(forms.Form):
             if cleaned.get('tipo') != _TIPO_SIN_MASCOTA and not cleaned.get('id_mascota'):
                 self.add_error('id_mascota', 'Selecciona a cuál mascota afecta este incidente.')
         return cleaned
+
+
+class ComplementoIncidenteForm(forms.Form):
+    """
+    Incremento 4 fase 3, punto A8 - "Agregar información" a un incidente
+    ya reportado: nunca modifica el reporte original (ver
+    incidentes.repository.agregar_complemento), solo agrega una entrada
+    nueva a la lista `complementos`.
+    """
+    texto = forms.CharField(
+        max_length=500,
+        label='Información adicional',
+        widget=forms.Textarea(attrs={'class': _INPUT_CLASS, 'rows': 3}),
+    )
+    foto = forms.ImageField(
+        required=False,
+        label='Foto (opcional)',
+        widget=forms.ClearableFileInput(attrs={'class': _INPUT_CLASS, 'accept': 'image/*'}),
+    )

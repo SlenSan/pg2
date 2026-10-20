@@ -22,7 +22,7 @@ from core.media import ErrorSubidaImagen, ErrorValidacionImagen, subir_imagen
 from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository
-from paseos.forms import InscribirMascotaForm, PublicarHorarioForm, SubirFotoPaseoForm
+from paseos.forms import InscribirMascotaForm, MotivoNoRecogidaForm, PublicarHorarioForm, SubirFotoPaseoForm
 from paseos.repository import MAXIMO_MASCOTAS_POR_PASEO, ZONAS_VALIDAS, ZONAS_VALIDAS_CON_NUMERO, etiqueta_zona
 from usuarios import repository as usuarios_repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
@@ -191,6 +191,11 @@ def detalle_paseador(request, id_paseador):
         # no haya llegado al maximo.
         if h.get('acepta_inscripciones', True) and len(h.get('id_mascotas', [])) < MAXIMO_MASCOTAS_POR_PASEO
         and h.get('horario_hasta') and h['horario_hasta'] >= ahora_utc
+        # Incremento 4 fase 3, punto A7 - "si la franja dura menos de 30
+        # minutos, no se puede inscribir": sin ninguna duración acordada
+        # que ofrecer, no tiene sentido mostrar el horario para inscribir
+        # en absoluto (sería pedirle elegir entre cero opciones).
+        and repository.duraciones_acordadas_disponibles(h['horario_desde'], h['horario_hasta'])
     ]
     if not horarios:
         messages.error(request, 'Este paseador no tiene horarios disponibles en este momento.')
@@ -198,6 +203,21 @@ def detalle_paseador(request, id_paseador):
 
     mis_mascotas = mascotas_repository.listar_por_dueno(request.session['id_usuario'])
     tiene_mascotas = bool(mis_mascotas)
+
+    # Incremento 4 fase 3, punto A1 - prellena el formulario de
+    # inscripción con la última recogida de este dueño; la primera vez
+    # (sin `ultima_recogida` todavía) cae a `direccion`/`telefono` del
+    # propio perfil, que ya existen (`direccion` es opcional en el
+    # registro del dueño - puede venir vacía).
+    usuario_dueno = usuarios_repository.obtener_por_id(request.session['id_usuario'])
+    ultima_recogida = usuario_dueno.get('ultima_recogida') if usuario_dueno else None
+    if ultima_recogida:
+        initial_recogida = ultima_recogida
+    else:
+        initial_recogida = {
+            'direccion': (usuario_dueno or {}).get('direccion', ''),
+            'telefono': (usuario_dueno or {}).get('telefono', ''),
+        }
 
     calificaciones_con_comentario = [
         c for c in calificaciones_repository.listar_por_paseador(oid_paseador) if c.get('comentario')
@@ -226,7 +246,16 @@ def detalle_paseador(request, id_paseador):
             # casillas nuevas una vez marcadas tantas como quepan, para
             # que nadie termine seleccionando de mas y se lleve el
             # rechazo recien al enviar (ver inscribir_en_horario()).
-            'form': InscribirMascotaForm(mascotas=mis_mascotas, prefix=id_paseo),
+            'form': InscribirMascotaForm(
+                mascotas=mis_mascotas, prefix=id_paseo, initial=initial_recogida,
+                # Punto A7 - solo las duraciones que caben en ESTE
+                # horario puntual (ya se filtró arriba que hay al menos
+                # una, pero se recalcula acá porque el form necesita las
+                # choices exactas, no solo saber que existen).
+                duraciones_disponibles=repository.duraciones_acordadas_disponibles(
+                    h['horario_desde'], h['horario_hasta'],
+                ),
+            ),
         })
 
     certificados_paseador = paseador.get('certificados', [])
@@ -265,7 +294,18 @@ def inscribir_en_horario(request, id_paseador, id_paseo):
     mis_mascotas = mascotas_repository.listar_por_dueno(request.session['id_usuario'])
     # Mismo prefix=id_paseo que uso detalle_paseador() al renderizar este
     # formulario, para leer los campos con el nombre namespaced correcto.
-    form = InscribirMascotaForm(request.POST, mascotas=mis_mascotas, prefix=id_paseo)
+    # Punto A7 - MISMAS duraciones disponibles que detalle_paseador() le
+    # ofreció a este horario puntual; sin esto, el ChoiceField no tendría
+    # ninguna choice válida y rechazaría CUALQUIER valor enviado, no solo
+    # uno forjado - la validación real (que un POST manual con una
+    # duración fuera de la franja se rechace) depende de recalcular esto
+    # acá, no solo de confiar en lo que mandó el formulario.
+    form = InscribirMascotaForm(
+        request.POST, mascotas=mis_mascotas, prefix=id_paseo,
+        duraciones_disponibles=repository.duraciones_acordadas_disponibles(
+            paseo['horario_desde'], paseo['horario_hasta'],
+        ),
+    )
     if not form.is_valid():
         messages.error(request, 'Selecciona al menos una mascota válida.')
         return redirect('paseos:detalle_paseador', id_paseador=id_paseador)
@@ -303,10 +343,25 @@ def inscribir_en_horario(request, id_paseador, id_paseo):
         id_paseo=id_paseo,
         id_dueno=request.session['id_usuario'],
         ids_mascota=ids_mascota,
+        direccion=form.cleaned_data['direccion'],
+        comuna=form.cleaned_data['comuna'],
+        indicaciones=form.cleaned_data['indicaciones'],
+        telefono=form.cleaned_data['telefono'],
+        duracion_acordada_min=form.cleaned_data['duracion_acordada_min'],
     )
     if not asignado:
         messages.error(request, 'Este horario ya no está disponible.')
         return redirect('paseos:detalle_paseador', id_paseador=id_paseador)
+
+    # Incremento 4 fase 3, punto A1 - prellena la PRÓXIMA inscripción de
+    # este dueño con estos mismos datos de recogida.
+    usuarios_repository.guardar_ultima_recogida(
+        request.session['id_usuario'],
+        direccion=form.cleaned_data['direccion'],
+        comuna=form.cleaned_data['comuna'],
+        indicaciones=form.cleaned_data['indicaciones'],
+        telefono=form.cleaned_data['telefono'],
+    )
 
     paseador = usuarios_repository.obtener_por_id(id_paseador)
     nombres = mascotas_repository.nombres_unidos(mascotas_elegidas)
@@ -404,9 +459,36 @@ def historial(request):
 
     items = []
     for p in paseos:
-        duracion_min = None
-        if p.get('hora_inicio') and p.get('hora_fin'):
-            duracion_min = int((p['hora_fin'] - p['hora_inicio']).total_seconds() // 60)
+        # Incremento 4 fase 3, puntos A4/A7 - el historial del DUEÑO
+        # mostraba la duración y la distancia del PASEO COMPLETO, nunca
+        # filtradas por su propio tramo (mismo problema de A3/A9, acá en
+        # la lista en vez del mapa). Con una entrada de recogida propia,
+        # se usa SOLO ese tramo (hora_recogida/hora_entrega); un paseo
+        # sin `recogidas` (de antes de esta fase) sigue mostrando el
+        # paseo completo, por compatibilidad.
+        entrada_recogida = next(
+            (r for r in p.get('recogidas', []) if r['id_dueno'] == oid_dueno), None,
+        )
+        if entrada_recogida:
+            hora_recogida = entrada_recogida.get('hora_recogida')
+            hora_entrega = entrada_recogida.get('hora_entrega')
+            duracion_min = (
+                int((hora_entrega - hora_recogida).total_seconds() // 60)
+                if hora_recogida and hora_entrega else None
+            )
+            distancia_texto = coordenadas_repository.formatear_distancia(
+                coordenadas_repository.distancia_recorrida_m(p['_id'], desde=hora_recogida, hasta=hora_entrega)
+            ) if hora_recogida else None
+            duracion_acordada_etiqueta = repository.etiqueta_duracion_acordada(
+                entrada_recogida.get('duracion_acordada_min')
+            )
+        else:
+            duracion_min = None
+            if p.get('hora_inicio') and p.get('hora_fin'):
+                duracion_min = int((p['hora_fin'] - p['hora_inicio']).total_seconds() // 60)
+            distancia_texto = _distancia_texto_de_paseo(p)
+            duracion_acordada_etiqueta = None
+
         calificacion = calificaciones_por_paseo.get(p['_id'])
         mascotas_paseo = mascotas_repository.resolver_lista(p.get('id_mascotas'), mis_mascotas_por_id)
         items.append({
@@ -416,8 +498,10 @@ def historial(request):
             'mascota_avatar': mascotas_paseo[0] if mascotas_paseo else None,
             'mascotas_nombres': mascotas_repository.nombres_unidos(mascotas_paseo),
             'duracion_min': duracion_min,
+            'duracion_real_texto': repository.formatear_duracion_real(duracion_min),
+            'duracion_acordada_etiqueta': duracion_acordada_etiqueta,
             'puntuacion': calificacion['puntuacion'] if calificacion else None,
-            'distancia_texto': _distancia_texto_de_paseo(p),
+            'distancia_texto': distancia_texto,
         })
 
     return render(request, 'paseos/historial.html', {'items': items})
@@ -476,7 +560,18 @@ def cancelar_disponibilidad(request, id_paseo):
 @require_POST
 @requiere_paseador
 def iniciar_paseo(request, id_paseo):
-    """Pasa un paseo propio de 'disponible' a 'en_vivo' y notifica al dueño."""
+    """
+    Pasa un paseo propio de 'disponible' a 'en_vivo'.
+
+    Incremento 4 fase 3, punto A2 - YA NO notifica a los dueños aquí
+    (antes mandaba "inició el paseo de tu mascota" a TODOS los dueños
+    del paseo al mismo tiempo). Con la recogida por mascota, "empezar el
+    paseo" (el paseador sale a buscar a la primera mascota) ya no es lo
+    mismo que "tu mascota está siendo paseada" - esa notificación
+    (mismo tipo `inicio_paseo`) ahora se manda individualmente, SOLO a
+    cada dueño, en el momento real de su propia recogida (ver
+    marcar_recogida() más abajo).
+    """
     id_paseador = ObjectId(request.session['id_usuario'])
     paseo = repository.iniciar_paseo(id_paseo=id_paseo, id_paseador=id_paseador)
     if not paseo:
@@ -486,15 +581,6 @@ def iniciar_paseo(request, id_paseo):
             'o ya tienes otro paseo en curso.',
         )
     else:
-        # Un paseo por notificacion, uno POR CADA dueño involucrado (hasta
-        # 8 mascotas, posiblemente de varios dueños - ver CLAUDE.md,
-        # "Corrección de alcance 2026-09-25"), no solo al primero.
-        for id_dueno in paseo.get('id_duenos', []):
-            notificaciones_repository.crear(
-                id_usuario=id_dueno,
-                tipo='inicio_paseo',
-                mensaje=f'{request.session.get("nombre")} inició el paseo de tu mascota.',
-            )
         # Incremento 4, fase 2, "pantalla encendida": en iPhone (y en
         # general, cualquier navegador) Safari/las apps de pantalla de
         # inicio suspenden JS cuando la pantalla se bloquea o la app
@@ -516,8 +602,35 @@ def iniciar_paseo(request, id_paseo):
 @require_POST
 @requiere_paseador
 def finalizar_paseo(request, id_paseo):
-    """Pasa un paseo propio de 'en_vivo' a 'historico' y notifica al dueño."""
+    """
+    Pasa un paseo propio de 'en_vivo' a 'historico'.
+
+    Incremento 4 fase 3, punto A2, punto 5 - solo si ninguna recogida
+    sigue 'pendiente'/'recogida' (repository.finalizar_paseo() lo
+    exige de forma atómica, es la defensa real). El chequeo de ACÁ es
+    solo para dar un mensaje de error específico en vez del genérico
+    "ya no estaba en curso" - sin esto, un paseador que todavía tiene
+    una recogida pendiente no entendería por qué el botón no hizo nada.
+
+    Punto A2 tampoco pide notificar aquí - "Entregado" (marcar_entrega)
+    ya notifica a cada dueño con `fin_paseo` en su propio momento; antes
+    esta vista mandaba esa misma notificación a TODOS los dueños de
+    nuevo al finalizar, duplicándola.
+    """
     id_paseador = ObjectId(request.session['id_usuario'])
+    paseo_actual = repository.obtener_por_id(id_paseo)
+    if paseo_actual and str(paseo_actual.get('id_paseador')) == request.session['id_usuario']:
+        pendientes = [
+            r for r in paseo_actual.get('recogidas', [])
+            if r['estado'] in ('pendiente', 'recogida')
+        ]
+        if pendientes:
+            messages.error(
+                request,
+                'No se puede finalizar: todavía hay recogidas pendientes de entregar.',
+            )
+            return redirect('usuarios:bienvenida_paseador')
+
     paseo = repository.finalizar_paseo(id_paseo=id_paseo, id_paseador=id_paseador)
     if not paseo:
         messages.error(request, 'No se pudo finalizar el paseo: ya no estaba en curso.')
@@ -527,12 +640,100 @@ def finalizar_paseo(request, id_paseo):
         # coordenadas_detalle de este paseo cada vez que se consulta.
         distancia_m = coordenadas_repository.distancia_recorrida_m(paseo['_id'])
         repository.guardar_distancia(paseo['_id'], distancia_m)
-        for id_dueno in paseo.get('id_duenos', []):
-            notificaciones_repository.crear(
-                id_usuario=id_dueno,
-                tipo='fin_paseo',
-                mensaje=f'{request.session.get("nombre")} finalizó el paseo de tu mascota.',
-            )
+    return redirect('usuarios:bienvenida_paseador')
+
+
+def _recogida_de_dueno(paseo, id_dueno):
+    """Entrada de `paseo.recogidas` de ese dueño, o None - helper compartido
+    por las 3 vistas de abajo para armar el mensaje/la notificación."""
+    oid_dueno = ObjectId(id_dueno)
+    return next((r for r in paseo.get('recogidas', []) if r['id_dueno'] == oid_dueno), None)
+
+
+def _nombres_mascotas_de_recogida(paseo, id_dueno):
+    """'Dobby, Luna' para la recogida de ESE dueño en este paseo, o
+    'tu mascota' si no se pudo resolver ninguna - usado en los mensajes
+    de notificación de marcar_recogida()/marcar_no_recogida()/
+    marcar_entrega(), que son siempre sobre LAS mascotas de un dueño
+    puntual, nunca las 8 del paseo entero."""
+    entrada = _recogida_de_dueno(paseo, id_dueno)
+    ids = entrada.get('id_mascotas', []) if entrada else []
+    mascotas = mascotas_repository.resolver_lista(ids, mascotas_repository.obtener_varias_por_id(ids))
+    return mascotas_repository.nombres_unidos(mascotas) or 'tu mascota'
+
+
+@require_POST
+@requiere_paseador
+def marcar_recogida(request, id_paseo, id_dueno):
+    """
+    "Recogido" (Incremento 4 fase 3, punto A2) - notifica SOLO a ese
+    dueño, con el tipo YA EXISTENTE `inicio_paseo` (no se crea un tipo
+    nuevo - pedido explícito).
+    """
+    id_paseador = ObjectId(request.session['id_usuario'])
+    paseo = repository.marcar_recogida(id_paseo=id_paseo, id_paseador=id_paseador, id_dueno=id_dueno)
+    if not paseo:
+        messages.error(request, 'No se pudo marcar como recogida: revisa el estado actual.')
+        return redirect('usuarios:bienvenida_paseador')
+
+    nombres = _nombres_mascotas_de_recogida(paseo, id_dueno)
+    notificaciones_repository.crear(
+        id_usuario=id_dueno,
+        tipo='inicio_paseo',
+        mensaje=f'{request.session.get("nombre")} recogió a {nombres}.',
+    )
+    messages.success(request, 'Recogida registrada.')
+    return redirect('usuarios:bienvenida_paseador')
+
+
+@require_POST
+@requiere_paseador
+def marcar_no_recogida(request, id_paseo, id_dueno):
+    """"No se pudo recoger" (Incremento 4 fase 3, punto A2) - motivo obligatorio."""
+    id_paseador = ObjectId(request.session['id_usuario'])
+    form = MotivoNoRecogidaForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, 'Escribe un motivo (máximo 300 caracteres).')
+        return redirect('usuarios:bienvenida_paseador')
+
+    paseo = repository.marcar_no_recogida(
+        id_paseo=id_paseo, id_paseador=id_paseador, id_dueno=id_dueno,
+        motivo=form.cleaned_data['motivo'],
+    )
+    if not paseo:
+        messages.error(request, 'No se pudo registrar: revisa el estado actual.')
+        return redirect('usuarios:bienvenida_paseador')
+
+    nombres = _nombres_mascotas_de_recogida(paseo, id_dueno)
+    notificaciones_repository.crear(
+        id_usuario=id_dueno,
+        tipo='emergencia',
+        mensaje=f'{request.session.get("nombre")} no pudo recoger a {nombres}: {form.cleaned_data["motivo"]}',
+    )
+    messages.success(request, 'Registrado - esas mascotas ya no hacen parte de este paseo.')
+    return redirect('usuarios:bienvenida_paseador')
+
+
+@require_POST
+@requiere_paseador
+def marcar_entrega(request, id_paseo, id_dueno):
+    """
+    "Entregado" (Incremento 4 fase 3, punto A2) - notifica SOLO a ese
+    dueño, con el tipo YA EXISTENTE `fin_paseo`.
+    """
+    id_paseador = ObjectId(request.session['id_usuario'])
+    paseo = repository.marcar_entrega(id_paseo=id_paseo, id_paseador=id_paseador, id_dueno=id_dueno)
+    if not paseo:
+        messages.error(request, 'No se pudo marcar como entregada: revisa el estado actual.')
+        return redirect('usuarios:bienvenida_paseador')
+
+    nombres = _nombres_mascotas_de_recogida(paseo, id_dueno)
+    notificaciones_repository.crear(
+        id_usuario=id_dueno,
+        tipo='fin_paseo',
+        mensaje=f'{request.session.get("nombre")} entregó a {nombres}.',
+    )
+    messages.success(request, 'Entrega registrada.')
     return redirect('usuarios:bienvenida_paseador')
 
 

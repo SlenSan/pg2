@@ -375,6 +375,50 @@
     var urlCoordenadas = "{% url 'coordenadas:registrar_coordenada' id_paseo_en_vivo_del_paseador %}";
     var enviandoAhora = false;
 
+    // Incremento 4 fase 3, punto A6 - "al volver a Canigo" (nueva carga
+    // de pagina, no un tick cualquiera del setInterval) se avisa si
+    // estuvo mas de UMBRAL_AVISO_INTERRUPCION_MS sin mandar un punto -
+    // limitacion de iOS (Safari/apps de pantalla de inicio cortan el JS
+    // con la pantalla bloqueada o la app en segundo plano, ver wake lock
+    // mas abajo). El emisor es global y no tiene estado entre una pagina
+    // y la siguiente (cada navegacion es una carga nueva), asi que la
+    // marca de tiempo del ULTIMO envio exitoso se guarda en localStorage,
+    // no en una variable JS - sobrevive a la navegacion/el bloqueo de
+    // pantalla que justamente se quiere detectar. Try/catch: localStorage
+    // puede fallar (navegacion privada, cuota agotada) y no debe romper
+    // el envio de GPS por eso.
+    var CLAVE_ULTIMO_ENVIO_MS = 'canigo_ultimo_envio_gps_ms';
+    var UMBRAL_AVISO_INTERRUPCION_MS = 2 * 60 * 1000;
+
+    function avisarSiHuboInterrupcion() {
+      var avisoEl = document.getElementById('aviso-interrupcion-gps');
+      if (!avisoEl) {
+        return; // solo existe en bienvenida_paseador.html, mismo patron que "estado-gps"
+      }
+      try {
+        var anteriorStr = localStorage.getItem(CLAVE_ULTIMO_ENVIO_MS);
+        if (!anteriorStr) {
+          return; // primer envio de este paseador en este navegador - nada que comparar
+        }
+        var gapMs = Date.now() - parseInt(anteriorStr, 10);
+        if (gapMs > UMBRAL_AVISO_INTERRUPCION_MS) {
+          var minutos = Math.round(gapMs / 60000);
+          avisoEl.textContent = 'Tu ubicación no se compartió durante ' + minutos + ' min.';
+          avisoEl.classList.remove('d-none');
+        }
+      } catch (e) {
+        // sin localStorage disponible: no se puede avisar, pero el envio de GPS sigue igual
+      }
+    }
+
+    function registrarEnvioExitoso() {
+      try {
+        localStorage.setItem(CLAVE_ULTIMO_ENVIO_MS, String(Date.now()));
+      } catch (e) {
+        // idem de arriba
+      }
+    }
+
     function enviarPosicion(position) {
       fetch(urlCoordenadas, {
         method: 'POST',
@@ -398,6 +442,9 @@
           estadoEl.textContent = resp.ok
             ? 'Compartiendo tu ubicación...'
             : 'No se pudo enviar tu ubicación. Reintentando...';
+        }
+        if (resp.ok) {
+          registrarEnvioExitoso();
         }
         return resp.ok ? resp.json() : null;
       }).then(function (data) {
@@ -451,6 +498,7 @@
       );
     }
 
+    avisarSiHuboInterrupcion();
     capturarYEnviar();
     setInterval(capturarYEnviar, INTERVALO_ENVIO_MS);
   })();

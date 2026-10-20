@@ -104,7 +104,18 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
                                           // aquí ni en ningún log), solo quién y cuándo
     asignado_por: String,                // correo del admin
     fecha: Date                          // UTC
-  }]
+  }],
+  ultima_recogida: {              // Incremento 4 fase 3, punto A1 - solo rol=dueño. Se guarda (se
+                                    // sobreescribe, no es un historial) cada vez que este dueño
+                                    // inscribe una mascota con éxito, para prellenar la PRÓXIMA
+                                    // inscripción (paseos.views_web.detalle_paseador()). Ausente en
+                                    // una cuenta que nunca inscribió - esa primera vez se prellena
+                                    // con `direccion`/`telefono` de arriba en su lugar
+    direccion: String,
+    comuna: String,                // uno de ZONAS_VALIDAS
+    indicaciones: String,
+    telefono: String
+  }
 }
 ```
 
@@ -156,7 +167,7 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
   total_puntos: Number,
   emergencia: Boolean,     // true si se activó el botón de emergencia
   fotos: [{ url: String, momento: String }],  // momento: "inicio"|"mitad"|"fin"
-  distancia_m: Number      // Ajustes del 19 de octubre, punto 1 - metros recorridos (Haversine
+  distancia_m: Number,     // Ajustes del 19 de octubre, punto 1 - metros recorridos (Haversine
                             // sobre coordenadas_detalle, solo puntos con precision <= 50m o nula -
                             // ver coordenadas/repository.py::distancia_recorrida_m()/
                             // UMBRAL_PRECISION_METROS). Se calcula y se guarda UNA vez, al
@@ -165,6 +176,23 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
                             // puntos válidos). Un paseo histórico de ANTES de este punto no tiene el
                             // campo en absoluto (no se migró) - se calcula en vivo al consultarse
                             // (paseos/views_web.py::_distancia_texto_de_paseo), sin guardarse
+  recogidas: [{            // Incremento 4 fase 3, punto A1 - UNA entrada por dueño con mascotas en
+                            // este paseo (no una por inscripción - ver inscribir_mascotas()), creada/
+                            // actualizada al inscribir. Un paseo de ANTES de este punto no tiene el
+                            // campo en absoluto - tratar como [] (.get('recogidas', [])), nunca asumir
+                            // presente
+    id_dueno: ObjectId,     // referencia a usuarios
+    id_mascotas: [ObjectId], // subconjunto de paseos.id_mascotas que pertenece a ESTE dueño
+    direccion: String,
+    comuna: String,         // uno de ZONAS_VALIDAS
+    indicaciones: String,   // opcional, "" si no se dio ninguna
+    telefono: String,       // celular colombiano del dueño, de contacto para ESTE paseo
+    duracion_acordada_min: Number, // punto A7 - 30|60|90|120|150|180, null en paseos de antes de A7
+    estado: String,         // "pendiente" | "recogida" | "no_recogida" | "entregada"
+    hora_recogida: Date,    // null hasta que el paseador marca "Recogido"
+    hora_entrega: Date,     // null hasta que el paseador marca "Entregado"
+    motivo_no_recogida: String // null salvo que estado="no_recogida"
+  }]
 }
 ```
 
@@ -255,7 +283,16 @@ Retención: ~90 días (trazabilidad y validación, no almacenamiento permanente 
                                    // "Aproximada" porque viene de un servicio externo, no de
                                    // un dato que el paseador haya escrito.
   fecha_hora: Date,
-  notificado: Boolean      // si el dueño ya fue notificado
+  notificado: Boolean,     // si el dueño ya fue notificado
+  complementos: [{            // Incremento 4 fase 3, punto A8 - tipo, descripcion, evidencia_foto,
+                                // latitud, longitud, direccion_aproximada y fecha_hora de ARRIBA
+                                // quedan inmutables (ningun codigo los modifica despues de crear() -
+                                // ver incidentes/repository.py); esto es lo UNICO que se puede
+                                // agregar despues. Ausente/[] en un incidente de antes de A8
+    texto: String,              // obligatorio, maximo 500 caracteres
+    foto: String,                // opcional, null si no se adjunto
+    fecha: Date
+  }]
 }
 ```
 

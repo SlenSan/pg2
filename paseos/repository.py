@@ -33,6 +33,68 @@ MAXIMO_MASCOTAS_POR_PASEO = 8
 # horario_hasta) creaba dos documentos 'disponible' idénticos.
 _SEGUNDOS_DUPLICADO_HORARIO = 10
 
+# Incremento 4 fase 3, punto A7 - lista CERRADA de duraciones que un
+# dueño puede acordar al inscribir (minutos). "Solo se ofrecen las que
+# caben entre la hora de inicio y la de fin del horario publicado" - ver
+# duraciones_acordadas_disponibles() más abajo, que filtra esta lista
+# según cada horario puntual (no es una elección libre de minutos).
+DURACIONES_ACORDADAS_CON_ETIQUETA = (
+    (30, '30 minutos'),
+    (60, '1 hora'),
+    (90, '1 hora y media'),
+    (120, '2 horas'),
+    (150, '2 horas y media'),
+    (180, '3 horas'),
+)
+DURACIONES_ACORDADAS_VALIDAS = tuple(m for m, _ in DURACIONES_ACORDADAS_CON_ETIQUETA)
+_ETIQUETA_POR_DURACION = dict(DURACIONES_ACORDADAS_CON_ETIQUETA)
+_DURACION_MINIMA_INSCRIBIBLE_MIN = DURACIONES_ACORDADAS_VALIDAS[0]  # 30 - "si la franja dura menos, no se puede inscribir"
+
+
+def etiqueta_duracion_acordada(minutos):
+    """
+    Formato ÚNICO para mostrar una duración acordada ("1 hora y media")
+    - mismo patrón que etiqueta_zona()/etiqueta_tipo_incidente(). Si
+    `minutos` no es uno de los valores válidos (no debería pasar, pero
+    nunca se asume), o es None (paseo de antes de este punto, sin
+    duración acordada), devuelve None - el llamador decide qué mostrar
+    en ese caso.
+    """
+    return _ETIQUETA_POR_DURACION.get(minutos)
+
+
+def formatear_duracion_real(minutos):
+    """
+    Formato de la duración REAL de un paseo/tramo ("1 h 05 min", "58
+    min") - punto A7, para mostrar junto a `etiqueta_duracion_acordada()`
+    en el historial del dueño ("Duración acordada: 1 hora · Duración
+    real: 58 min"). Misma lógica que `formatearDuracion()` en
+    `coordenadas/templates/coordenadas/mapa.html` (el timer en vivo del
+    mapa), reescrita en Python porque el historial es una lista
+    estática, sin JS - las dos deberían verse igual, así que si se
+    ajusta una hay que ajustar la otra. `None` si `minutos` es `None`
+    (todavía no hay una duración real que mostrar).
+    """
+    if minutos is None:
+        return None
+    horas, resto = divmod(minutos, 60)
+    return f'{horas} h {resto:02d} min' if horas else f'{resto} min'
+
+
+def duraciones_acordadas_disponibles(horario_desde, horario_hasta):
+    """
+    Subconjunto de DURACIONES_ACORDADAS_CON_ETIQUETA que cabe entre
+    `horario_desde` y `horario_hasta` de un horario puntual (no son
+    minutos libres - Incremento 4 fase 3, punto A7). Vacío si la franja
+    dura menos de 30 minutos (la más corta de la lista) - el llamador
+    debe tratar eso como "este horario no se puede inscribir", no como
+    "sin duración obligatoria".
+    """
+    minutos_disponibles = (horario_hasta - horario_desde).total_seconds() / 60
+    return tuple(
+        (m, etiqueta) for m, etiqueta in DURACIONES_ACORDADAS_CON_ETIQUETA if m <= minutos_disponibles
+    )
+
 # Las 17 comunas oficiales de Bucaramanga, CON su numero oficial
 # (bucaramanga.gov.co/el-mapa/division-politico-urbana - confirmado ahi
 # antes de escribir esto, Incremento 4 punto G: el numero de cada una
@@ -243,7 +305,10 @@ def obtener_por_id(id_paseo):
     return get_db().paseos.find_one({'_id': oid})
 
 
-def inscribir_mascotas(*, id_paseo, id_dueno, ids_mascota):
+def inscribir_mascotas(
+    *, id_paseo, id_dueno, ids_mascota, direccion, comuna, indicaciones, telefono,
+    duracion_acordada_min=None,
+):
     """
     Suma una o varias mascotas (de UN dueño, ya validadas por el
     llamador) a un paseo 'disponible' - a las que ya haya de este u OTROS
@@ -264,6 +329,19 @@ def inscribir_mascotas(*, id_paseo, id_dueno, ids_mascota):
     dueño reenvia el mismo formulario dos veces (doble clic, o inscribe
     una mascota, y despues vuelve a este horario a sumar otra), una
     mascota que ya estaba no se duplica ni infla el conteo de cupos.
+
+    Incremento 4 fase 3, punto A1 - además de id_mascotas/id_duenos,
+    mantiene `paseos.recogidas`: UNA entrada por dueño (no una por
+    inscripción - "vuelve a este horario a sumar otra" de arriba sigue
+    siendo el mismo caso real). Como Mongo no tiene un "upsert sobre un
+    elemento de un array" en una sola operación, son DOS intentos:
+    primero intenta ACTUALIZAR una entrada ya existente de este dueño
+    (`array_filters`) con los datos de contacto recién enviados (puede
+    haber cambiado la dirección desde la última vez) y sumarle las
+    mascotas nuevas; si no modificó nada (este dueño no tenía entrada
+    todavía), el segundo intento agrega una entrada nueva. Mismo filtro
+    $expr de cupo en los dos intentos - un doble envío nunca se cuela
+    por la segunda rama si la primera ya lo cubrió.
     """
     try:
         oid_paseo = ObjectId(id_paseo)
@@ -274,26 +352,161 @@ def inscribir_mascotas(*, id_paseo, id_dueno, ids_mascota):
     if not oids_mascota:
         return False
 
+    filtro_base = {
+        '_id': oid_paseo,
+        'estado': 'disponible',
+        'acepta_inscripciones': True,
+        '$expr': {
+            '$lte': [
+                {'$add': [{'$size': '$id_mascotas'}, len(oids_mascota)]},
+                MAXIMO_MASCOTAS_POR_PASEO,
+            ],
+        },
+    }
+
     resultado = get_db().paseos.update_one(
+        {**filtro_base, 'recogidas.id_dueno': oid_dueno},
         {
-            '_id': oid_paseo,
-            'estado': 'disponible',
-            'acepta_inscripciones': True,
-            '$expr': {
-                '$lte': [
-                    {'$add': [{'$size': '$id_mascotas'}, len(oids_mascota)]},
-                    MAXIMO_MASCOTAS_POR_PASEO,
-                ],
+            '$addToSet': {
+                'id_mascotas': {'$each': oids_mascota},
+                'recogidas.$[entrada].id_mascotas': {'$each': oids_mascota},
+            },
+            '$set': {
+                'recogidas.$[entrada].direccion': direccion,
+                'recogidas.$[entrada].comuna': comuna,
+                'recogidas.$[entrada].indicaciones': indicaciones,
+                'recogidas.$[entrada].telefono': telefono,
+                'recogidas.$[entrada].duracion_acordada_min': duracion_acordada_min,
             },
         },
+        array_filters=[{'entrada.id_dueno': oid_dueno}],
+    )
+    if resultado.modified_count == 1:
+        return True
+
+    resultado = get_db().paseos.update_one(
+        filtro_base,
         {
             '$addToSet': {
                 'id_mascotas': {'$each': oids_mascota},
                 'id_duenos': oid_dueno,
             },
+            '$push': {
+                'recogidas': {
+                    'id_dueno': oid_dueno,
+                    'id_mascotas': oids_mascota,
+                    'direccion': direccion,
+                    'comuna': comuna,
+                    'indicaciones': indicaciones,
+                    'telefono': telefono,
+                    'duracion_acordada_min': duracion_acordada_min,
+                    'estado': 'pendiente',
+                    'hora_recogida': None,
+                    'hora_entrega': None,
+                    'motivo_no_recogida': None,
+                },
+            },
         },
     )
     return resultado.modified_count == 1
+
+
+def marcar_recogida(*, id_paseo, id_paseador, id_dueno):
+    """
+    Incremento 4 fase 3, punto A2 - "Recogido": la recogida de ESE dueño
+    pasa de 'pendiente' a 'recogida' y se guarda `hora_recogida`. Atómico
+    vía `array_filters` + el `estado` de la recogida en el filtro
+    principal (si ya estaba 'recogida'/'no_recogida'/'entregada', o el
+    paseo ya no es 'en_vivo' de este paseador, no modifica nada).
+    Devuelve el documento actualizado, o None.
+    """
+    try:
+        oid_paseo = ObjectId(id_paseo)
+        oid_dueno = ObjectId(id_dueno)
+    except (InvalidId, TypeError):
+        return None
+    return get_db().paseos.find_one_and_update(
+        {
+            '_id': oid_paseo,
+            'id_paseador': id_paseador,
+            'estado': 'en_vivo',
+            'recogidas': {'$elemMatch': {'id_dueno': oid_dueno, 'estado': 'pendiente'}},
+        },
+        {'$set': {
+            'recogidas.$[entrada].estado': 'recogida',
+            'recogidas.$[entrada].hora_recogida': datetime.now(timezone.utc),
+        }},
+        array_filters=[{'entrada.id_dueno': oid_dueno}],
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+def marcar_no_recogida(*, id_paseo, id_paseador, id_dueno, motivo):
+    """
+    "No se pudo recoger": la recogida de ESE dueño pasa a 'no_recogida'
+    con su motivo, y sus mascotas se QUITAN de `paseo.id_mascotas`
+    (pedido explícito: "esas mascotas quedan fuera del paseo" - ya no se
+    están caminando de verdad). La entrada de `recogidas` NO se borra -
+    queda como registro permanente de que se intentó y no se pudo,
+    visible para ese dueño. `id_duenos` no se toca (el dueño sigue
+    "siendo parte" de este paseo a efectos de historial, aunque su
+    mascota no haya caminado).
+    """
+    try:
+        oid_paseo = ObjectId(id_paseo)
+        oid_dueno = ObjectId(id_dueno)
+    except (InvalidId, TypeError):
+        return None
+    paseo = get_db().paseos.find_one({
+        '_id': oid_paseo,
+        'id_paseador': id_paseador,
+        'estado': 'en_vivo',
+        'recogidas': {'$elemMatch': {'id_dueno': oid_dueno, 'estado': 'pendiente'}},
+    })
+    if not paseo:
+        return None
+    entrada = next(r for r in paseo['recogidas'] if r['id_dueno'] == oid_dueno)
+    ids_mascotas_fuera = entrada.get('id_mascotas', [])
+    return get_db().paseos.find_one_and_update(
+        {'_id': oid_paseo},
+        {
+            '$set': {
+                'recogidas.$[entrada].estado': 'no_recogida',
+                'recogidas.$[entrada].motivo_no_recogida': motivo,
+            },
+            '$pullAll': {'id_mascotas': ids_mascotas_fuera},
+        },
+        array_filters=[{'entrada.id_dueno': oid_dueno}],
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+def marcar_entrega(*, id_paseo, id_paseador, id_dueno):
+    """
+    "Entregado": la recogida de ESE dueño pasa de 'recogida' a
+    'entregada' y se guarda `hora_entrega`. Solo si estaba 'recogida'
+    (nunca desde 'pendiente' - no se puede entregar lo que no se
+    recogió).
+    """
+    try:
+        oid_paseo = ObjectId(id_paseo)
+        oid_dueno = ObjectId(id_dueno)
+    except (InvalidId, TypeError):
+        return None
+    return get_db().paseos.find_one_and_update(
+        {
+            '_id': oid_paseo,
+            'id_paseador': id_paseador,
+            'estado': 'en_vivo',
+            'recogidas': {'$elemMatch': {'id_dueno': oid_dueno, 'estado': 'recogida'}},
+        },
+        {'$set': {
+            'recogidas.$[entrada].estado': 'entregada',
+            'recogidas.$[entrada].hora_entrega': datetime.now(timezone.utc),
+        }},
+        array_filters=[{'entrada.id_dueno': oid_dueno}],
+        return_document=ReturnDocument.AFTER,
+    )
 
 
 def iniciar_paseo(*, id_paseo, id_paseador):
@@ -338,8 +551,21 @@ def iniciar_paseo(*, id_paseo, id_paseador):
 def finalizar_paseo(*, id_paseo, id_paseador):
     """
     Pasa un paseo de 'en_vivo' a 'historico' y registra hora_fin. Solo si
-    le pertenece a ese paseador y esta actualmente en curso. Devuelve el
-    documento actualizado, o None si no se cumplen las condiciones.
+    le pertenece a ese paseador y esta actualmente en curso.
+
+    Incremento 4 fase 3, punto A2, punto 5 - además, SOLO si ninguna
+    recogida sigue en 'pendiente' ni 'recogida' (toda mascota ya fue
+    recogida-y-entregada, o se marcó explícitamente 'no_recogida'). Esto
+    es la defensa de BACKEND, obligatoria - el frontend deshabilita el
+    botón con el mismo criterio, pero un POST directo también se
+    rechaza acá. `$not`/`$elemMatch`: ningún elemento de `recogidas`
+    puede tener ese estado; un paseo SIN el campo `recogidas` (de antes
+    de esta fase) o con `recogidas: []` no bloquea - un array ausente o
+    vacío nunca matchea `$elemMatch`, así que `$not` sobre eso es
+    verdadero.
+
+    Devuelve el documento actualizado, o None si no se cumplen las
+    condiciones.
     """
     try:
         oid_paseo = ObjectId(id_paseo)
@@ -351,6 +577,7 @@ def finalizar_paseo(*, id_paseo, id_paseador):
             '_id': oid_paseo,
             'id_paseador': id_paseador,
             'estado': 'en_vivo',
+            'recogidas': {'$not': {'$elemMatch': {'estado': {'$in': ['pendiente', 'recogida']}}}},
         },
         {'$set': {'estado': 'historico', 'hora_fin': datetime.now(timezone.utc)}},
         return_document=ReturnDocument.AFTER,

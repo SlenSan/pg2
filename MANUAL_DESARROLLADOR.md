@@ -2020,6 +2020,585 @@ sobre-bloquear).
 `data-canigo-carga-manual` (confirmado por inspección, no se probó
 cada uno manualmente en el navegador).
 
+**Incremento 4, fase 3 — dirección de recogida y flujo de recogida y
+entrega por mascota**: la fase más grande de las tres, en la rama
+`fase3-recogida` (no fusionada a `master` todavía - se fusiona y se
+despliega solo cuando todo el punto A esté verificado en local y la
+autora lo apruebe).
+
+- **Punto A1 — datos de recogida al inscribir**: diagnóstico - antes,
+  `InscribirMascotaForm` solo pedía elegir mascota(s)
+  (`paseos/forms.py`); la inscripción (`paseos.views_web.
+  inscribir_en_horario()` → `paseos.repository.inscribir_mascotas()`)
+  solo sumaba a `id_mascotas`/`id_duenos`, sin ningún dato de recogida.
+  No había ningún `direccion`/`comuna`/`indicaciones`/`telefono` de
+  contacto por dueño en todo el esquema.
+
+  Fix: `InscribirMascotaForm` ahora pide, junto con la(s) mascota(s),
+  `direccion` (5-150 caracteres), `comuna` (una de `ZONAS_VALIDAS`),
+  `indicaciones` (opcional, máx. 200) y `telefono` (celular colombiano
+  - reutiliza el mismo validador que `usuarios/forms.py`, movido a
+  `core/validators.py` porque ahora lo necesitan dos apps). Se guarda
+  en `paseos.recogidas`, **una entrada por dueño** (no una por
+  inscripción): `paseos.repository.inscribir_mascotas()` intenta
+  primero actualizar una entrada ya existente de ese dueño
+  (`array_filters`, fusiona mascotas nuevas y actualiza los datos de
+  contacto a los recién enviados) y, si no existía ninguna, agrega una
+  entrada nueva - dos intentos porque Mongo no tiene un "upsert sobre
+  un elemento de un array" en una sola operación, mismo filtro `$expr`
+  de cupo en los dos. Se prellena con `usuarios.ultima_recogida`
+  (`usuarios.repository.guardar_ultima_recogida()`, se sobreescribe
+  cada vez que el dueño inscribe con éxito) o, la primera vez, con
+  `usuarios.direccion`/`telefono` del perfil.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, dos rondas con el
+  mismo dueño en el mismo horario): la primera inscripción prellenó el
+  teléfono con el del perfil (`"300"`, dato de prueba) y creó una
+  entrada en `recogidas` con `estado: "pendiente"`; la segunda (otra
+  mascota, otros datos de contacto) **no duplicó** la entrada - la
+  fusionó (`id_mascotas` con las dos mascotas, datos de contacto
+  actualizados a los de la segunda ronda) y `id_duenos` siguió con un
+  solo elemento. Validación de backend confirmada por separado
+  (dirección de 3 caracteres, comuna inventada, indicaciones de 250
+  caracteres y teléfono inválido - los 4 se rechazan).
+
+- **Punto A2 — flujo del paseador (recoger/entregar por dueño)**:
+  diagnóstico - antes, "Iniciar paseo" notificaba (tipo `inicio_paseo`)
+  a TODOS los dueños del paseo a la vez, y "Finalizar paseo" notificaba
+  (tipo `fin_paseo`) a todos de nuevo, sin ningún estado intermedio por
+  mascota. **Contradicción real encontrada con la tarea**: el punto A2
+  pide notificar `inicio_paseo`/`fin_paseo` en los momentos de
+  "Recogido"/"Entregado" de CADA dueño, no al iniciar/finalizar el
+  paseo entero - mandar las dos notificaciones (la vieja, global, Y la
+  nueva, por dueño) habría duplicado el aviso. Se quitaron las
+  notificaciones de `iniciar_paseo()`/`finalizar_paseo()` (vistas) y se
+  movieron a `marcar_recogida()`/`marcar_entrega()`, que es lo que pide
+  la tarea.
+
+  Fix: 3 funciones nuevas en `paseos/repository.py`
+  (`marcar_recogida()`, `marcar_no_recogida()`, `marcar_entrega()`),
+  cada una atómica vía `array_filters` sobre la entrada de ese dueño en
+  `recogidas`, con su propio estado como parte del filtro (una
+  recogida ya `recogida`/`entregada` no se puede volver a marcar
+  `recogida`, etc.). "No se pudo recoger" (`MotivoNoRecogidaForm`,
+  motivo obligatorio, máx. 300 caracteres) además saca esas mascotas de
+  `paseo.id_mascotas` (`$pullAll`) - la entrada de `recogidas` NO se
+  borra, queda como registro permanente con su motivo.
+  `paseos.repository.finalizar_paseo()` ahora exige, en el MISMO filtro
+  atómico, que ninguna entrada de `recogidas` siga en `pendiente`/
+  `recogida` (`$not`/`$elemMatch`) - un paseo sin `recogidas` (de antes
+  de esta fase) nunca bloquea. La vista agrega un chequeo "amigable"
+  antes (mensaje específico "todavía hay recogidas pendientes"), pero
+  la regla real es la del repository.
+
+  `bienvenida_paseador.html` muestra una tarjeta por dueño (dirección,
+  indicaciones, teléfono como link `tel:`, mascotas, estado) con el
+  botón que corresponde a su estado actual; "No se pudo recoger" usa
+  `<details>`/`<summary>` nativo (sin JS) para no mostrar el textarea
+  del motivo hasta que se necesita. "Finalizar paseo" se deshabilita en
+  el frontend (`paseo_activo.puede_finalizar`) mientras falte alguna
+  recogida - la defensa real sigue siendo la del backend.
+
+  **Decisión sin especificar en la tarea**: el tipo de notificación de
+  "No se pudo recoger" no estaba dicho (a diferencia de "Recogido"/
+  "Entregado", que sí dicen explícitamente `inicio_paseo`/`fin_paseo`).
+  Se usó `emergencia` (el tipo existente más cercano - algo cambió y el
+  dueño necesita enterarse pronto) en vez de crear un tipo nuevo, igual
+  que pide el punto A8 más abajo para "no crear tipos nuevos".
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, D1/D2/P1 - guion
+  completo iniciar → recoger D1 → recoger D2 → intentar finalizar (falla,
+  200 pero sigue `en_vivo`) → entregar D2 → entregar D1 → finalizar
+  (ahora sí, pasa a `historico`)): las dos recogidas quedaron
+  `entregada` con `hora_recogida`/`hora_entrega` guardadas; las 4
+  notificaciones (`inicio_paseo` x2, `fin_paseo` x2) salieron con el
+  nombre de la mascota correcta de cada dueño, nunca mezcladas. Por
+  separado, "No se pudo recoger": la mascota salió de `id_mascotas`, la
+  entrada de `recogidas` quedó con su motivo, se notificó con tipo
+  `emergencia`, y `finalizar_paseo()` SÍ funcionó después (un
+  `no_recogida` no bloquea).
+
+- **Puntos A3 y A9 — privacidad del mapa por dueño, y distancia por
+  dueño**: se implementaron juntos, en un solo commit (la tarea permite
+  "un commit por punto o por subpunto" - A9 es literalmente "aplica la
+  misma regla de privacidad de A3" a la distancia, que ya se calcula en
+  la MISMA vista que dibuja el mapa - separarlos habría significado
+  tocar los mismos `if`/`else` dos veces). Diagnóstico - antes,
+  `coordenadas_de_paseo()` (el JSON que consume el mapa) y
+  `mapa_paseo()` no filtraban los puntos GPS por dueño en absoluto -
+  cualquier dueño con acceso al paseo (`_paseo_accesible_o_none()`) veía
+  el trayecto COMPLETO, incluido el tramo hacia/desde la casa de otros
+  dueños. La distancia recorrida (ajustes del 19 de octubre) tenía el
+  mismo problema - siempre el total del paseo.
+
+  Fix: `_rango_visible_para_dueno(paseo, id_dueno)` (nueva, en
+  `coordenadas/views_web.py`) devuelve tres cosas posibles: `None` (sin
+  filtro - SOLO para un paseo de antes de esta fase, sin el campo
+  `recogidas` - compatibilidad explícita), el sentinel
+  `_SIN_PUNTOS_VISIBLES` (la mascota de ese dueño todavía no se
+  recogió, o nunca se recogió - no hay nada que mostrarle todavía), o
+  `(hora_recogida, hora_entrega)` (el tramo real - `hora_entrega` puede
+  ser `None`, "todavía con el paseador"). `coordenadas.repository.
+  listar_por_paseo()`/`obtener_ultimo_punto()`/`distancia_recorrida_m()`
+  ya aceptaban `desde`/`hasta` (preparado en los ajustes del 19 de
+  octubre) - ahora SÍ tienen un llamador real. El filtrado es en el
+  BACKEND (la query a Mongo), no solo ocultando en la plantilla - un
+  dueño no puede pedir puntos ajenos ni con un `?desde=` forjado en la
+  URL, porque el límite inferior efectivo es el MÁS RESTRICTIVO entre
+  el cursor del cliente y `hora_recogida`.
+
+  El paseador NUNCA pasa por este filtro (ve el paseo completo
+  siempre). `hay_punto_reciente` (si el GPS del paseador sigue
+  transmitiendo ahora mismo) tampoco se filtra a propósito - no revela
+  posición, solo si hay señal.
+
+  **Paradas y datos de contacto en el historial**: la tarea pide que
+  "nunca se muestren las paradas de recogida de otros dueños" y que la
+  dirección/indicaciones/teléfono "solo las vea el paseador... y solo
+  mientras el paseo está disponible o en_vivo, en el historial se
+  ocultan". Ninguna pantalla del proyecto dibuja pines de "parada" en
+  el mapa (ni esta fase lo pide) ni muestra los datos de contacto fuera
+  de la tarjeta de `bienvenida_paseador.html`, que solo existe mientras
+  `paseo_activo.estado == 'en_vivo'` - las dos reglas se cumplen porque
+  no hay ningún lugar que las viole todavía, no porque se haya agregado
+  un filtro activo. Se deja señalado para cuando se construya el
+  historial del paseador con detalle de recogidas (fuera del alcance
+  de esta fase) - esa pantalla nueva deberá respetar las dos reglas
+  desde el diseño.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, escenario D1/D2
+  con 26 puntos GPS en una línea de tiempo real: D1 recogido en el
+  minuto 5 y entregado en el 20; D2 recogido en el 10 y entregado en el
+  15): D1 vio 15 puntos (minutos 6 a 20) y "778 m"; D2 vio 5 puntos
+  (minutos 11 a 15) y "222 m"; el paseador vio los 26 puntos completos
+  y "1,4 km" - los tres números distintos, cada uno coherente con su
+  propio tramo (capturas móviles de los mapas de D1 y D2 adjuntas al
+  reporte). Un paseo SIN `recogidas` (legacy) le siguió mostrando a un
+  dueño los 5 puntos completos, sin filtrar - compatibilidad
+  confirmada, no solo asumida.
+
+- **Punto A4 — duración (RF9), por rol**: diagnóstico - `mapa.html` ya
+  calculaba y mostraba una duración (`actualizarTiempo()`, "Duración: X"
+  o "X transcurridos"), pero siempre con `paseo.hora_inicio`/`hora_fin` -
+  la duración TOTAL del paseo, sin importar el rol. RF9 pide que cada
+  dueño vea la duración de SU tramo (`hora_entrega - hora_recogida`), no
+  la del paseo completo.
+
+  Fix: reusa el MISMO `rango` que ya calcula A3/A9 para el mapa y la
+  distancia - si es un tramo real (`(hora_recogida, hora_entrega)`), se
+  lo pasa a `actualizarTiempo()` en vez de `paseo.hora_inicio`/
+  `hora_fin`; el paseador (`rango is None` siempre) sigue viendo el
+  total, sin cambios. Si la mascota de ese dueño todavía no se recogió
+  (`_SIN_PUNTOS_VISIBLES`), no se muestra ninguna duración. Cero
+  cambios de JS - la función ya sabía calcular "entre estas dos fechas,
+  o hasta ahora si la segunda es null", solo hacía falta pasarle las
+  fechas correctas según quién mira.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, un paseo con D1
+  recogido pero SIN entregar todavía, y D2 ya recogido Y entregado): D1
+  recibió su propia `hora_recogida` como inicio y `null` como fin (el
+  contador sigue corriendo en vivo, sobre SU tramo); D2 recibió su
+  propia `hora_recogida`/`hora_entrega` (duración fija, ya cerrada); el
+  paseador siguió recibiendo `paseo.hora_inicio`/`null` (el total del
+  paseo, sin ningún cambio respecto a antes de este punto).
+
+- **Punto A7 — duración acordada por dueño**: diagnóstico - antes,
+  `InscribirMascotaForm` no pedía ninguna duración; el dueño inscribía y
+  el paseador decidía cuánto duraba el paseo sin ningún acuerdo previo
+  visible para nadie. `historial.html` (lista de paseos del dueño)
+  seguía mostrando la duración TOTAL del paseo (`item.duracion_min`),
+  el mismo problema de A4 pero en la pantalla de historial en vez del
+  mapa - se dejó señalado al cerrar A4 y se resolvió aquí, junto con la
+  duración acordada, para no tocar el mismo bloque de `historial()` dos
+  veces.
+
+  Fix: nuevas constantes en `paseos/repository.py` -
+  `DURACIONES_ACORDADAS_CON_ETIQUETA` (30/60/90/120/150/180 minutos, con
+  etiqueta legible), `etiqueta_duracion_acordada()` y
+  `duraciones_acordadas_disponibles(horario_desde, horario_hasta)`, que
+  recorta la lista a solo las duraciones que caben en la ventana
+  publicada por el paseador (un horario de 90 min nunca ofrece 120+).
+  `InscribirMascotaForm` gana `duracion_acordada_min`
+  (`TypedChoiceField(coerce=int)`, `choices` armadas con esa función -
+  **nunca una lista fija**, para que el backend rechace automáticamente
+  una duración que no quepa en el horario). `detalle_paseador()` e
+  `inscribir_en_horario()` calculan las mismas `duraciones_disponibles`
+  a partir del `horario_desde`/`horario_hasta` real del paseo - el
+  mismo cálculo en los dos lados (mostrar el formulario y validar el
+  POST), si no coincidieran el backend rechazaría cualquier envío
+  válido. Se guarda en la misma entrada de `recogidas` que A1 (quedó
+  anticipado en el commit de A1, sin necesidad de tocar el esquema de
+  nuevo aquí).
+
+  El panel del paseador (`bienvenida_paseador.html`) calcula
+  `hora_limite_entrega = hora_recogida + duracion_acordada_min` por
+  cada recogida ya `recogida` y compara contra la hora actual
+  (`entrega_vencida`); vencida, la tarjeta completa gana
+  `border-danger border-2` y el texto "Entregar antes de las HH:MM"
+  pasa de `text-muted` a `text-danger fw-bold` - mismo patrón de "avisar
+  con color, nunca bloquear" que ya usa el resto del panel (el botón
+  "Entregado" sigue disponible, vencida o no, porque el sistema no
+  decide responsabilidad legal, solo informa). `mapa.html` (el que ve
+  el dueño) muestra "Duración acordada: X" justo encima del contador de
+  duración real de A4, reusando `duracion_acordada_etiqueta` que ya
+  calcula `mapa_paseo()` a partir del `rango` de A3/A9 - vuelve a
+  buscar la entrada de `recogidas` de ESE dueño para su propio
+  `duracion_acordada_min`, nunca el de otro dueño del mismo paseo.
+
+  `historial()` ahora busca la entrada de `recogidas` de ese dueño; si
+  existe, muestra "Duración acordada: X · Duración real: Y" (duración
+  real calculada entre `hora_recogida`/`hora_entrega` de ESE dueño, vía
+  `coordenadas_repository.distancia_recorrida_m(desde=, hasta=)` para
+  la distancia y una resta simple para el tiempo, formateada con la
+  nueva `paseos.repository.formatear_duracion_real()` - puerto a Python
+  de la misma `formatearDuracion()` que ya usa `mapa.html` en JS, deben
+  mantenerse sincronizadas si una cambia). Un paseo sin `recogidas`
+  (legacy) cae al texto viejo `· 15 min` sin tocar, compatibilidad
+  explícita.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real): confirmado por
+  Python directo que `duraciones_acordadas_disponibles()` recorta bien
+  para ventanas de 20 min (vacío), 2 h (hasta 120) y 4 h (las 6
+  completas); confirmado por HTTP que un horario de 20 min NO ofrece
+  ninguna duración para inscribirse (el formulario la omite) y uno de
+  90 min ofrece solo 30/60/90 (120+ no aparecen); inscripción real con
+  `duracion_acordada_min=90` quedó guardada como entero nativo de Mongo
+  (no string). Con esa recogida marcada "Recogido", el panel mostró
+  "Entregar antes de las 22:04" en gris normal; tras retrasar
+  `hora_recogida` 120 minutos (ventana de 90 min ya vencida), la misma
+  tarjeta pasó a borde rojo y texto rojo en negrita (captura móvil
+  `p20oct_entrega_vencida.png`) sin bloquear el botón "Entregado". Los
+  dos paseos de prueba se eliminaron de `canigo_dev` al terminar.
+
+- **Punto A6 — seguimiento interrumpido (limitación de iOS)**: diagnóstico -
+  Safari/las apps de pantalla de inicio suspenden el JS cuando la
+  pantalla se bloquea o la app pasa a segundo plano (ver "Wake Lock" más
+  abajo, que ya mitiga el caso más común pero no lo garantiza) - el
+  emisor de GPS se corta sin aviso, y antes de este punto nada en la
+  interfaz lo hacía notar: el mapa del dueño mostraba "Esperando la
+  ubicación del paseador…" sin decir desde cuándo, la ruta se dibujaba
+  como una sola línea sólida (un hueco de varios minutos parecía un
+  tramo caminado en línea recta) y el paseador no se enteraba de cuánto
+  tiempo había estado sin transmitir al volver.
+
+  Fix (cuatro cambios, un solo commit - los cuatro son la misma
+  limitación de iOS vista desde los dos lados, dueño y paseador):
+
+  1. **Ruta punteada en los huecos**: `mapa.html` ya no dibuja un único
+     `L.polyline` - mantiene una lista de segmentos (`segmentos`), cada
+     uno su propio `L.polyline` sólido o punteado (`dashArray`). Un
+     hueco mayor a `GAP_PUNTEADO_MS` (2 min) entre dos puntos
+     DIBUJADOS (no entre dos puntos recibidos - uno descartado por mala
+     precisión no cuenta para este cálculo, pero el tiempo real
+     transcurrido sí importa) cierra el segmento sólido actual, dibuja
+     un segmento punteado de 2 puntos que une el hueco, y abre un
+     segmento sólido nuevo. `bordesDeLaRuta()` reemplaza a
+     `linea.getBounds()` para que el primer `fitBounds()` siga
+     funcionando con varios segmentos en vez de uno solo.
+
+     **Bug real encontrado y corregido de paso**: `coordenadas.
+     repository.a_json()` mandaba `fecha_captura` con `.isoformat()` a
+     secas (sin sufijo "Z") - pymongo devuelve esa fecha naive en UTC,
+     así que un futuro `new Date(p.fecha_captura)` en JS la habría
+     interpretado como hora LOCAL del navegador, desfasando el cálculo
+     del hueco 5 horas en Bogotá. Antes no importaba (ningún JS parseaba
+     ese campo como `Date`, solo se reenviaba como string en
+     `?desde=`) - A6 es el primer caso real que necesita la fecha
+     parseada, así que se corrigió ahí mismo (mismo criterio que
+     `_fecha_iso_utc()` en `coordenadas/views_web.py`).
+
+  2. **"Última ubicación: hace N min"**: el `<span id="ultima-ubicacion-hace">`
+     dentro de "Esperando la ubicación del paseador…" se llena con el
+     tiempo transcurrido desde `fecha_captura` del último punto conocido
+     (`ultimaFechaCapturaConocida`, ya existía para el polling
+     incremental - A6 solo lo reutiliza). Calculado DESPUÉS del bloque
+     que procesa los puntos nuevos de cada vuelta del polling (no antes,
+     como estaba "esperando-ubicacion" originalmente) para que use el
+     valor recién actualizado de esta vuelta, no el de la anterior.
+
+  3. **Marcador atenuado**: mientras `!hay_punto_reciente` y el paseo
+     sigue `en_vivo`, `marcadorActual.setOpacity(0.5)` - sigue mostrando
+     la última posición conocida (ocultarla dejaría al dueño sin ningún
+     punto de referencia), pero a simple vista se nota que no es una
+     posición fresca. Vuelve a opacidad 1 apenas llega un punto nuevo.
+
+  4. **Aviso al paseador "al volver a Canigo"**: el emisor de GPS
+     (`base.html`) es global y no tiene estado propio entre una página y
+     la siguiente (cada navegación es una carga nueva) - la hora del
+     último envío EXITOSO se guarda en `localStorage`
+     (`canigo_ultimo_envio_gps_ms`, try/catch por si no está disponible)
+     en vez de en una variable JS, para que sobreviva justo a la
+     navegación/el bloqueo de pantalla que se quiere detectar. Al
+     cargar cualquier página con un paseo `en_vivo`,
+     `avisarSiHuboInterrupcion()` compara esa marca contra "ahora" ANTES
+     de la primera captura de esta carga; si pasaron más de 2 minutos,
+     llena `#aviso-interrupcion-gps` (solo existe en
+     `bienvenida_paseador.html`, mismo patrón `null` que "estado-gps")
+     con "Tu ubicación no se compartió durante N min.".
+
+  **Toques accidentales** (celular en el bolsillo con la pantalla
+  encendida por el Wake Lock de la fase 2): "Finalizar paseo",
+  "Entregado" y "No se pudo recoger" ahora piden confirmación
+  (`onsubmit="return confirm(...)"`) antes de enviarse - "Recogido" NO
+  la pide (así lo pide la tarea explícitamente). El mensaje de
+  "Entregado"/"No se pudo recoger" incluye el nombre de la mascota
+  (`r.mascotas_nombres|escapejs`) para que el paseador sepa a cuál se
+  refiere si lleva varias. `confirm()` corre en el evento `submit`, DESPUÉS
+  de que el navegador ya validó los `required` del formulario (el motivo
+  de "No se pudo recoger" vacío ni llega a mostrar el diálogo) - cancelar
+  el diálogo cancela el envío sin tocar el backend.
+
+  **Decisión sin especificar en la tarea**: el umbral de "hueco" (ruta
+  punteada) y el de "no se compartió durante N min" (aviso al volver)
+  son el MISMO valor (`GAP_PUNTEADO_MS`/`UMBRAL_AVISO_INTERRUPCION_MS`,
+  2 minutos) a propósito - la tarea los describe como dos reglas
+  separadas pero ambas existen para la misma limitación real; usar el
+  mismo número evita que la ruta se vea punteada en un tramo que el
+  aviso no consideró "interrumpido", o viceversa.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real + Chrome vía CDP,
+  D1/P1): con 8 puntos GPS reales (4 antes de un hueco de 3 min, 4
+  después) inscritos tras una recogida real, el DOM mostró exactamente
+  UN `<path>` con `stroke-dasharray: "6, 10"` (el tramo que cierra el
+  hueco) y el resto sin punteado; el marcador de posición actual quedó
+  con `opacity: 0.5` mientras no llegaban puntos nuevos; "Esperando la
+  ubicación del paseador… Última ubicación: hace 8 min." se mostró
+  correctamente (captura móvil adjunta). El aviso de interrupción se
+  probó fijando `localStorage` a "hace 6 minutos" antes de recargar
+  `bienvenida_paseador.html`: apareció "Tu ubicación no se compartió
+  durante 6 min.". Los diálogos de confirmación se probaron disparando
+  el `submit` real de los formularios vía Chrome DevTools Protocol
+  (`Page.javascriptDialogOpening`/`handleJavaScriptDialog`): "Entregado"
+  con el diálogo ACEPTADO completó la entrega normalmente (la recogida
+  pasó a `entregada`); "Finalizar paseo" con el diálogo CANCELADO no
+  envió el formulario (el paseo quedó `en_vivo`, confirmado leyendo
+  Mongo directamente) y, aceptado después, sí finalizó (`historico`).
+  "No se pudo recoger" usa el mismo mecanismo exacto (`onsubmit="return
+  confirm(...)"`) y se verificó por código, no se repitió la prueba en
+  vivo (ya no quedaba una recogida en `pendiente` en el paseo de
+  prueba). Toda la data de prueba (2 paseos, cuentas y mascotas de
+  prueba) se eliminó de `canigo_dev` al terminar.
+
+- **Punto A8 — incidentes: solo agregar información, nunca modificar el
+  original**: **diagnóstico primero (contradicción real encontrada con
+  la tarea)** - la tarea afirma que "en la prueba con un usuario final
+  se vio que el paseador podía editar un incidente ya reportado". Leído
+  todo `incidentes/` (`views_web.py`, `urls_web.py`, `repository.py`,
+  `templates/incidentes/`) antes de tocar nada: **no existe, ni existió,
+  ningún endpoint ni formulario para editar un incidente**.
+  `urls_web.py` solo tenía 4 rutas (`lista`, `lista_paseador`,
+  `reportar_incidente`, `detalle_incidente`); `detalle.html` era
+  puramente de lectura (ningún `<form>`); `repository.py` solo tenía
+  `crear()` (inserta) y `marcar_notificado()` (un solo campo booleano,
+  ajeno al contenido del reporte) - ninguna función de "actualizar" los
+  campos originales. Por pedido explícito de la tarea ("si un punto
+  contradice lo que encuentres en el código, detente y repórtalo"), se
+  reporta esto tal cual en vez de inventar un bug de edición para
+  "corregirlo": la inmutabilidad del reporte original YA era cierta
+  antes de este punto, no por una regla que la impusiera, sino porque
+  nunca se construyó una forma de romperla. Posible explicación de lo
+  que vio la autora: volver a tocar "Reportar emergencia" para el MISMO
+  paseo con datos distintos crea un incidente NUEVO y separado (no edita
+  el anterior) - pudo percibirse como "edición" sin serlo. Se reportó
+  esto explícitamente antes de seguir.
+
+  Aun así, el resto del punto (A8 describe un "Comportamiento esperado"
+  con valor real e independiente de si había o no un bug que corregir)
+  se implementó completo:
+
+  - **`@require_GET` en `detalle_incidente`** (antes aceptaba cualquier
+    método sin más, aunque nunca leyera `request.POST`): hace explícito
+    y testeable el rechazo de "un POST manual a esta URL" - ahora
+    responde 405 en vez de depender de que la vista simplemente ignore
+    el body.
+  - **"Agregar información"**: `incidentes.repository.
+    agregar_complemento(id_incidente, texto, foto)` - un solo `$push` a
+    la lista nueva `incidentes.complementos` (ver CLAUDE.md), nunca
+    toca los campos originales (no hay otra función que lo haga). Vista
+    nueva `agregar_complemento_incidente` (`@require_POST`,
+    `@requiere_paseador`), con dos guardas en el BACKEND, no solo en la
+    plantilla: `_incidente_accesible_o_none()` (reusada tal cual de
+    `detalle_incidente()` - con `@requiere_paseador` ya aplicado, solo
+    deja pasar al paseador ASIGNADO a ese paseo) y
+    `_puede_agregar_complemento()` (nueva - `en_vivo`, o `historico`
+    dentro de `HORAS_LIMITE_COMPLEMENTO_INCIDENTE` horas desde
+    `hora_fin`; **constante con nombre**, pedido explícito de la tarea).
+    Las DOS son la misma fuente de verdad que ya usa `detalle_incidente()`
+    para decidir si mostrar el formulario, así que un POST forjado
+    después del plazo (o a un incidente ajeno) se rechaza igual aunque
+    el botón ya no estuviera visible.
+  - **Privacidad del detalle**: no hizo falta ningún filtro nuevo - los
+    `complementos` son un campo más del MISMO documento `incidentes`,
+    ya protegido por `_incidente_accesible_o_none()` (mismas reglas de
+    INC-01, pedido explícito de la tarea). Solo el PASEADOR ve el
+    formulario para agregar uno (`form_complemento` es `None` para el
+    dueño en la vista, antes incluso de llegar a la plantilla) - "el
+    paseador solo puede Agregar información" es literal, el dueño nunca
+    tiene esa opción.
+  - **Notificación**: tipo `emergencia` (existente, "no crees un tipo
+    nuevo" - pedido explícito). Si el incidente afecta a una mascota
+    concreta, el texto es literal el de la tarea ("Se agregó información
+    al incidente de `<mascota>`"), solo al dueño de esa mascota - mismo
+    criterio de privacidad que `reportar_incidente()`. **Decisión sin
+    especificar en la tarea**: para "accidente_paseador" (`id_mascota`
+    `None`, no involucra a ninguna mascota en particular - ver
+    CLAUDE.md) no hay un "`<mascota>`" que nombrar; se notifica a TODOS
+    los `id_duenos` del paseo con un texto genérico, mismo criterio que
+    ya usa `reportar_incidente()` para decidir a quién notificar en ese
+    mismo caso (documentado explícitamente, no asumido en silencio).
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, D1/P1): reportado
+  un incidente real con foto; un POST manual con `tipo`/`descripcion`
+  forjados a `/incidentes/<id>/` (con CSRF válido, para probar el guard
+  nuevo y no solo la protección CSRF) devolvió **405**; el dueño vio el
+  detalle pero SIN el formulario de complemento, y un POST suyo a
+  `/complementos/` no agregó nada (bloqueado por `@requiere_paseador`);
+  el paseador agregó un complemento real con foto (subida a Cloudinary
+  confirmada) - visible tanto para él como para el dueño; los campos
+  originales del incidente (`tipo`, `descripcion`, `evidencia_foto`,
+  `latitud`, `longitud`, `fecha_hora`) quedaron **byte a byte idénticos**
+  antes y después, comparados directamente en Mongo; un complemento con
+  texto vacío se rechazó (0 complementos agregados, el único exitoso
+  siguió siendo 1); y, forzando el paseo a `historico` con
+  `hora_fin` hace 25 horas (fuera del plazo de 24h), el formulario dejó
+  de mostrarse Y un POST directo al endpoint no agregó nada (rechazado
+  en el backend, no solo oculto en la interfaz). Toda la data de prueba
+  se eliminó de `canigo_dev` al terminar.
+
+- **Punto A5 — mapa y GPS (confirmación, sin código nuevo)**: la tarea
+  pide reusar el emisor único de GPS de la fase 1 y aplicarle a ese
+  MISMO endpoint JSON el filtro de privacidad de A3, en vez de construir
+  algo nuevo - verificado, no haía nada que escribir:
+
+  - **Un solo emisor de GPS en todo el proyecto**: `core/templates/
+    base.html` (el bloque `{% if id_paseo_en_vivo_del_paseador %}` con
+    `navigator.geolocation.getCurrentPosition()` + `setInterval`) es el
+    ÚNICO lugar de todo el código que llama a la API de geolocalización
+    del navegador - confirmado con una búsqueda en todo el proyecto. A6
+    (seguimiento interrumpido) extendió ESE mismo bloque
+    (`avisarSiHuboInterrupcion()`/`registrarEnvioExitoso()`) en vez de
+    crear uno aparte.
+  - **Un solo endpoint JSON para el mapa**: `coordenadas.views_web.
+    coordenadas_de_paseo()` (fase 1) sigue siendo la única vista que
+    sirve los puntos GPS al `fetch()` de `mapa.html` - A3/A9 le
+    agregaron el filtro de privacidad (`_rango_visible_para_dueno()`)
+    DENTRO de esa misma función, nunca en un endpoint nuevo; A4
+    (duración) y A7 (duración acordada) reusan el mismo `rango` que
+    calcula ahí. No existe un segundo endpoint de coordenadas en todo
+    el proyecto.
+
+  Sin cambios de código ni commit propio para este punto - queda
+  documentado como confirmación explícita, no como "ya se hará solo".
+
+- **Revisión pre-fusión de fase 3 (antes de fusionar a `master`) - dos bugs
+  reales encontrados y corregidos**: la autora pidió, antes de aprobar la
+  fusión, (1) revisar producción (`canigo`) en solo lectura para paseos
+  `disponible`/`en_vivo` sin `recogidas`, (2) confirmar que el try/catch
+  de `localStorage` (A6) no corta el emisor de GPS en navegación privada,
+  (3) listar las pantallas que consumen el JSON de `a_json()` (A6) y
+  confirmar que ninguna queda desfasada 5 horas, (4) respaldo de
+  `paseos`/`usuarios`/`incidentes` de producción, (5) plan de reversión.
+
+  - **(1) Producción**: UN SOLO paseo real `disponible`/`en_vivo` con
+    mascotas y sin `recogidas` (`6acda740fad7a1d5b6643b6f` - cuentas
+    reales, no `@canigo.test`; además lleva `en_vivo` desde el 13 de
+    octubre, `total_puntos: 0` - paseo real abandonado, no finalizado,
+    **dato a seguir de cerca por separado, no corregido acá** porque no
+    se pidió). Se clonó la MISMA forma exacta de ese documento (sin
+    `recogidas`, `en_vivo`, `total_puntos: 0`) en `canigo_dev` y se
+    ejecutaron contra ella, con HTTP real, las 8 pantallas que fase 3
+    tocó (mapa del dueño en vivo e histórico, JSON de coordenadas,
+    bienvenida del paseador, mis-paseos, finalizar, historial del dueño
+    y del paseador) - **cero errores 500**, comportamiento idéntico al
+    de antes de fase 3 en los 8 casos (sin tarjeta "Recogidas:", sin
+    bloquear "Finalizar", duración/distancia del paseo completo).
+
+  - **(2) `localStorage`**: confirmado por lectura que los DOS únicos
+    usos de `localStorage` en todo el proyecto (`avisarSiHuboInterrupcion()`/
+    `registrarEnvioExitoso()`, `core/templates/base.html`) están cada
+    uno dentro de su propio `try/catch`. Verificado además por
+    EJECUCIÓN (Chrome vía CDP, `Object.defineProperty(window,
+    'localStorage', {get: () => { throw ... }})` para simular Safari en
+    navegación privada antes de que cargue cualquier script): el emisor
+    de GPS siguió mandando puntos nuevos cada ~8s con normalidad
+    (`estado-gps` mostró "Compartiendo tu ubicación...", el conteo de
+    `coordenadas_detalle` avanzó) pese a que CUALQUIER acceso a
+    `localStorage` lanzaba una excepción.
+
+  - **(3) Pantallas que consumen el JSON de `a_json()`**: UNA sola,
+    `coordenadas/templates/coordenadas/mapa.html` (confirmado con una
+    búsqueda de `datos_paseo`/`coordenadas:datos_paseo` en todo el
+    proyecto - ningún otro template ni vista lo consume). El historial,
+    el panel del paseador y el detalle de un incidente NUNCA pasan por
+    esta función (usan `distancia_recorrida_m()` del lado del servidor,
+    la respuesta de `registrar_coordenada()`, o `incidentes.
+    repository.a_json()` respectivamente - funciones y datos
+    completamente aparte), así que no podían quedar desfasados por este
+    cambio en absoluto.
+
+    **Encontrando esto se detectaron 2 bugs reales que la revisión de
+    ejecución de A6 no había probado** (esa revisión solo ejecutó la
+    PRIMERA carga de la página, nunca una segunda vuelta del polling de
+    8s con un rango de privacidad activo):
+
+    - **Bug 1 (500 real)**: `_parsear_fecha()` (`coordenadas/views_web.py`)
+      hacía `.replace('Z', '+00:00')`, devolviendo un datetime AWARE
+      para `desde_cliente` (el cursor `?desde=` que manda `mapa.html` en
+      cada vuelta del polling). `desde_privacidad` (`hora_recogida`,
+      directo de Mongo) sigue NAIVE - comparar los dos con `max()`
+      lanzaba `TypeError: can't compare offset-naive and offset-aware
+      datetimes`, un 500 real en la SEGUNDA vuelta del polling para
+      cualquier dueño con una recogida ya en curso. Reproducido con HTTP
+      real (dos peticiones seguidas al JSON de coordenadas) antes de
+      corregirlo. Fix: `.replace('Z', '')` en vez de reemplazar por un
+      offset - devuelve NAIVE, igual que el resto del proyecto
+      (CLAUDE.md, "Manejo de zonas horarias").
+    - **Bug 2 (regresión silenciosa de rendimiento)**: la primera
+      versión del fix de A6 usaba `strftime('%Y-%m-%dT%H:%M:%SZ')` (sin
+      microsegundos) en `a_json()`, truncando la precisión real que
+      `fecha_captura` SÍ tiene en Mongo. Como `mapa.html` reenvía ese
+      mismo string como cursor incremental (optimización de lentitud en
+      producción del 14 de octubre), el ÚLTIMO punto de cada vuelta del
+      polling volvía a matchear (`$gt` sobre un valor truncado, siempre
+      menor al real) en la vuelta siguiente - reenviaba ese mismo punto
+      PARA SIEMPRE, rompiendo el "solo lo nuevo" que esa optimización
+      necesitaba. Fix: `.isoformat()` (conserva microsegundos) con el
+      sufijo `+00:00` cambiado por `Z`, en vez de `strftime` sin `%f`.
+      Reproducido (un segundo poll con el cursor de el primero volvía a
+      traer el mismo punto) y confirmado corregido (0 puntos nuevos en
+      el segundo poll) con HTTP real.
+
+  - **(4) Respaldo**: `respaldo_canigo_2026-10-20_premerge_fase3/`
+    (mismo patrón que `cca79d7` - `.gitignore` ya cubre
+    `respaldo_canigo_*/`, nunca se comitea) - `paseos.json` (13
+    documentos), `usuarios.json` (11), `incidentes.json` (7), export
+    completo de las 3 colecciones de `canigo` tal cual estaban antes de
+    desplegar.
+
+  - **(5) Plan de reversión**: el merge se hace con `--no-ff` (pedido
+    explícito) para que quede como un commit de merge único y
+    reversible. Para deshacerlo: `git revert -m 1 <hash-del-merge>`
+    (el `-m 1` es obligatorio en un revert de un merge commit - indica
+    "volver al estado del primer padre", `master` antes de fusionar;
+    NUNCA `git reset --hard`, que reescribiría el historial de una rama
+    ya compartida). Esto crea un commit NUEVO que deshace el código,
+    sin tocar MongoDB en absoluto - los documentos no se migran ni se
+    borran con un revert de código. Para los paseos creados DURANTE el
+    tiempo que estuvo desplegado fase 3 (con `recogidas` ya poblado): el
+    código revertido (pre-fase-3) simplemente no sabe que ese campo
+    existe - lo ignora por completo (Mongo no tiene esquema fijo), así
+    que el paseo sigue funcionando con sus campos de siempre
+    (`id_mascotas`, `hora_inicio`/`hora_fin`), sin errores, sin perder
+    el dato (queda en Mongo, recuperable si se vuelve a desplegar fase 3
+    después). **Única salvedad real**: si el revert ocurre con un paseo
+    `en_vivo` que TIENE recogidas `pendiente`/`recogida` sin cerrar, el
+    código viejo no exige entregarlas antes de finalizar (esa regla es
+    de A2, no existe en `master`) - el paseador podría finalizar con
+    recogidas "colgadas" en Mongo, sin que nada las marque
+    `entregada`/`no_recogida` nunca. No rompe nada ni pierde datos, pero
+    por prolijidad conviene revertir entre paseos, no a mitad de uno con
+    recogidas activas.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

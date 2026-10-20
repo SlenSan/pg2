@@ -105,6 +105,26 @@ def actualizar_calificacion_promedio(id_paseador, promedio):
     get_db().usuarios.update_one({'_id': oid}, {'$set': {'calificacion_promedio': promedio}})
 
 
+def guardar_ultima_recogida(id_dueno, *, direccion, comuna, indicaciones, telefono):
+    """
+    Incremento 4 fase 3, punto A1 - se llama cada vez que un dueño
+    inscribe una mascota con éxito (paseos.repository.inscribir_
+    mascotas()), para prellenar la PRÓXIMA inscripción con los mismos
+    datos de recogida. Siempre `$set` (sobreescribe, nunca un historial)
+    - solo interesa la última vez, no todas. Una cuenta que nunca
+    inscribió no tiene este campo - la primera vez se prellena con
+    `usuarios.direccion`/`telefono` en su lugar (ver
+    paseos.views_web.detalle_paseador()).
+    """
+    oid = id_dueno if isinstance(id_dueno, ObjectId) else ObjectId(id_dueno)
+    get_db().usuarios.update_one({'_id': oid}, {'$set': {'ultima_recogida': {
+        'direccion': direccion,
+        'comuna': comuna,
+        'indicaciones': indicaciones,
+        'telefono': telefono,
+    }}})
+
+
 def actualizar_contrasena(id_usuario, nuevo_hash):
     """
     Lentitud en producción (14 de octubre) - re-hash automático al

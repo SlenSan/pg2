@@ -28,10 +28,115 @@
     recargar la pagina no tendria donde aparecer.
     {% endcomment %}
     <div id="avisos-paseo"></div>
-    <form method="post" action="{% url 'paseos:finalizar_paseo' paseo_activo.id_paseo %}">
+
+    {% comment %}
+    Incremento 4 fase 3, punto A2 - una tarjeta por dueño con sus datos
+    de recogida y la acción que corresponde a su estado actual. Un
+    paseo de ANTES de esta fase no tiene `recogidas` - la lista viene
+    vacía, no se muestra nada acá (compatibilidad).
+    {% endcomment %}
+    {% if paseo_activo.recogidas %}
+    <div class="mb-3">
+      <p class="small text-muted mb-2">Recogidas:</p>
+      {% for r in paseo_activo.recogidas %}
+      {% comment %}
+      Incremento 4 fase 3, punto A7 - borde rojo si la entrega está
+      vencida (solo un indicador visual, pedido explícito: "no bloquea
+      nada ni envía notificaciones" - el botón "Entregado" sigue
+      funcionando igual).
+      {% endcomment %}
+      <div class="p-2 rounded-3 mb-2 {% if r.entrega_vencida %}border border-danger border-2{% endif %}" style="background-color: var(--color-muted);">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div class="fw-bold small">{{ r.mascotas_nombres }} <span class="text-muted fw-normal">(de {{ r.dueno_nombre }})</span></div>
+            <div class="small">{{ r.direccion }}{% if r.comuna_etiqueta %} · {{ r.comuna_etiqueta }}{% endif %}</div>
+            {% if r.indicaciones %}<div class="small text-muted">{{ r.indicaciones }}</div>{% endif %}
+            <div class="small"><a href="tel:{{ r.telefono }}">{{ r.telefono }}</a></div>
+            {% if r.duracion_etiqueta %}<div class="small text-muted">Duración acordada: {{ r.duracion_etiqueta }}</div>{% endif %}
+          </div>
+          <span class="badge {% if r.estado == 'pendiente' %}bg-secondary{% elif r.estado == 'recogida' %}bg-success{% elif r.estado == 'entregada' %}bg-dark{% else %}bg-danger{% endif %}">
+            {{ r.estado }}
+          </span>
+        </div>
+        {% if r.estado == 'pendiente' %}
+        <form method="post" action="{% url 'paseos:marcar_recogida' paseo_activo.id_paseo r.id_dueno %}" class="mt-2">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-success btn-sm w-100">Recogido</button>
+        </form>
+        <details class="mt-2">
+          <summary class="small text-danger">No se pudo recoger</summary>
+          {% comment %}
+          Punto A6 - confirmación antes de ejecutar (toque accidental con
+          el celular en el bolsillo y la pantalla encendida, ver wake
+          lock). "return confirm(...)" corre DESPUÉS de que el navegador
+          ya validó el "required" del textarea de motivo - un submit con
+          el motivo vacío ni llega a mostrar el diálogo.
+          {% endcomment %}
+          <form
+            method="post"
+            action="{% url 'paseos:marcar_no_recogida' paseo_activo.id_paseo r.id_dueno %}"
+            class="mt-2"
+            onsubmit="return confirm('¿Confirmas que no se pudo recoger a {{ r.mascotas_nombres|escapejs }}?');"
+          >
+            {% csrf_token %}
+            {{ form_motivo_no_recogida.motivo }}
+            <button type="submit" class="btn btn-outline-danger btn-sm w-100 mt-1">Confirmar que no se pudo recoger</button>
+          </form>
+        </details>
+        {% elif r.estado == 'recogida' %}
+        {% if r.hora_limite_entrega %}
+        <p class="small mb-1 mt-2 {% if r.entrega_vencida %}text-danger fw-bold{% else %}text-muted{% endif %}">
+          Entregar antes de las {{ r.hora_limite_entrega|time:"H:i" }}
+        </p>
+        {% endif %}
+        <form
+          method="post"
+          action="{% url 'paseos:marcar_entrega' paseo_activo.id_paseo r.id_dueno %}"
+          onsubmit="return confirm('¿Confirmas que ya entregaste a {{ r.mascotas_nombres|escapejs }}?');"
+        >
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary btn-sm w-100">Entregado</button>
+        </form>
+        {% elif r.estado == 'no_recogida' %}
+        <p class="small text-danger mb-0 mt-1">Motivo: {{ r.motivo_no_recogida }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% comment %}
+    Punto A6 - "Finalizar paseo" también pide confirmación (toque
+    accidental). Se suma al "disabled" de abajo, no lo reemplaza: un
+    botón disabled no dispara submit ni confirm en absoluto.
+    {% endcomment %}
+    <form
+      method="post"
+      action="{% url 'paseos:finalizar_paseo' paseo_activo.id_paseo %}"
+      onsubmit="return confirm('¿Confirmas que quieres finalizar el paseo?');"
+    >
       {% csrf_token %}
-      <button type="submit" class="btn btn-primary w-100">Finalizar paseo</button>
+      {% comment %}
+      Punto A2, punto 5 - deshabilitado en el frontend mientras quede
+      alguna recogida 'pendiente'/'recogida' (el backend lo exige de
+      verdad - ver paseos.repository.finalizar_paseo()). Un paseo sin
+      `recogidas` (de antes de esta fase) siempre puede finalizarse.
+      {% endcomment %}
+      <button type="submit" class="btn btn-primary w-100" {% if not paseo_activo.puede_finalizar %}disabled{% endif %}>
+        Finalizar paseo
+      </button>
+      {% if not paseo_activo.puede_finalizar %}
+      <p class="text-muted small mt-1 mb-0">Entrega todas las recogidas pendientes antes de finalizar.</p>
+      {% endif %}
     </form>
+    {% comment %}
+    Incremento 4 fase 3, punto A6 - aviso de interrupción del GPS "al
+    volver a Canigo" (limitación de iOS: la pantalla bloqueada o la app
+    en segundo plano corta el envío). Lo llena el emisor global de GPS
+    (base.html, avisarSiHuboInterrupcion()) solo si corresponde - vacío y
+    oculto por defecto, mismo patrón que "estado-wakelock" más abajo.
+    {% endcomment %}
+    <p class="text-danger small mt-2 mb-1 d-none" id="aviso-interrupcion-gps"></p>
     <p class="text-muted small mt-2 mb-1" id="estado-gps">Compartiendo tu ubicación...</p>
     {% comment %}
     Ajustes del 19 de octubre, punto 1 - mismo patron que "estado-gps":

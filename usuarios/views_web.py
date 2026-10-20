@@ -29,7 +29,7 @@ from incidentes.forms import ReportarIncidenteForm
 from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository as paseos_repository
-from paseos.forms import PublicarHorarioForm
+from paseos.forms import MotivoNoRecogidaForm, PublicarHorarioForm
 from usuarios import repository
 from usuarios.decorators import URL_DASHBOARD_POR_ROL, requiere_autenticacion, requiere_dueno, requiere_paseador
 from usuarios.forms import (
@@ -524,6 +524,52 @@ def bienvenida_paseador(request):
         duenos_paseo = repository.resolver_lista(paseo.get('id_duenos'), duenos_por_id)
         duenos_nombres = repository.nombres_unidos(duenos_paseo)
         fotos_existentes = {f['momento'] for f in paseo.get('fotos', [])}
+
+        # Incremento 4 fase 3, punto A2 - "el paseador ve la lista de
+        # recogidas con dirección, indicaciones, teléfono y las mascotas
+        # de cada dueño". Un paseo de ANTES de esta fase no tiene el
+        # campo `recogidas` - .get(..., []) lo trata como ninguna
+        # recogida pendiente (compatibilidad, ver reglas de trabajo).
+        items_recogida = []
+        ahora_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+        for r in paseo.get('recogidas', []):
+            mascotas_recogida = mascotas_repository.resolver_lista(
+                r.get('id_mascotas', []), mascotas_por_id,
+            )
+            # Incremento 4 fase 3, punto A7 - completa RF9. Un paseo de
+            # ANTES de este punto no tiene `duracion_acordada_min`
+            # (None) - sin duración acordada, no hay "hora límite" que
+            # calcular ni resaltar, solo se omite (compatibilidad).
+            duracion_min = r.get('duracion_acordada_min')
+            hora_limite_entrega = None
+            entrega_vencida = False
+            if duracion_min and r.get('hora_recogida'):
+                hora_limite_entrega = r['hora_recogida'] + timedelta(minutes=duracion_min)
+                entrega_vencida = r.get('estado') == 'recogida' and ahora_utc > hora_limite_entrega
+            items_recogida.append({
+                'id_dueno': str(r['id_dueno']),
+                'dueno_nombre': (duenos_por_id.get(r['id_dueno']) or {}).get('nombre', 'Dueño'),
+                'mascotas_nombres': mascotas_repository.nombres_unidos(mascotas_recogida),
+                'direccion': r.get('direccion'),
+                'comuna_etiqueta': paseos_repository.etiqueta_zona(r['comuna']) if r.get('comuna') else None,
+                'indicaciones': r.get('indicaciones'),
+                'telefono': r.get('telefono'),
+                'estado': r.get('estado'),
+                'motivo_no_recogida': r.get('motivo_no_recogida'),
+                'duracion_etiqueta': paseos_repository.etiqueta_duracion_acordada(duracion_min),
+                # Solo tiene sentido mostrar "Entregar antes de las
+                # HH:MM" mientras sigue 'recogida' (ya con el
+                # paseador, todavía sin entregar) - una vez
+                # 'entregada'/'no_recogida', ya pasó. Marcado tzinfo=utc
+                # (mismo cuidado de siempre, ver CLAUDE.md) para que el
+                # filtro |time de la plantilla lo convierta a hora de
+                # Bogotá - es un valor ESTÁTICO (no vive actualizándose
+                # como "tiempo-transcurrido" en el mapa), así que no
+                # hace falta JS para esto.
+                'hora_limite_entrega': hora_limite_entrega.replace(tzinfo=timezone.utc) if hora_limite_entrega else None,
+                'entrega_vencida': entrega_vencida,
+            })
+
         paseo_activo = {
             'id_paseo': str(paseo['_id']),
             'estado': paseo['estado'],
@@ -538,6 +584,13 @@ def bienvenida_paseador(request):
             # que el primer envio de GPS (cada 8s, base.html) lo actualice.
             'distancia_texto': coordenadas_repository.formatear_distancia(
                 coordenadas_repository.distancia_recorrida_m(paseo['_id'])
+            ),
+            'recogidas': items_recogida,
+            # "Finalizar paseo" se deshabilita en el frontend mientras
+            # quede alguna recogida sin cerrar (backend lo exige de
+            # verdad, ver paseos.repository.finalizar_paseo()).
+            'puede_finalizar': not any(
+                r['estado'] in ('pendiente', 'recogida') for r in paseo.get('recogidas', [])
             ),
         }
         # mascotas=mascotas_paseo: si el paseo lleva mas de una, el form
@@ -573,6 +626,11 @@ def bienvenida_paseador(request):
         'incidente_form': incidente_form,
         'horarios_disponibles': horarios_disponibles,
         'form_horario': form_horario,
+        # Incremento 4 fase 3, punto A2 - un solo formulario sin binding,
+        # reusado para las N tarjetas de "No se pudo recoger" (cada una
+        # postea a su propia URL con el id_dueno en la ruta, no hace
+        # falta un prefix distinto por tarjeta).
+        'form_motivo_no_recogida': MotivoNoRecogidaForm(),
         'solicitudes_hoy': solicitudes_hoy,
         'paseos_esta_semana': paseos_esta_semana,
     })

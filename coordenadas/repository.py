@@ -39,14 +39,29 @@ def registrar_punto(*, id_paseo, latitud, longitud, altitud=None, precision=None
     return punto
 
 
-def obtener_ultimo_punto(id_paseo):
-    """El punto GPS mas reciente de un paseo, o None si todavia no hay ninguno."""
+def obtener_ultimo_punto(id_paseo, *, desde=None, hasta=None):
+    """
+    El punto GPS mas reciente de un paseo, o None si todavia no hay
+    ninguno. `desde`/`hasta` (datetime, opcionales) - Incremento 4 fase
+    3, punto A3: el mapa de un DUEÑO solo debe considerar el tramo
+    entre la recogida y la entrega de SUS mascotas (nunca el paseo
+    completo) para decidir cosas como "hay puntos" o "hay un punto
+    reciente" - mismos parametros que listar_por_paseo() mas abajo.
+    """
     try:
         oid = ObjectId(id_paseo)
     except (InvalidId, TypeError):
         return None
+    query = {'id_paseo': oid}
+    rango_fecha = {}
+    if desde is not None:
+        rango_fecha['$gte'] = desde
+    if hasta is not None:
+        rango_fecha['$lte'] = hasta
+    if rango_fecha:
+        query['fecha_captura'] = rango_fecha
     return get_db().coordenadas_detalle.find_one(
-        {'id_paseo': oid},
+        query,
         sort=[('fecha_captura', -1)],
     )
 
@@ -72,28 +87,43 @@ def obtener_ultima_recepcion(id_paseo):
     return punto['fecha_recepcion'] if punto else None
 
 
-def listar_por_paseo(id_paseo, desde=None):
+def listar_por_paseo(id_paseo, desde=None, hasta=None):
     """
-    `desde` (datetime, opcional) - lentitud en producción, 14 de
-    octubre, punto 3: antes el polling del mapa en vivo (cada 8s,
-    mientras dura el paseo) llamaba a esto SIN `desde`, así que cada
-    vuelta volvía a traer y volvía a serializar TODOS los puntos desde
-    el inicio del paseo, no solo los nuevos - en un paseo de 30 minutos
-    (~225 puntos a 8s cada uno) el volumen total transferido a lo largo
-    del paseo crece proporcional al CUADRADO de su duración, no a su
-    duración (confirmado leyendo coordenadas/views_web.py::
-    coordenadas_de_paseo(), que ya recibía el array entero y lo volvía
-    a mandar completo en cada respuesta JSON). Con `desde`, cada
-    petición de polling solo pide (y Mongo solo escanea) los puntos
-    posteriores al último que el navegador ya tiene - ver mapa.html.
+    `desde` (datetime, opcional, exclusivo - `$gt`) - lentitud en
+    producción, 14 de octubre, punto 3: antes el polling del mapa en
+    vivo (cada 8s, mientras dura el paseo) llamaba a esto SIN `desde`,
+    así que cada vuelta volvía a traer y volvía a serializar TODOS los
+    puntos desde el inicio del paseo, no solo los nuevos - en un paseo
+    de 30 minutos (~225 puntos a 8s cada uno) el volumen total
+    transferido a lo largo del paseo crece proporcional al CUADRADO de
+    su duración, no a su duración (confirmado leyendo
+    coordenadas/views_web.py::coordenadas_de_paseo(), que ya recibía el
+    array entero y lo volvía a mandar completo en cada respuesta JSON).
+    Con `desde`, cada petición de polling solo pide (y Mongo solo
+    escanea) los puntos posteriores al último que el navegador ya
+    tiene - ver mapa.html. Mismo parametro reusado (Incremento 4 fase
+    3, punto A3) como límite inferior de privacidad: el mapa de un
+    dueño nunca debe pedir puntos de ANTES de la recogida de su propia
+    mascota - el `$gt` de un solo punto de margen (la recepción del GPS
+    es cada 6-8s) es insignificante frente a eso.
+
+    `hasta` (datetime, opcional, inclusivo - `$lte`) - punto A3: límite
+    superior de privacidad, la hora de entrega de ese dueño (si ya se
+    entregó). `None` significa "sin límite superior todavía" (la
+    mascota sigue con el paseador).
     """
     try:
         oid = ObjectId(id_paseo)
     except (InvalidId, TypeError):
         return []
     query = {'id_paseo': oid}
+    rango_fecha = {}
     if desde is not None:
-        query['fecha_captura'] = {'$gt': desde}
+        rango_fecha['$gt'] = desde
+    if hasta is not None:
+        rango_fecha['$lte'] = hasta
+    if rango_fecha:
+        query['fecha_captura'] = rango_fecha
     return list(get_db().coordenadas_detalle.find(query).sort('fecha_captura', 1))
 
 
@@ -133,10 +163,11 @@ def distancia_recorrida_m(id_paseo, *, desde=None, hasta=None):
     de dato).
 
     `desde`/`hasta` (datetime, opcionales, comparados contra
-    `fecha_captura`): sin usar todavía por ningún llamador real - queda
-    preparada para la Fase 3 (RF de "recogida por dueño"), donde cada
-    dueño necesitará la distancia de SOLO su propio tramo del paseo, no
-    el paseo completo.
+    `fecha_captura`): preparada en los ajustes del 19 de octubre para
+    esto - Incremento 4 fase 3, punto A9: cada dueño ve SOLO la
+    distancia de su propio tramo (entre su `hora_recogida` y
+    `hora_entrega`), nunca el paseo completo - ver
+    coordenadas.views_web._rango_visible_para_dueno().
 
     Se decidió NO agregar un filtro de "jitter" (ignorar un tramo si es
     más corto que la suma de las precisiones de sus dos puntos) a pesar
@@ -188,11 +219,37 @@ def formatear_distancia(metros):
 
 
 def a_json(punto):
+    """
+    Incremento 4 fase 3, punto A6 - `fecha_captura` ahora se manda con
+    sufijo "Z" explícito: pymongo devuelve la fecha naive en UTC, y un
+    `new Date("...sin Z...")` en JS la interpreta como hora LOCAL del
+    navegador. Antes no importaba porque ningún JS parseaba este campo
+    como Date (solo se reenviaba como string en "?desde="); A6 (el
+    cálculo de "Última ubicación: hace N min" contra `Date.now()`) es el
+    primer caso real que sí necesita la fecha bien interpretada.
+
+    Bug real encontrado en la revisión pre-fusión: la primera versión de
+    este fix usaba `strftime('%Y-%m-%dT%H:%M:%SZ')` (sin microsegundos),
+    truncando la precisión real que SÍ tiene `fecha_captura` en Mongo
+    (viene con microsegundos - ver coordenadas.repository.registrar_punto).
+    `mapa.html` reenvía este mismo string como cursor incremental
+    ("?desde=", ver coordenadas_de_paseo() - lentitud en producción,
+    14 de octubre) - truncado a segundos, el ÚLTIMO punto de cada
+    vuelta del polling volvía a matchear ($gt sobre un valor MENOR al
+    real) en la vuelta siguiente, reenviando ese mismo punto para
+    siempre y rompiendo el "solo lo nuevo" que esa optimización
+    necesitaba. `.isoformat()` conserva los microsegundos; el sufijo
+    "+00:00" que agrega para un datetime aware se cambia por "Z" (mismo
+    formato de siempre, JS lo parsea igual).
+    """
     fecha_captura = punto.get('fecha_captura')
     return {
         'latitud': punto['latitud'],
         'longitud': punto['longitud'],
         'altitud': punto.get('altitud'),
         'precision': punto.get('precision'),
-        'fecha_captura': fecha_captura.isoformat() if isinstance(fecha_captura, datetime) else fecha_captura,
+        'fecha_captura': (
+            fecha_captura.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z')
+            if isinstance(fecha_captura, datetime) else fecha_captura
+        ),
     }

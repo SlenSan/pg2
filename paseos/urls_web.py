@@ -21,4 +21,20 @@ urlpatterns = [
     path('paseador/paseos/<str:id_paseo>/iniciar/', views_web.iniciar_paseo, name='iniciar_paseo'),
     path('paseador/paseos/<str:id_paseo>/finalizar/', views_web.finalizar_paseo, name='finalizar_paseo'),
     path('paseador/paseos/<str:id_paseo>/fotos/<str:momento>/', views_web.subir_foto, name='subir_foto'),
+    # Incremento 4 fase 3, punto A2 - una recogida por dueño dentro del paseo.
+    path(
+        'paseador/paseos/<str:id_paseo>/recogidas/<str:id_dueno>/recoger/',
+        views_web.marcar_recogida,
+        name='marcar_recogida',
+    ),
+    path(
+        'paseador/paseos/<str:id_paseo>/recogidas/<str:id_dueno>/no-recogida/',
+        views_web.marcar_no_recogida,
+        name='marcar_no_recogida',
+    ),
+    path(
+        'paseador/paseos/<str:id_paseo>/recogidas/<str:id_dueno>/entregar/',
+        views_web.marcar_entrega,
+        name='marcar_entrega',
+    ),
 ]

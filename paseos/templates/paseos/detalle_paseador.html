@@ -159,6 +159,53 @@
                 <div class="text-danger small mt-1">{{ error }}</div>
               {% endfor %}
             </div>
+            {% comment %}
+            Incremento 4 fase 3, punto A1 - datos de recogida, pedidos
+            junto con la(s) mascota(s) porque son la misma acción del
+            dueño. Prellenados por detalle_paseador() con la última
+            recogida de este dueño (o su dirección/teléfono de perfil,
+            la primera vez).
+            {% endcomment %}
+            <div class="mb-2">
+              <label class="form-label" for="{{ item.form.direccion.id_for_label }}">{{ item.form.direccion.label }}</label>
+              {{ item.form.direccion }}
+              {% for error in item.form.direccion.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+              {% endfor %}
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="{{ item.form.comuna.id_for_label }}">{{ item.form.comuna.label }}</label>
+              {{ item.form.comuna }}
+              {% for error in item.form.comuna.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+              {% endfor %}
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="{{ item.form.indicaciones.id_for_label }}">{{ item.form.indicaciones.label }}</label>
+              {{ item.form.indicaciones }}
+              {% for error in item.form.indicaciones.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+              {% endfor %}
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="{{ item.form.telefono.id_for_label }}">{{ item.form.telefono.label }}</label>
+              {{ item.form.telefono }}
+              {% for error in item.form.telefono.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+              {% endfor %}
+            </div>
+            {% comment %}
+            Incremento 4 fase 3, punto A7 - completa RF9. Las opciones
+            ya vienen acotadas a lo que cabe en ESTE horario puntual
+            (ver item.form en detalle_paseador()) - nunca todas las 6.
+            {% endcomment %}
+            <div class="mb-2">
+              <label class="form-label" for="{{ item.form.duracion_acordada_min.id_for_label }}">{{ item.form.duracion_acordada_min.label }}</label>
+              {{ item.form.duracion_acordada_min }}
+              {% for error in item.form.duracion_acordada_min.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+              {% endfor %}
+            </div>
             <button type="submit" class="btn btn-primary w-100">Inscribir en este horario</button>
           </form>
         </div>
