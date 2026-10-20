@@ -2118,6 +2118,65 @@ autora lo apruebe).
   `emergencia`, y `finalizar_paseo()` SÍ funcionó después (un
   `no_recogida` no bloquea).
 
+- **Puntos A3 y A9 — privacidad del mapa por dueño, y distancia por
+  dueño**: se implementaron juntos, en un solo commit (la tarea permite
+  "un commit por punto o por subpunto" - A9 es literalmente "aplica la
+  misma regla de privacidad de A3" a la distancia, que ya se calcula en
+  la MISMA vista que dibuja el mapa - separarlos habría significado
+  tocar los mismos `if`/`else` dos veces). Diagnóstico - antes,
+  `coordenadas_de_paseo()` (el JSON que consume el mapa) y
+  `mapa_paseo()` no filtraban los puntos GPS por dueño en absoluto -
+  cualquier dueño con acceso al paseo (`_paseo_accesible_o_none()`) veía
+  el trayecto COMPLETO, incluido el tramo hacia/desde la casa de otros
+  dueños. La distancia recorrida (ajustes del 19 de octubre) tenía el
+  mismo problema - siempre el total del paseo.
+
+  Fix: `_rango_visible_para_dueno(paseo, id_dueno)` (nueva, en
+  `coordenadas/views_web.py`) devuelve tres cosas posibles: `None` (sin
+  filtro - SOLO para un paseo de antes de esta fase, sin el campo
+  `recogidas` - compatibilidad explícita), el sentinel
+  `_SIN_PUNTOS_VISIBLES` (la mascota de ese dueño todavía no se
+  recogió, o nunca se recogió - no hay nada que mostrarle todavía), o
+  `(hora_recogida, hora_entrega)` (el tramo real - `hora_entrega` puede
+  ser `None`, "todavía con el paseador"). `coordenadas.repository.
+  listar_por_paseo()`/`obtener_ultimo_punto()`/`distancia_recorrida_m()`
+  ya aceptaban `desde`/`hasta` (preparado en los ajustes del 19 de
+  octubre) - ahora SÍ tienen un llamador real. El filtrado es en el
+  BACKEND (la query a Mongo), no solo ocultando en la plantilla - un
+  dueño no puede pedir puntos ajenos ni con un `?desde=` forjado en la
+  URL, porque el límite inferior efectivo es el MÁS RESTRICTIVO entre
+  el cursor del cliente y `hora_recogida`.
+
+  El paseador NUNCA pasa por este filtro (ve el paseo completo
+  siempre). `hay_punto_reciente` (si el GPS del paseador sigue
+  transmitiendo ahora mismo) tampoco se filtra a propósito - no revela
+  posición, solo si hay señal.
+
+  **Paradas y datos de contacto en el historial**: la tarea pide que
+  "nunca se muestren las paradas de recogida de otros dueños" y que la
+  dirección/indicaciones/teléfono "solo las vea el paseador... y solo
+  mientras el paseo está disponible o en_vivo, en el historial se
+  ocultan". Ninguna pantalla del proyecto dibuja pines de "parada" en
+  el mapa (ni esta fase lo pide) ni muestra los datos de contacto fuera
+  de la tarjeta de `bienvenida_paseador.html`, que solo existe mientras
+  `paseo_activo.estado == 'en_vivo'` - las dos reglas se cumplen porque
+  no hay ningún lugar que las viole todavía, no porque se haya agregado
+  un filtro activo. Se deja señalado para cuando se construya el
+  historial del paseador con detalle de recogidas (fuera del alcance
+  de esta fase) - esa pantalla nueva deberá respetar las dos reglas
+  desde el diseño.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, escenario D1/D2
+  con 26 puntos GPS en una línea de tiempo real: D1 recogido en el
+  minuto 5 y entregado en el 20; D2 recogido en el 10 y entregado en el
+  15): D1 vio 15 puntos (minutos 6 a 20) y "778 m"; D2 vio 5 puntos
+  (minutos 11 a 15) y "222 m"; el paseador vio los 26 puntos completos
+  y "1,4 km" - los tres números distintos, cada uno coherente con su
+  propio tramo (capturas móviles de los mapas de D1 y D2 adjuntas al
+  reporte). Un paseo SIN `recogidas` (legacy) le siguió mostrando a un
+  dueño los 5 puntos completos, sin filtrar - compatibilidad
+  confirmada, no solo asumida.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

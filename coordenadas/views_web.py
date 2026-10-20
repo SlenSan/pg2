@@ -185,6 +185,53 @@ def _mascotas_del_dueno_en_paseo(paseo, id_dueno):
     return [por_id[mid] for mid in paseo.get('id_mascotas', []) if mid in por_id]
 
 
+_SIN_PUNTOS_VISIBLES = object()  # sentinel: este dueño no debe ver NINGUN punto todavia
+
+
+def _rango_visible_para_dueno(paseo, id_dueno):
+    """
+    Incremento 4 fase 3, punto A3 - límites de privacidad para el mapa
+    de UN dueño: solo puede ver los puntos GPS entre la recogida y la
+    entrega de SUS mascotas, nunca el trayecto hacia/desde otros dueños
+    (eso revelaría dónde viven). Devuelve:
+      - `None`: sin límites, se ve la ruta completa - SOLO para un
+        paseo de ANTES de esta fase (`'recogidas' not in paseo`, nunca
+        se migraron); compatibilidad explícita, no un descuido.
+      - `_SIN_PUNTOS_VISIBLES`: la mascota de este dueño todavía no fue
+        recogida (o nunca se recogió, `no_recogida`) - no hay ningún
+        punto que le corresponda ver todavía.
+      - `(hora_recogida, hora_entrega)`: el tramo real. `hora_entrega`
+        puede ser `None` ("sigue con el paseador, hasta ahora").
+    El paseador NUNCA pasa por acá - ve el paseo completo siempre (ver
+    los dos llamadores más abajo, que solo filtran `if es_dueno`).
+    """
+    if 'recogidas' not in paseo:
+        return None
+    oid_dueno = ObjectId(id_dueno)
+    entrada = next((r for r in paseo['recogidas'] if r['id_dueno'] == oid_dueno), None)
+    if not entrada or not entrada.get('hora_recogida'):
+        return _SIN_PUNTOS_VISIBLES
+    return entrada['hora_recogida'], entrada.get('hora_entrega')
+
+
+def _distancia_texto_para_viewer(paseo, rango):
+    """
+    Texto de distancia ("850 m"/"1,2 km") para quien está viendo este
+    paseo, según su rango de privacidad (ver _rango_visible_para_dueno
+    más arriba) - compartida por mapa_paseo() y coordenadas_de_paseo()
+    para no repetir la misma rama tres veces (Incremento 4 fase 3,
+    punto A9).
+    """
+    if rango is _SIN_PUNTOS_VISIBLES:
+        return None
+    if rango is None:
+        return repository.formatear_distancia(repository.distancia_recorrida_m(paseo['_id']))
+    desde, hasta = rango
+    return repository.formatear_distancia(
+        repository.distancia_recorrida_m(paseo['_id'], desde=desde, hasta=hasta)
+    )
+
+
 def _certificados_de_mascotas_para_paseador(id_paseador, mascotas):
     """
     Mismo criterio que usuarios.views_web._certificados_de_mascotas_para_paseador()
@@ -289,6 +336,10 @@ def mapa_paseo(request, id_paseo):
             'mascota': mascotas_por_id_mapa.get(i.get('id_mascota')),
         })
 
+    # Incremento 4 fase 3, punto A3/A9 - rango de privacidad de ESTE
+    # usuario (None para el paseador: sin filtro, siempre ve todo).
+    rango = _rango_visible_para_dueno(paseo, id_usuario) if es_dueno else None
+
     return render(request, 'coordenadas/mapa.html', {
         'paseo': paseo,
         'id_paseo': str(paseo['_id']),
@@ -323,7 +374,10 @@ def mapa_paseo(request, id_paseo):
         # Ajustes del 19 de octubre, punto 1 - valor inicial (antes de
         # que el primer polling de coordenadas_de_paseo() lo actualice);
         # mismo texto formateado, ver ese docstring de mas abajo.
-        'distancia_texto': repository.formatear_distancia(repository.distancia_recorrida_m(paseo['_id'])),
+        # Incremento 4 fase 3, punto A3/A9 - para un dueño, SOLO la
+        # distancia de su propio tramo (ver _rango_visible_para_dueno);
+        # el paseador siempre ve el total.
+        'distancia_texto': _distancia_texto_para_viewer(paseo, rango),
     })
 
 
@@ -348,8 +402,29 @@ def coordenadas_de_paseo(request, id_paseo):
     # serialice) los puntos NUEVOS en cada vuelta del polling, no el
     # historial entero del paseo otra vez. Sin `desde` (primera carga de
     # la página), se comporta igual que antes: todos los puntos.
-    desde = _parsear_fecha(request.GET.get('desde'))
-    puntos = repository.listar_por_paseo(id_paseo, desde=desde)
+    desde_cliente = _parsear_fecha(request.GET.get('desde'))
+
+    # Incremento 4 fase 3, punto A3/A9 - rango de privacidad de ESTE
+    # usuario (None para el paseador: sin filtro). El límite inferior
+    # efectivo es el MÁS RESTRICTIVO de los dos: el cursor incremental
+    # del cliente (no re-mandar lo que ya tiene) Y la hora de recogida
+    # de este dueño (nunca mandarle nada de ANTES de su propia
+    # recogida, ni aunque su navegador pida "desde el inicio").
+    rango = _rango_visible_para_dueno(paseo, id_usuario) if es_dueno else None
+    if rango is _SIN_PUNTOS_VISIBLES:
+        puntos = []
+        hay_puntos_historicos = False
+    else:
+        if rango is None:
+            desde_privacidad, hasta_privacidad = None, None
+        else:
+            desde_privacidad, hasta_privacidad = rango
+        desde_efectivo = max(desde_cliente, desde_privacidad) if (desde_cliente and desde_privacidad) else (desde_cliente or desde_privacidad)
+        puntos = repository.listar_por_paseo(id_paseo, desde=desde_efectivo, hasta=hasta_privacidad)
+        hay_puntos_historicos = repository.obtener_ultimo_punto(
+            id_paseo, desde=desde_privacidad, hasta=hasta_privacidad,
+        ) is not None
+
     return JsonResponse({
         'estado': paseo['estado'],
         'emergencia': paseo.get('emergencia', False),
@@ -362,7 +437,7 @@ def coordenadas_de_paseo(request, id_paseo):
         # aunque el paseo SÍ tenga historial) - mapa.html lo necesita
         # para decidir "sin puntos todavía" sin depender de si esta
         # vuelta del polling trajo algo nuevo o no.
-        'hay_puntos_historicos': repository.obtener_ultimo_punto(id_paseo) is not None,
+        'hay_puntos_historicos': hay_puntos_historicos,
         # Esta pantalla ya hace polling cada 8s mientras el paseo esta
         # "en_vivo" - se aprovecha esa misma peticion para el punto de
         # notificaciones del navbar en vez de sumar una aparte (ver
@@ -372,14 +447,17 @@ def coordenadas_de_paseo(request, id_paseo):
         'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, id_usuario),
         # Misma logica que mapa_paseo() - solo aplica al dueño.
         'pendiente_calificar': _pendiente_calificar(paseo, id_usuario) if es_dueno else False,
-        # Idem mapa_paseo() - punto 1 del reporte de revision.
+        # Idem mapa_paseo() - punto 1 del reporte de revision. SIN
+        # filtrar por dueño a propósito (ver _hay_punto_reciente): es
+        # una señal de "el GPS del paseador sigue transmitiendo ahora
+        # mismo", no revela posición - no es un dato de privacidad.
         'hay_punto_reciente': _hay_punto_reciente(paseo['_id']),
-        # Ajustes del 19 de octubre, punto 1 - ya viene formateado
-        # ("850 m" / "1,2 km") para no mandar un numero crudo al JSON
-        # (mismo cuidado que INC-05: nunca un numero que JS vaya a tratar
-        # como tal, si al final solo se va a mostrar como texto). None si
-        # el paseo todavia no tiene 2 puntos validos.
-        'distancia_texto': repository.formatear_distancia(repository.distancia_recorrida_m(paseo['_id'])),
+        # Ajustes del 19 de octubre, punto 1 (y A9 de la fase 3) - ya
+        # viene formateado ("850 m" / "1,2 km") para no mandar un numero
+        # crudo al JSON (mismo cuidado que INC-05). None si el paseo
+        # todavia no tiene 2 puntos validos, o si este dueño todavia no
+        # tiene nada que ver.
+        'distancia_texto': _distancia_texto_para_viewer(paseo, rango),
     })
 
 
