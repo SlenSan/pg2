@@ -768,29 +768,62 @@ def listar_por_paseador(id_paseador):
     return list(get_db().paseos.find({'id_paseador': id_paseador}).sort('fecha', -1))
 
 
+# Ajuste del 20 de octubre, punto 1 (acceso del paseador al perfil de la
+# mascota) - mismo patrón con nombre que
+# incidentes.repository.HORAS_LIMITE_COMPLEMENTO_INCIDENTE: "disponible"
+# o "en_vivo" sin límite, y hasta este número de horas después de
+# `hora_fin` para un paseo ya "historico". Antes (3d13851) no había
+# ningún límite, ni siquiera en "historico" - la autora decidió
+# acotarlo (Ley Kiara sigue exigiendo el certificado ANTES de empezar,
+# pero no hay motivo para que el acceso dure para siempre después de
+# terminado).
+HORAS_LIMITE_ACCESO_PERFIL_MASCOTA = 24
+
+
 def paseador_tiene_acceso_a_mascota(id_paseador, id_mascota):
     """
-    True si existe AL MENOS UN paseo, en CUALQUIER estado, donde este
-    paseador es el asignado (`id_paseador`) y esa mascota esta incluida
-    (`id_mascotas`) - control de acceso para los certificados de la
-    mascota (Ley Kiara). Una mascota se agrega a `id_mascotas` al
-    inscribirse en un horario "disponible" (ver inscribir_mascotas()) y
-    ese array ya NUNCA se modifica despues (ni al pasar a "en_vivo" ni a
-    "historico") - por eso no hace falta filtrar por estado aca: "alguna
-    vez la llevó o la va a llevar" es exactamente "aparece en algun
-    documento con ese id_paseador".
+    True si existe AL MENOS UN paseo donde este paseador es el asignado
+    (`id_paseador`) y esa mascota está incluida (`id_mascotas`), Y ese
+    paseo todavía está dentro de la ventana de acceso - control de
+    acceso para el perfil de la mascota y sus certificados (Ley Kiara).
+    Una mascota se agrega a `id_mascotas` al inscribirse en un horario
+    "disponible" (ver inscribir_mascotas()) y ese array ya NUNCA se
+    modifica después (ni al pasar a "en_vivo" ni a "historico").
+
+    Ventana de acceso (ajuste del 20 de octubre, punto 1 - antes de
+    3d13851 no había límite en absoluto, ni en "historico"):
+    `disponible`/`en_vivo` sin límite de tiempo (el paseador necesita
+    verlo ANTES de empezar), `historico` solo hasta
+    `HORAS_LIMITE_ACCESO_PERFIL_MASCOTA` horas después de `hora_fin`.
+    Si la mascota está en VARIOS paseos de este mismo paseador, basta
+    con que UNO solo siga dentro de la ventana (`$or` evalúa esto
+    documento por documento, no "el paseo más reciente").
 
     Una sola función, pensada para llamarse DESDE el backend antes de
-    mostrar cualquier dato de certificado a un paseador - no basta con
-    ocultar el link en la plantilla.
+    mostrar cualquier dato de la mascota o sus certificados a un
+    paseador - no basta con ocultar el link en la plantilla. La usan
+    `mascotas.views.perfil_mascota_paseador()` Y
+    `_certificados_de_mascotas_para_paseador()` (duplicada entre
+    `usuarios/views_web.py` y `coordenadas/views_web.py`) - los
+    certificados que ya existían desde `3d13851` quedan sujetos a la
+    MISMA ventana automáticamente, al ser la misma función compartida;
+    no hizo falta tocar esas dos funciones ni sus plantillas.
     """
     try:
         oid_paseador = id_paseador if isinstance(id_paseador, ObjectId) else ObjectId(id_paseador)
         oid_mascota = id_mascota if isinstance(id_mascota, ObjectId) else ObjectId(id_mascota)
     except (InvalidId, TypeError):
         return False
+    limite = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=HORAS_LIMITE_ACCESO_PERFIL_MASCOTA)
     return get_db().paseos.count_documents(
-        {'id_paseador': oid_paseador, 'id_mascotas': oid_mascota},
+        {
+            'id_paseador': oid_paseador,
+            'id_mascotas': oid_mascota,
+            '$or': [
+                {'estado': {'$in': ['disponible', 'en_vivo']}},
+                {'estado': 'historico', 'hora_fin': {'$gte': limite}},
+            ],
+        },
         limit=1,
     ) > 0
 

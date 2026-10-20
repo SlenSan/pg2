@@ -2935,6 +2935,50 @@ puntos, cada uno con su propio commit.
   **Solo leído en código**: ninguno - todo lo relevante para este
   punto se verificó con HTTP real.
 
+**Cierre de los ajustes de fase 3 antes de la prueba con el celular (20
+de octubre)** - un punto de acceso antes del push, deploy, y
+diagnóstico del Wake Lock en iPhone pendiente del resultado real.
+
+- **Punto 1 — límite de 24h al perfil de la mascota**: diagnóstico -
+  `paseador_tiene_acceso_a_mascota()` (de `3d13851`, documentado en el
+  punto 4 de este mismo reporte) no tenía NINGÚN límite, ni siquiera en
+  `historico` - "alguna vez la llevó" valía para siempre. La autora
+  decidió acotarlo a 24h después de `hora_fin` (decisión de producto,
+  mismo patrón con nombre que `incidentes.repository.
+  HORAS_LIMITE_COMPLEMENTO_INCIDENTE` de A8) - `disponible`/`en_vivo`
+  siguen sin límite (Ley Kiara: el certificado se necesita ANTES de
+  empezar).
+
+  **Si afecta a los certificados de `3d13851` - sí, automáticamente**:
+  `_certificados_de_mascotas_para_paseador()` (duplicada entre
+  `usuarios/views_web.py` y `coordenadas/views_web.py`) y la vista
+  nueva del punto 4 llaman las DOS a esta misma función - al moverle el
+  límite ahí, las dos quedan sujetas a la misma ventana sin tocar
+  ninguna de esas dos funciones ni sus plantillas. El badge
+  "Certificados (Ley Kiara)" del mapa de un paseo `historico` deja de
+  aparecer pasadas las 24h, igual que el perfil completo.
+
+  Fix: `HORAS_LIMITE_ACCESO_PERFIL_MASCOTA = 24` (nueva, `paseos/
+  repository.py`) + la condición agregada al filtro de Mongo de
+  `paseador_tiene_acceso_a_mascota()` (`$or`: `disponible`/`en_vivo`
+  sin límite, o `historico` con `hora_fin >= ahora - 24h`) - si la
+  misma mascota aparece en VARIOS paseos de este paseador, basta con
+  que uno solo siga dentro de la ventana (la condición se evalúa
+  documento por documento, Mongo no "elige el más reciente").
+  "Historial del paseador" (`historial_paseador.html`) no mostraba
+  ningún enlace a la mascota antes de esto (el punto 4 solo enlazó las
+  3 pantallas que pedía explícitamente) - no había nada que ocultar
+  ahí; se deja señalado por si se agrega un enlace ahí más adelante,
+  para que recuerde pasar por esta misma función.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, fechas ajustadas
+  directamente en Mongo en vez de esperar): `en_vivo` → 200;
+  `historico` con `hora_fin` hace 10h (dentro del plazo) → 200;
+  `historico` con `hora_fin` hace 30h (fuera del plazo) → **404**; el
+  badge "Certificados (Ley Kiara)" del mapa de ESE mismo paseo ya
+  vencido dejó de aparecer, confirmando que los enlaces de `3d13851`
+  heredan la regla sin cambios propios.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
