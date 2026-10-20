@@ -131,3 +131,17 @@ class InscribirMascotaForm(forms.Form):
 
     def clean_telefono(self):
         return validar_telefono_colombiano(self.cleaned_data.get('telefono', ''))
+
+
+class MotivoNoRecogidaForm(forms.Form):
+    """
+    Incremento 4 fase 3, punto A2 - "No se pudo recoger" exige un
+    motivo (pedido explícito de la tarea): mismo patrón que
+    `administracion.forms.ObservacionForm`, pero `required=True` acá -
+    ese sí es opcional, este no.
+    """
+    motivo = forms.CharField(
+        max_length=300,
+        label='Motivo',
+        widget=forms.Textarea(attrs={'class': _INPUT_CLASS, 'rows': 2}),
+    )

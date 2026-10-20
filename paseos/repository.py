@@ -349,6 +349,104 @@ def inscribir_mascotas(
     return resultado.modified_count == 1
 
 
+def marcar_recogida(*, id_paseo, id_paseador, id_dueno):
+    """
+    Incremento 4 fase 3, punto A2 - "Recogido": la recogida de ESE dueño
+    pasa de 'pendiente' a 'recogida' y se guarda `hora_recogida`. Atómico
+    vía `array_filters` + el `estado` de la recogida en el filtro
+    principal (si ya estaba 'recogida'/'no_recogida'/'entregada', o el
+    paseo ya no es 'en_vivo' de este paseador, no modifica nada).
+    Devuelve el documento actualizado, o None.
+    """
+    try:
+        oid_paseo = ObjectId(id_paseo)
+        oid_dueno = ObjectId(id_dueno)
+    except (InvalidId, TypeError):
+        return None
+    return get_db().paseos.find_one_and_update(
+        {
+            '_id': oid_paseo,
+            'id_paseador': id_paseador,
+            'estado': 'en_vivo',
+            'recogidas': {'$elemMatch': {'id_dueno': oid_dueno, 'estado': 'pendiente'}},
+        },
+        {'$set': {
+            'recogidas.$[entrada].estado': 'recogida',
+            'recogidas.$[entrada].hora_recogida': datetime.now(timezone.utc),
+        }},
+        array_filters=[{'entrada.id_dueno': oid_dueno}],
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+def marcar_no_recogida(*, id_paseo, id_paseador, id_dueno, motivo):
+    """
+    "No se pudo recoger": la recogida de ESE dueño pasa a 'no_recogida'
+    con su motivo, y sus mascotas se QUITAN de `paseo.id_mascotas`
+    (pedido explícito: "esas mascotas quedan fuera del paseo" - ya no se
+    están caminando de verdad). La entrada de `recogidas` NO se borra -
+    queda como registro permanente de que se intentó y no se pudo,
+    visible para ese dueño. `id_duenos` no se toca (el dueño sigue
+    "siendo parte" de este paseo a efectos de historial, aunque su
+    mascota no haya caminado).
+    """
+    try:
+        oid_paseo = ObjectId(id_paseo)
+        oid_dueno = ObjectId(id_dueno)
+    except (InvalidId, TypeError):
+        return None
+    paseo = get_db().paseos.find_one({
+        '_id': oid_paseo,
+        'id_paseador': id_paseador,
+        'estado': 'en_vivo',
+        'recogidas': {'$elemMatch': {'id_dueno': oid_dueno, 'estado': 'pendiente'}},
+    })
+    if not paseo:
+        return None
+    entrada = next(r for r in paseo['recogidas'] if r['id_dueno'] == oid_dueno)
+    ids_mascotas_fuera = entrada.get('id_mascotas', [])
+    return get_db().paseos.find_one_and_update(
+        {'_id': oid_paseo},
+        {
+            '$set': {
+                'recogidas.$[entrada].estado': 'no_recogida',
+                'recogidas.$[entrada].motivo_no_recogida': motivo,
+            },
+            '$pullAll': {'id_mascotas': ids_mascotas_fuera},
+        },
+        array_filters=[{'entrada.id_dueno': oid_dueno}],
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+def marcar_entrega(*, id_paseo, id_paseador, id_dueno):
+    """
+    "Entregado": la recogida de ESE dueño pasa de 'recogida' a
+    'entregada' y se guarda `hora_entrega`. Solo si estaba 'recogida'
+    (nunca desde 'pendiente' - no se puede entregar lo que no se
+    recogió).
+    """
+    try:
+        oid_paseo = ObjectId(id_paseo)
+        oid_dueno = ObjectId(id_dueno)
+    except (InvalidId, TypeError):
+        return None
+    return get_db().paseos.find_one_and_update(
+        {
+            '_id': oid_paseo,
+            'id_paseador': id_paseador,
+            'estado': 'en_vivo',
+            'recogidas': {'$elemMatch': {'id_dueno': oid_dueno, 'estado': 'recogida'}},
+        },
+        {'$set': {
+            'recogidas.$[entrada].estado': 'entregada',
+            'recogidas.$[entrada].hora_entrega': datetime.now(timezone.utc),
+        }},
+        array_filters=[{'entrada.id_dueno': oid_dueno}],
+        return_document=ReturnDocument.AFTER,
+    )
+
+
 def iniciar_paseo(*, id_paseo, id_paseador):
     """
     Pasa un paseo de 'disponible' a 'en_vivo' y registra hora_inicio.
@@ -391,8 +489,21 @@ def iniciar_paseo(*, id_paseo, id_paseador):
 def finalizar_paseo(*, id_paseo, id_paseador):
     """
     Pasa un paseo de 'en_vivo' a 'historico' y registra hora_fin. Solo si
-    le pertenece a ese paseador y esta actualmente en curso. Devuelve el
-    documento actualizado, o None si no se cumplen las condiciones.
+    le pertenece a ese paseador y esta actualmente en curso.
+
+    Incremento 4 fase 3, punto A2, punto 5 - además, SOLO si ninguna
+    recogida sigue en 'pendiente' ni 'recogida' (toda mascota ya fue
+    recogida-y-entregada, o se marcó explícitamente 'no_recogida'). Esto
+    es la defensa de BACKEND, obligatoria - el frontend deshabilita el
+    botón con el mismo criterio, pero un POST directo también se
+    rechaza acá. `$not`/`$elemMatch`: ningún elemento de `recogidas`
+    puede tener ese estado; un paseo SIN el campo `recogidas` (de antes
+    de esta fase) o con `recogidas: []` no bloquea - un array ausente o
+    vacío nunca matchea `$elemMatch`, así que `$not` sobre eso es
+    verdadero.
+
+    Devuelve el documento actualizado, o None si no se cumplen las
+    condiciones.
     """
     try:
         oid_paseo = ObjectId(id_paseo)
@@ -404,6 +515,7 @@ def finalizar_paseo(*, id_paseo, id_paseador):
             '_id': oid_paseo,
             'id_paseador': id_paseador,
             'estado': 'en_vivo',
+            'recogidas': {'$not': {'$elemMatch': {'estado': {'$in': ['pendiente', 'recogida']}}}},
         },
         {'$set': {'estado': 'historico', 'hora_fin': datetime.now(timezone.utc)}},
         return_document=ReturnDocument.AFTER,

@@ -2062,6 +2062,62 @@ autora lo apruebe).
   (dirección de 3 caracteres, comuna inventada, indicaciones de 250
   caracteres y teléfono inválido - los 4 se rechazan).
 
+- **Punto A2 — flujo del paseador (recoger/entregar por dueño)**:
+  diagnóstico - antes, "Iniciar paseo" notificaba (tipo `inicio_paseo`)
+  a TODOS los dueños del paseo a la vez, y "Finalizar paseo" notificaba
+  (tipo `fin_paseo`) a todos de nuevo, sin ningún estado intermedio por
+  mascota. **Contradicción real encontrada con la tarea**: el punto A2
+  pide notificar `inicio_paseo`/`fin_paseo` en los momentos de
+  "Recogido"/"Entregado" de CADA dueño, no al iniciar/finalizar el
+  paseo entero - mandar las dos notificaciones (la vieja, global, Y la
+  nueva, por dueño) habría duplicado el aviso. Se quitaron las
+  notificaciones de `iniciar_paseo()`/`finalizar_paseo()` (vistas) y se
+  movieron a `marcar_recogida()`/`marcar_entrega()`, que es lo que pide
+  la tarea.
+
+  Fix: 3 funciones nuevas en `paseos/repository.py`
+  (`marcar_recogida()`, `marcar_no_recogida()`, `marcar_entrega()`),
+  cada una atómica vía `array_filters` sobre la entrada de ese dueño en
+  `recogidas`, con su propio estado como parte del filtro (una
+  recogida ya `recogida`/`entregada` no se puede volver a marcar
+  `recogida`, etc.). "No se pudo recoger" (`MotivoNoRecogidaForm`,
+  motivo obligatorio, máx. 300 caracteres) además saca esas mascotas de
+  `paseo.id_mascotas` (`$pullAll`) - la entrada de `recogidas` NO se
+  borra, queda como registro permanente con su motivo.
+  `paseos.repository.finalizar_paseo()` ahora exige, en el MISMO filtro
+  atómico, que ninguna entrada de `recogidas` siga en `pendiente`/
+  `recogida` (`$not`/`$elemMatch`) - un paseo sin `recogidas` (de antes
+  de esta fase) nunca bloquea. La vista agrega un chequeo "amigable"
+  antes (mensaje específico "todavía hay recogidas pendientes"), pero
+  la regla real es la del repository.
+
+  `bienvenida_paseador.html` muestra una tarjeta por dueño (dirección,
+  indicaciones, teléfono como link `tel:`, mascotas, estado) con el
+  botón que corresponde a su estado actual; "No se pudo recoger" usa
+  `<details>`/`<summary>` nativo (sin JS) para no mostrar el textarea
+  del motivo hasta que se necesita. "Finalizar paseo" se deshabilita en
+  el frontend (`paseo_activo.puede_finalizar`) mientras falte alguna
+  recogida - la defensa real sigue siendo la del backend.
+
+  **Decisión sin especificar en la tarea**: el tipo de notificación de
+  "No se pudo recoger" no estaba dicho (a diferencia de "Recogido"/
+  "Entregado", que sí dicen explícitamente `inicio_paseo`/`fin_paseo`).
+  Se usó `emergencia` (el tipo existente más cercano - algo cambió y el
+  dueño necesita enterarse pronto) en vez de crear un tipo nuevo, igual
+  que pide el punto A8 más abajo para "no crear tipos nuevos".
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, D1/D2/P1 - guion
+  completo iniciar → recoger D1 → recoger D2 → intentar finalizar (falla,
+  200 pero sigue `en_vivo`) → entregar D2 → entregar D1 → finalizar
+  (ahora sí, pasa a `historico`)): las dos recogidas quedaron
+  `entregada` con `hora_recogida`/`hora_entrega` guardadas; las 4
+  notificaciones (`inicio_paseo` x2, `fin_paseo` x2) salieron con el
+  nombre de la mascota correcta de cada dueño, nunca mezcladas. Por
+  separado, "No se pudo recoger": la mascota salió de `id_mascotas`, la
+  entrada de `recogidas` quedó con su motivo, se notificó con tipo
+  `emergencia`, y `finalizar_paseo()` SÍ funcionó después (un
+  `no_recogida` no bloquea).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

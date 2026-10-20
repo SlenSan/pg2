@@ -28,9 +28,69 @@
     recargar la pagina no tendria donde aparecer.
     {% endcomment %}
     <div id="avisos-paseo"></div>
+
+    {% comment %}
+    Incremento 4 fase 3, punto A2 - una tarjeta por dueño con sus datos
+    de recogida y la acción que corresponde a su estado actual. Un
+    paseo de ANTES de esta fase no tiene `recogidas` - la lista viene
+    vacía, no se muestra nada acá (compatibilidad).
+    {% endcomment %}
+    {% if paseo_activo.recogidas %}
+    <div class="mb-3">
+      <p class="small text-muted mb-2">Recogidas:</p>
+      {% for r in paseo_activo.recogidas %}
+      <div class="p-2 rounded-3 mb-2" style="background-color: var(--color-muted);">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div class="fw-bold small">{{ r.mascotas_nombres }} <span class="text-muted fw-normal">(de {{ r.dueno_nombre }})</span></div>
+            <div class="small">{{ r.direccion }}{% if r.comuna_etiqueta %} · {{ r.comuna_etiqueta }}{% endif %}</div>
+            {% if r.indicaciones %}<div class="small text-muted">{{ r.indicaciones }}</div>{% endif %}
+            <div class="small"><a href="tel:{{ r.telefono }}">{{ r.telefono }}</a></div>
+          </div>
+          <span class="badge {% if r.estado == 'pendiente' %}bg-secondary{% elif r.estado == 'recogida' %}bg-success{% elif r.estado == 'entregada' %}bg-dark{% else %}bg-danger{% endif %}">
+            {{ r.estado }}
+          </span>
+        </div>
+        {% if r.estado == 'pendiente' %}
+        <form method="post" action="{% url 'paseos:marcar_recogida' paseo_activo.id_paseo r.id_dueno %}" class="mt-2">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-success btn-sm w-100">Recogido</button>
+        </form>
+        <details class="mt-2">
+          <summary class="small text-danger">No se pudo recoger</summary>
+          <form method="post" action="{% url 'paseos:marcar_no_recogida' paseo_activo.id_paseo r.id_dueno %}" class="mt-2">
+            {% csrf_token %}
+            {{ form_motivo_no_recogida.motivo }}
+            <button type="submit" class="btn btn-outline-danger btn-sm w-100 mt-1">Confirmar que no se pudo recoger</button>
+          </form>
+        </details>
+        {% elif r.estado == 'recogida' %}
+        <form method="post" action="{% url 'paseos:marcar_entrega' paseo_activo.id_paseo r.id_dueno %}" class="mt-2">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary btn-sm w-100">Entregado</button>
+        </form>
+        {% elif r.estado == 'no_recogida' %}
+        <p class="small text-danger mb-0 mt-1">Motivo: {{ r.motivo_no_recogida }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     <form method="post" action="{% url 'paseos:finalizar_paseo' paseo_activo.id_paseo %}">
       {% csrf_token %}
-      <button type="submit" class="btn btn-primary w-100">Finalizar paseo</button>
+      {% comment %}
+      Punto A2, punto 5 - deshabilitado en el frontend mientras quede
+      alguna recogida 'pendiente'/'recogida' (el backend lo exige de
+      verdad - ver paseos.repository.finalizar_paseo()). Un paseo sin
+      `recogidas` (de antes de esta fase) siempre puede finalizarse.
+      {% endcomment %}
+      <button type="submit" class="btn btn-primary w-100" {% if not paseo_activo.puede_finalizar %}disabled{% endif %}>
+        Finalizar paseo
+      </button>
+      {% if not paseo_activo.puede_finalizar %}
+      <p class="text-muted small mt-1 mb-0">Entrega todas las recogidas pendientes antes de finalizar.</p>
+      {% endif %}
     </form>
     <p class="text-muted small mt-2 mb-1" id="estado-gps">Compartiendo tu ubicación...</p>
     {% comment %}

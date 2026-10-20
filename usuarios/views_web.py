@@ -29,7 +29,7 @@ from incidentes.forms import ReportarIncidenteForm
 from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository as paseos_repository
-from paseos.forms import PublicarHorarioForm
+from paseos.forms import MotivoNoRecogidaForm, PublicarHorarioForm
 from usuarios import repository
 from usuarios.decorators import URL_DASHBOARD_POR_ROL, requiere_autenticacion, requiere_dueno, requiere_paseador
 from usuarios.forms import (
@@ -524,6 +524,29 @@ def bienvenida_paseador(request):
         duenos_paseo = repository.resolver_lista(paseo.get('id_duenos'), duenos_por_id)
         duenos_nombres = repository.nombres_unidos(duenos_paseo)
         fotos_existentes = {f['momento'] for f in paseo.get('fotos', [])}
+
+        # Incremento 4 fase 3, punto A2 - "el paseador ve la lista de
+        # recogidas con dirección, indicaciones, teléfono y las mascotas
+        # de cada dueño". Un paseo de ANTES de esta fase no tiene el
+        # campo `recogidas` - .get(..., []) lo trata como ninguna
+        # recogida pendiente (compatibilidad, ver reglas de trabajo).
+        items_recogida = []
+        for r in paseo.get('recogidas', []):
+            mascotas_recogida = mascotas_repository.resolver_lista(
+                r.get('id_mascotas', []), mascotas_por_id,
+            )
+            items_recogida.append({
+                'id_dueno': str(r['id_dueno']),
+                'dueno_nombre': (duenos_por_id.get(r['id_dueno']) or {}).get('nombre', 'Dueño'),
+                'mascotas_nombres': mascotas_repository.nombres_unidos(mascotas_recogida),
+                'direccion': r.get('direccion'),
+                'comuna_etiqueta': paseos_repository.etiqueta_zona(r['comuna']) if r.get('comuna') else None,
+                'indicaciones': r.get('indicaciones'),
+                'telefono': r.get('telefono'),
+                'estado': r.get('estado'),
+                'motivo_no_recogida': r.get('motivo_no_recogida'),
+            })
+
         paseo_activo = {
             'id_paseo': str(paseo['_id']),
             'estado': paseo['estado'],
@@ -538,6 +561,13 @@ def bienvenida_paseador(request):
             # que el primer envio de GPS (cada 8s, base.html) lo actualice.
             'distancia_texto': coordenadas_repository.formatear_distancia(
                 coordenadas_repository.distancia_recorrida_m(paseo['_id'])
+            ),
+            'recogidas': items_recogida,
+            # "Finalizar paseo" se deshabilita en el frontend mientras
+            # quede alguna recogida sin cerrar (backend lo exige de
+            # verdad, ver paseos.repository.finalizar_paseo()).
+            'puede_finalizar': not any(
+                r['estado'] in ('pendiente', 'recogida') for r in paseo.get('recogidas', [])
             ),
         }
         # mascotas=mascotas_paseo: si el paseo lleva mas de una, el form
@@ -573,6 +603,11 @@ def bienvenida_paseador(request):
         'incidente_form': incidente_form,
         'horarios_disponibles': horarios_disponibles,
         'form_horario': form_horario,
+        # Incremento 4 fase 3, punto A2 - un solo formulario sin binding,
+        # reusado para las N tarjetas de "No se pudo recoger" (cada una
+        # postea a su propia URL con el id_dueno en la ruta, no hace
+        # falta un prefix distinto por tarjeta).
+        'form_motivo_no_recogida': MotivoNoRecogidaForm(),
         'solicitudes_hoy': solicitudes_hoy,
         'paseos_esta_semana': paseos_esta_semana,
     })

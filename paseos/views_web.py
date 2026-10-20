@@ -22,7 +22,7 @@ from core.media import ErrorSubidaImagen, ErrorValidacionImagen, subir_imagen
 from mascotas import repository as mascotas_repository
 from notificaciones import repository as notificaciones_repository
 from paseos import repository
-from paseos.forms import InscribirMascotaForm, PublicarHorarioForm, SubirFotoPaseoForm
+from paseos.forms import InscribirMascotaForm, MotivoNoRecogidaForm, PublicarHorarioForm, SubirFotoPaseoForm
 from paseos.repository import MAXIMO_MASCOTAS_POR_PASEO, ZONAS_VALIDAS, ZONAS_VALIDAS_CON_NUMERO, etiqueta_zona
 from usuarios import repository as usuarios_repository
 from usuarios.decorators import requiere_dueno, requiere_paseador
@@ -505,7 +505,18 @@ def cancelar_disponibilidad(request, id_paseo):
 @require_POST
 @requiere_paseador
 def iniciar_paseo(request, id_paseo):
-    """Pasa un paseo propio de 'disponible' a 'en_vivo' y notifica al dueño."""
+    """
+    Pasa un paseo propio de 'disponible' a 'en_vivo'.
+
+    Incremento 4 fase 3, punto A2 - YA NO notifica a los dueños aquí
+    (antes mandaba "inició el paseo de tu mascota" a TODOS los dueños
+    del paseo al mismo tiempo). Con la recogida por mascota, "empezar el
+    paseo" (el paseador sale a buscar a la primera mascota) ya no es lo
+    mismo que "tu mascota está siendo paseada" - esa notificación
+    (mismo tipo `inicio_paseo`) ahora se manda individualmente, SOLO a
+    cada dueño, en el momento real de su propia recogida (ver
+    marcar_recogida() más abajo).
+    """
     id_paseador = ObjectId(request.session['id_usuario'])
     paseo = repository.iniciar_paseo(id_paseo=id_paseo, id_paseador=id_paseador)
     if not paseo:
@@ -515,15 +526,6 @@ def iniciar_paseo(request, id_paseo):
             'o ya tienes otro paseo en curso.',
         )
     else:
-        # Un paseo por notificacion, uno POR CADA dueño involucrado (hasta
-        # 8 mascotas, posiblemente de varios dueños - ver CLAUDE.md,
-        # "Corrección de alcance 2026-09-25"), no solo al primero.
-        for id_dueno in paseo.get('id_duenos', []):
-            notificaciones_repository.crear(
-                id_usuario=id_dueno,
-                tipo='inicio_paseo',
-                mensaje=f'{request.session.get("nombre")} inició el paseo de tu mascota.',
-            )
         # Incremento 4, fase 2, "pantalla encendida": en iPhone (y en
         # general, cualquier navegador) Safari/las apps de pantalla de
         # inicio suspenden JS cuando la pantalla se bloquea o la app
@@ -545,8 +547,35 @@ def iniciar_paseo(request, id_paseo):
 @require_POST
 @requiere_paseador
 def finalizar_paseo(request, id_paseo):
-    """Pasa un paseo propio de 'en_vivo' a 'historico' y notifica al dueño."""
+    """
+    Pasa un paseo propio de 'en_vivo' a 'historico'.
+
+    Incremento 4 fase 3, punto A2, punto 5 - solo si ninguna recogida
+    sigue 'pendiente'/'recogida' (repository.finalizar_paseo() lo
+    exige de forma atómica, es la defensa real). El chequeo de ACÁ es
+    solo para dar un mensaje de error específico en vez del genérico
+    "ya no estaba en curso" - sin esto, un paseador que todavía tiene
+    una recogida pendiente no entendería por qué el botón no hizo nada.
+
+    Punto A2 tampoco pide notificar aquí - "Entregado" (marcar_entrega)
+    ya notifica a cada dueño con `fin_paseo` en su propio momento; antes
+    esta vista mandaba esa misma notificación a TODOS los dueños de
+    nuevo al finalizar, duplicándola.
+    """
     id_paseador = ObjectId(request.session['id_usuario'])
+    paseo_actual = repository.obtener_por_id(id_paseo)
+    if paseo_actual and str(paseo_actual.get('id_paseador')) == request.session['id_usuario']:
+        pendientes = [
+            r for r in paseo_actual.get('recogidas', [])
+            if r['estado'] in ('pendiente', 'recogida')
+        ]
+        if pendientes:
+            messages.error(
+                request,
+                'No se puede finalizar: todavía hay recogidas pendientes de entregar.',
+            )
+            return redirect('usuarios:bienvenida_paseador')
+
     paseo = repository.finalizar_paseo(id_paseo=id_paseo, id_paseador=id_paseador)
     if not paseo:
         messages.error(request, 'No se pudo finalizar el paseo: ya no estaba en curso.')
@@ -556,12 +585,100 @@ def finalizar_paseo(request, id_paseo):
         # coordenadas_detalle de este paseo cada vez que se consulta.
         distancia_m = coordenadas_repository.distancia_recorrida_m(paseo['_id'])
         repository.guardar_distancia(paseo['_id'], distancia_m)
-        for id_dueno in paseo.get('id_duenos', []):
-            notificaciones_repository.crear(
-                id_usuario=id_dueno,
-                tipo='fin_paseo',
-                mensaje=f'{request.session.get("nombre")} finalizó el paseo de tu mascota.',
-            )
+    return redirect('usuarios:bienvenida_paseador')
+
+
+def _recogida_de_dueno(paseo, id_dueno):
+    """Entrada de `paseo.recogidas` de ese dueño, o None - helper compartido
+    por las 3 vistas de abajo para armar el mensaje/la notificación."""
+    oid_dueno = ObjectId(id_dueno)
+    return next((r for r in paseo.get('recogidas', []) if r['id_dueno'] == oid_dueno), None)
+
+
+def _nombres_mascotas_de_recogida(paseo, id_dueno):
+    """'Dobby, Luna' para la recogida de ESE dueño en este paseo, o
+    'tu mascota' si no se pudo resolver ninguna - usado en los mensajes
+    de notificación de marcar_recogida()/marcar_no_recogida()/
+    marcar_entrega(), que son siempre sobre LAS mascotas de un dueño
+    puntual, nunca las 8 del paseo entero."""
+    entrada = _recogida_de_dueno(paseo, id_dueno)
+    ids = entrada.get('id_mascotas', []) if entrada else []
+    mascotas = mascotas_repository.resolver_lista(ids, mascotas_repository.obtener_varias_por_id(ids))
+    return mascotas_repository.nombres_unidos(mascotas) or 'tu mascota'
+
+
+@require_POST
+@requiere_paseador
+def marcar_recogida(request, id_paseo, id_dueno):
+    """
+    "Recogido" (Incremento 4 fase 3, punto A2) - notifica SOLO a ese
+    dueño, con el tipo YA EXISTENTE `inicio_paseo` (no se crea un tipo
+    nuevo - pedido explícito).
+    """
+    id_paseador = ObjectId(request.session['id_usuario'])
+    paseo = repository.marcar_recogida(id_paseo=id_paseo, id_paseador=id_paseador, id_dueno=id_dueno)
+    if not paseo:
+        messages.error(request, 'No se pudo marcar como recogida: revisa el estado actual.')
+        return redirect('usuarios:bienvenida_paseador')
+
+    nombres = _nombres_mascotas_de_recogida(paseo, id_dueno)
+    notificaciones_repository.crear(
+        id_usuario=id_dueno,
+        tipo='inicio_paseo',
+        mensaje=f'{request.session.get("nombre")} recogió a {nombres}.',
+    )
+    messages.success(request, 'Recogida registrada.')
+    return redirect('usuarios:bienvenida_paseador')
+
+
+@require_POST
+@requiere_paseador
+def marcar_no_recogida(request, id_paseo, id_dueno):
+    """"No se pudo recoger" (Incremento 4 fase 3, punto A2) - motivo obligatorio."""
+    id_paseador = ObjectId(request.session['id_usuario'])
+    form = MotivoNoRecogidaForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, 'Escribe un motivo (máximo 300 caracteres).')
+        return redirect('usuarios:bienvenida_paseador')
+
+    paseo = repository.marcar_no_recogida(
+        id_paseo=id_paseo, id_paseador=id_paseador, id_dueno=id_dueno,
+        motivo=form.cleaned_data['motivo'],
+    )
+    if not paseo:
+        messages.error(request, 'No se pudo registrar: revisa el estado actual.')
+        return redirect('usuarios:bienvenida_paseador')
+
+    nombres = _nombres_mascotas_de_recogida(paseo, id_dueno)
+    notificaciones_repository.crear(
+        id_usuario=id_dueno,
+        tipo='emergencia',
+        mensaje=f'{request.session.get("nombre")} no pudo recoger a {nombres}: {form.cleaned_data["motivo"]}',
+    )
+    messages.success(request, 'Registrado - esas mascotas ya no hacen parte de este paseo.')
+    return redirect('usuarios:bienvenida_paseador')
+
+
+@require_POST
+@requiere_paseador
+def marcar_entrega(request, id_paseo, id_dueno):
+    """
+    "Entregado" (Incremento 4 fase 3, punto A2) - notifica SOLO a ese
+    dueño, con el tipo YA EXISTENTE `fin_paseo`.
+    """
+    id_paseador = ObjectId(request.session['id_usuario'])
+    paseo = repository.marcar_entrega(id_paseo=id_paseo, id_paseador=id_paseador, id_dueno=id_dueno)
+    if not paseo:
+        messages.error(request, 'No se pudo marcar como entregada: revisa el estado actual.')
+        return redirect('usuarios:bienvenida_paseador')
+
+    nombres = _nombres_mascotas_de_recogida(paseo, id_dueno)
+    notificaciones_repository.crear(
+        id_usuario=id_dueno,
+        tipo='fin_paseo',
+        mensaje=f'{request.session.get("nombre")} entregó a {nombres}.',
+    )
+    messages.success(request, 'Entrega registrada.')
     return redirect('usuarios:bienvenida_paseador')
 
 
