@@ -221,13 +221,26 @@ def formatear_distancia(metros):
 def a_json(punto):
     """
     Incremento 4 fase 3, punto A6 - `fecha_captura` ahora se manda con
-    sufijo "Z" explícito (mismo criterio que _fecha_iso_utc() en
-    coordenadas/views_web.py), no `.isoformat()` a secas: pymongo
-    devuelve la fecha naive en UTC, y un `new Date("...sin Z...")` en JS
-    la interpreta como hora LOCAL del navegador - el cálculo de huecos
-    entre puntos (mapa.html) quedaría desfasado 5 horas en Bogotá. Antes
-    no importaba porque ningún JS parseaba este campo como Date (solo se
-    reenviaba como string en "?desde="); A6 es el primer caso real.
+    sufijo "Z" explícito: pymongo devuelve la fecha naive en UTC, y un
+    `new Date("...sin Z...")` en JS la interpreta como hora LOCAL del
+    navegador. Antes no importaba porque ningún JS parseaba este campo
+    como Date (solo se reenviaba como string en "?desde="); A6 (el
+    cálculo de "Última ubicación: hace N min" contra `Date.now()`) es el
+    primer caso real que sí necesita la fecha bien interpretada.
+
+    Bug real encontrado en la revisión pre-fusión: la primera versión de
+    este fix usaba `strftime('%Y-%m-%dT%H:%M:%SZ')` (sin microsegundos),
+    truncando la precisión real que SÍ tiene `fecha_captura` en Mongo
+    (viene con microsegundos - ver coordenadas.repository.registrar_punto).
+    `mapa.html` reenvía este mismo string como cursor incremental
+    ("?desde=", ver coordenadas_de_paseo() - lentitud en producción,
+    14 de octubre) - truncado a segundos, el ÚLTIMO punto de cada
+    vuelta del polling volvía a matchear ($gt sobre un valor MENOR al
+    real) en la vuelta siguiente, reenviando ese mismo punto para
+    siempre y rompiendo el "solo lo nuevo" que esa optimización
+    necesitaba. `.isoformat()` conserva los microsegundos; el sufijo
+    "+00:00" que agrega para un datetime aware se cambia por "Z" (mismo
+    formato de siempre, JS lo parsea igual).
     """
     fecha_captura = punto.get('fecha_captura')
     return {
@@ -236,7 +249,7 @@ def a_json(punto):
         'altitud': punto.get('altitud'),
         'precision': punto.get('precision'),
         'fecha_captura': (
-            fecha_captura.replace(tzinfo=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+            fecha_captura.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z')
             if isinstance(fecha_captura, datetime) else fecha_captura
         ),
     }

@@ -2490,6 +2490,115 @@ autora lo apruebe).
   Sin cambios de código ni commit propio para este punto - queda
   documentado como confirmación explícita, no como "ya se hará solo".
 
+- **Revisión pre-fusión de fase 3 (antes de fusionar a `master`) - dos bugs
+  reales encontrados y corregidos**: la autora pidió, antes de aprobar la
+  fusión, (1) revisar producción (`canigo`) en solo lectura para paseos
+  `disponible`/`en_vivo` sin `recogidas`, (2) confirmar que el try/catch
+  de `localStorage` (A6) no corta el emisor de GPS en navegación privada,
+  (3) listar las pantallas que consumen el JSON de `a_json()` (A6) y
+  confirmar que ninguna queda desfasada 5 horas, (4) respaldo de
+  `paseos`/`usuarios`/`incidentes` de producción, (5) plan de reversión.
+
+  - **(1) Producción**: UN SOLO paseo real `disponible`/`en_vivo` con
+    mascotas y sin `recogidas` (`6acda740fad7a1d5b6643b6f` - cuentas
+    reales, no `@canigo.test`; además lleva `en_vivo` desde el 13 de
+    octubre, `total_puntos: 0` - paseo real abandonado, no finalizado,
+    **dato a seguir de cerca por separado, no corregido acá** porque no
+    se pidió). Se clonó la MISMA forma exacta de ese documento (sin
+    `recogidas`, `en_vivo`, `total_puntos: 0`) en `canigo_dev` y se
+    ejecutaron contra ella, con HTTP real, las 8 pantallas que fase 3
+    tocó (mapa del dueño en vivo e histórico, JSON de coordenadas,
+    bienvenida del paseador, mis-paseos, finalizar, historial del dueño
+    y del paseador) - **cero errores 500**, comportamiento idéntico al
+    de antes de fase 3 en los 8 casos (sin tarjeta "Recogidas:", sin
+    bloquear "Finalizar", duración/distancia del paseo completo).
+
+  - **(2) `localStorage`**: confirmado por lectura que los DOS únicos
+    usos de `localStorage` en todo el proyecto (`avisarSiHuboInterrupcion()`/
+    `registrarEnvioExitoso()`, `core/templates/base.html`) están cada
+    uno dentro de su propio `try/catch`. Verificado además por
+    EJECUCIÓN (Chrome vía CDP, `Object.defineProperty(window,
+    'localStorage', {get: () => { throw ... }})` para simular Safari en
+    navegación privada antes de que cargue cualquier script): el emisor
+    de GPS siguió mandando puntos nuevos cada ~8s con normalidad
+    (`estado-gps` mostró "Compartiendo tu ubicación...", el conteo de
+    `coordenadas_detalle` avanzó) pese a que CUALQUIER acceso a
+    `localStorage` lanzaba una excepción.
+
+  - **(3) Pantallas que consumen el JSON de `a_json()`**: UNA sola,
+    `coordenadas/templates/coordenadas/mapa.html` (confirmado con una
+    búsqueda de `datos_paseo`/`coordenadas:datos_paseo` en todo el
+    proyecto - ningún otro template ni vista lo consume). El historial,
+    el panel del paseador y el detalle de un incidente NUNCA pasan por
+    esta función (usan `distancia_recorrida_m()` del lado del servidor,
+    la respuesta de `registrar_coordenada()`, o `incidentes.
+    repository.a_json()` respectivamente - funciones y datos
+    completamente aparte), así que no podían quedar desfasados por este
+    cambio en absoluto.
+
+    **Encontrando esto se detectaron 2 bugs reales que la revisión de
+    ejecución de A6 no había probado** (esa revisión solo ejecutó la
+    PRIMERA carga de la página, nunca una segunda vuelta del polling de
+    8s con un rango de privacidad activo):
+
+    - **Bug 1 (500 real)**: `_parsear_fecha()` (`coordenadas/views_web.py`)
+      hacía `.replace('Z', '+00:00')`, devolviendo un datetime AWARE
+      para `desde_cliente` (el cursor `?desde=` que manda `mapa.html` en
+      cada vuelta del polling). `desde_privacidad` (`hora_recogida`,
+      directo de Mongo) sigue NAIVE - comparar los dos con `max()`
+      lanzaba `TypeError: can't compare offset-naive and offset-aware
+      datetimes`, un 500 real en la SEGUNDA vuelta del polling para
+      cualquier dueño con una recogida ya en curso. Reproducido con HTTP
+      real (dos peticiones seguidas al JSON de coordenadas) antes de
+      corregirlo. Fix: `.replace('Z', '')` en vez de reemplazar por un
+      offset - devuelve NAIVE, igual que el resto del proyecto
+      (CLAUDE.md, "Manejo de zonas horarias").
+    - **Bug 2 (regresión silenciosa de rendimiento)**: la primera
+      versión del fix de A6 usaba `strftime('%Y-%m-%dT%H:%M:%SZ')` (sin
+      microsegundos) en `a_json()`, truncando la precisión real que
+      `fecha_captura` SÍ tiene en Mongo. Como `mapa.html` reenvía ese
+      mismo string como cursor incremental (optimización de lentitud en
+      producción del 14 de octubre), el ÚLTIMO punto de cada vuelta del
+      polling volvía a matchear (`$gt` sobre un valor truncado, siempre
+      menor al real) en la vuelta siguiente - reenviaba ese mismo punto
+      PARA SIEMPRE, rompiendo el "solo lo nuevo" que esa optimización
+      necesitaba. Fix: `.isoformat()` (conserva microsegundos) con el
+      sufijo `+00:00` cambiado por `Z`, en vez de `strftime` sin `%f`.
+      Reproducido (un segundo poll con el cursor de el primero volvía a
+      traer el mismo punto) y confirmado corregido (0 puntos nuevos en
+      el segundo poll) con HTTP real.
+
+  - **(4) Respaldo**: `respaldo_canigo_2026-10-20_premerge_fase3/`
+    (mismo patrón que `cca79d7` - `.gitignore` ya cubre
+    `respaldo_canigo_*/`, nunca se comitea) - `paseos.json` (13
+    documentos), `usuarios.json` (11), `incidentes.json` (7), export
+    completo de las 3 colecciones de `canigo` tal cual estaban antes de
+    desplegar.
+
+  - **(5) Plan de reversión**: el merge se hace con `--no-ff` (pedido
+    explícito) para que quede como un commit de merge único y
+    reversible. Para deshacerlo: `git revert -m 1 <hash-del-merge>`
+    (el `-m 1` es obligatorio en un revert de un merge commit - indica
+    "volver al estado del primer padre", `master` antes de fusionar;
+    NUNCA `git reset --hard`, que reescribiría el historial de una rama
+    ya compartida). Esto crea un commit NUEVO que deshace el código,
+    sin tocar MongoDB en absoluto - los documentos no se migran ni se
+    borran con un revert de código. Para los paseos creados DURANTE el
+    tiempo que estuvo desplegado fase 3 (con `recogidas` ya poblado): el
+    código revertido (pre-fase-3) simplemente no sabe que ese campo
+    existe - lo ignora por completo (Mongo no tiene esquema fijo), así
+    que el paseo sigue funcionando con sus campos de siempre
+    (`id_mascotas`, `hora_inicio`/`hora_fin`), sin errores, sin perder
+    el dato (queda en Mongo, recuperable si se vuelve a desplegar fase 3
+    después). **Única salvedad real**: si el revert ocurre con un paseo
+    `en_vivo` que TIENE recogidas `pendiente`/`recogida` sin cerrar, el
+    código viejo no exige entregarlas antes de finalizar (esa regla es
+    de A2, no existe en `master`) - el paseador podría finalizar con
+    recogidas "colgadas" en Mongo, sin que nada las marque
+    `entregada`/`no_recogida` nunca. No rompe nada ni pierde datos, pero
+    por prolijidad conviene revertir entre paseos, no a mitad de uno con
+    recogidas activas.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

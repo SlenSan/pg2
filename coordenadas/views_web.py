@@ -489,10 +489,26 @@ def coordenadas_de_paseo(request, id_paseo):
 
 
 def _parsear_fecha(valor):
+    """
+    Bug real encontrado en la revisión pre-fusión de fase 3 (A6 agregó el
+    sufijo "Z" a `coordenadas.repository.a_json()` - ver ese docstring):
+    con `.replace('Z', '+00:00')`, esto devolvía un datetime AWARE
+    (tzinfo=UTC) para `desde_cliente` (coordenadas_de_paseo(), más abajo),
+    mientras `desde_privacidad` (paseos.recogidas.hora_recogida, naive -
+    pymongo siempre las devuelve así) seguía NAIVE - comparar los dos con
+    `max()` lanzaba `TypeError: can't compare offset-naive and
+    offset-aware datetimes`, un 500 real en la SEGUNDA vuelta del polling
+    (la primera no manda `?desde=` todavía) para cualquier dueño con una
+    recogida ya en curso. Reproducido con HTTP real antes de corregirlo.
+    `.replace('Z', '')` en vez de reemplazar por un offset: devuelve
+    NAIVE, igual que pymongo y que el resto del proyecto (CLAUDE.md,
+    "Manejo de zonas horarias" - naive = UTC implícito en todo el
+    backend, nunca aware salvo al pasarle una fecha a una plantilla).
+    """
     if not valor:
         return None
     try:
-        return datetime.fromisoformat(str(valor).replace('Z', '+00:00'))
+        return datetime.fromisoformat(str(valor).replace('Z', ''))
     except ValueError:
         return None
 
