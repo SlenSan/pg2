@@ -661,13 +661,33 @@ def registrar_coordenada(request, id_paseo):
                 'distancia_texto': repository.formatear_distancia(repository.distancia_recorrida_m(paseo['_id'])),
             }, status=201)
 
+    # Ajuste del 23 de octubre - filtro de salto geográfico: rechaza en
+    # silencio (MISMO patrón que el filtro de 6s de arriba - 201, mismo
+    # cuerpo, para que el JS no reintente ni muestre error) un punto
+    # cuya velocidad implícita respecto al ÚLTIMO PUNTO GUARDADO de este
+    # paseo supere VELOCIDAD_MAXIMA_RAZONABLE_KMH. `fecha_captura`
+    # calculada UNA sola vez acá (no en la llamada a registrar_punto de
+    # más abajo) para que el chequeo y el valor que se guarda sean
+    # exactamente el mismo instante - `.replace(tzinfo=None)` porque
+    # `obtener_ultimo_punto()`/Mongo devuelven naive (UTC implícito en
+    # todo el backend, ver CLAUDE.md).
+    fecha_captura = _parsear_fecha(data.get('fecha_captura')) or ahora.replace(tzinfo=None)
+    punto_anterior = repository.obtener_ultimo_punto(paseo['_id'])
+    velocidad_kmh = repository.velocidad_implicita_kmh(punto_anterior, latitud, longitud, fecha_captura)
+    if velocidad_kmh is not None and velocidad_kmh > repository.VELOCIDAD_MAXIMA_RAZONABLE_KMH:
+        return JsonResponse({
+            'total_puntos': paseo.get('total_puntos', 0),
+            'hay_notificaciones_sin_leer': _hay_notificaciones_sin_leer(request, paseo['id_paseador']),
+            'distancia_texto': repository.formatear_distancia(repository.distancia_recorrida_m(paseo['_id'])),
+        }, status=201)
+
     repository.registrar_punto(
         id_paseo=paseo['_id'],
         latitud=latitud,
         longitud=longitud,
         altitud=altitud,
         precision=precision,
-        fecha_captura=_parsear_fecha(data.get('fecha_captura')),
+        fecha_captura=fecha_captura,
     )
     total_puntos = paseos_repository.incrementar_total_puntos(paseo['_id'])
     return JsonResponse({

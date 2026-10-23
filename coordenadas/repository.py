@@ -195,6 +195,41 @@ def distancia_recorrida_m(id_paseo, *, desde=None, hasta=None):
     return round(total_m)
 
 
+# Un punto GPS puede reportar una `precision` (radio de incertidumbre)
+# buena y aun así estar completamente fuera de lugar - típico de un
+# *fix* de red/Wi-Fi que reemplaza momentáneamente al GPS satelital, por
+# lo que `precision` sola no alcanza para descartar este tipo de error
+# (ver el filtro de dibujo del mapa, que sí confía en `precision`, más
+# arriba). 30 km/h está muy por encima de cualquier ritmo humano real a
+# pie o trotando con un perro (un sprint corto ronda 15-20 km/h), y muy
+# por debajo de un salto de varios km en pocos segundos.
+VELOCIDAD_MAXIMA_RAZONABLE_KMH = 30
+
+
+def velocidad_implicita_kmh(punto_anterior, latitud, longitud, fecha_captura):
+    """
+    Velocidad implícita (km/h) entre `punto_anterior` (el último punto ya
+    GUARDADO de este paseo, documento de Mongo - o `None` si este sería
+    el primer punto) y un punto nuevo candidato (`latitud`/`longitud`/
+    `fecha_captura`, todavía sin guardar).
+
+    `None` si no se puede calcular - sin punto anterior (primer punto
+    del paseo, ver registrar_coordenada() para esa validación aparte), o
+    sin tiempo transcurrido válido (`fecha_captura` igual o anterior a
+    la del punto anterior - no debería pasar, pero nunca se interpreta
+    como "salto" si pasa). El llamador decide qué hacer con el `None`.
+    """
+    if not punto_anterior:
+        return None
+    dt_s = (fecha_captura - punto_anterior['fecha_captura']).total_seconds()
+    if dt_s <= 0:
+        return None
+    distancia_m = _distancia_haversine_m(
+        punto_anterior['latitud'], punto_anterior['longitud'], latitud, longitud,
+    )
+    return (distancia_m / 1000) / (dt_s / 3600)
+
+
 def formatear_distancia(metros):
     """
     ÚNICA función que da el texto de distancia a mostrar ("850 m" /
