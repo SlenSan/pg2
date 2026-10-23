@@ -166,7 +166,15 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
   hora_fin: Date,
   total_puntos: Number,
   emergencia: Boolean,     // true si se activó el botón de emergencia
-  fotos: [{ url: String, momento: String }],  // momento: "inicio"|"mitad"|"fin"
+  fotos: [{ url: String, momento: String }],  // momento: "inicio"|"mitad"|"fin" - INC-12 (22 de
+                                                // octubre): desde que existe `recogidas[]`, las
+                                                // fotos NUEVAS se guardan en `recogidas[ese
+                                                // dueño].fotos` (mas abajo), no aca - este campo
+                                                // sigue existiendo solo como lo que ya tenia un
+                                                // paseo de ANTES de ese punto (legacy, un solo
+                                                // dueño en ese entonces, o un paseo que ya estaba
+                                                // "en_vivo" al desplegar el fix). No se migra ni
+                                                // se borra lo viejo
   distancia_m: Number,     // Ajustes del 19 de octubre, punto 1 - metros recorridos (Haversine
                             // sobre coordenadas_detalle, solo puntos con precision <= 50m o nula -
                             // ver coordenadas/repository.py::distancia_recorrida_m()/
@@ -196,7 +204,17 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
     estado: String,         // "pendiente" | "recogida" | "no_recogida" | "entregada"
     hora_recogida: Date,    // null hasta que el paseador marca "Recogido"
     hora_entrega: Date,     // null hasta que el paseador marca "Entregado"
-    motivo_no_recogida: String // null salvo que estado="no_recogida"
+    motivo_no_recogida: String, // null salvo que estado="no_recogida"
+    fotos: [{ url: String, momento: String }] // INC-12 (hallazgos de la prueba de usabilidad,
+                                                // 22 de octubre) - las 3 fotos (inicio/mitad/fin,
+                                                // RF15) de LAS MASCOTAS DE ESTE DUEÑO, no de todo
+                                                // el paseo (antes vivian en paseos.fotos de mas
+                                                // abajo, compartidas entre todos los duenos - un
+                                                // problema de privacidad ademas del funcional).
+                                                // Ausente/[] si el paseador todavia no subio
+                                                // ninguna para este dueno. Ver
+                                                // paseos.repository.agregar_foto()/
+                                                // fotos_visibles_para_dueno()
   }]
 }
 ```

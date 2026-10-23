@@ -111,6 +111,31 @@
         {% elif r.estado == 'no_recogida' %}
         <p class="small text-danger mb-0 mt-1">Motivo: {{ r.motivo_no_recogida }}</p>
         {% endif %}
+        {% comment %}
+        INC-12 (hallazgos de la prueba de usabilidad, 22 de octubre) -
+        las 3 fotos (inicio/mitad/fin) son POR DUEÑO: antes eran una
+        sola tanda para todo el paseo, compartida entre todos (problema
+        funcional Y de privacidad - un dueño veía fotos de mascotas
+        ajenas). Cada tarjeta de recogida ahora tiene sus propios
+        botones, con `data-id-dueno` para que el modal sepa a cuál
+        recogida corresponde la foto.
+        {% endcomment %}
+        {% if r.fotos_pendientes %}
+        <div class="d-flex flex-wrap gap-2 mt-2 fotos-pendientes-contenedor" data-id-dueno="{{ r.id_dueno }}">
+          {% for momento in r.fotos_pendientes %}
+          <button
+            type="button"
+            class="btn btn-outline-primary btn-sm flex-fill"
+            data-bs-toggle="modal"
+            data-bs-target="#modalFoto"
+            data-momento="{{ momento }}"
+            data-id-dueno="{{ r.id_dueno }}"
+          >
+            Foto de {{ momento }}
+          </button>
+          {% endfor %}
+        </div>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
@@ -202,9 +227,15 @@
     </div>
     {% endif %}
 
-    {% if paseo_activo.fotos_pendientes %}
-    <div class="d-flex flex-wrap gap-2 mb-3" id="fotos-pendientes-contenedor">
-      {% for momento in paseo_activo.fotos_pendientes %}
+    {% comment %}
+    INC-12 - SOLO para un paseo de ANTES de `recogidas` (ver
+    repository.agregar_foto()): sin dueño que elegir, misma tanda
+    compartida de siempre. Un paseo con `recogidas` ya tiene sus
+    botones por dueño dentro de cada tarjeta, más arriba.
+    {% endcomment %}
+    {% if paseo_activo.fotos_pendientes_legacy %}
+    <div class="d-flex flex-wrap gap-2 mb-3 fotos-pendientes-contenedor">
+      {% for momento in paseo_activo.fotos_pendientes_legacy %}
       <button
         type="button"
         class="btn btn-outline-primary flex-fill"
@@ -396,7 +427,7 @@ servidor - ver estado_bienvenida_paseador() y _horarios_paseador.html.
 </div>
 {% endif %}
 
-{% if paseo_activo.fotos_pendientes %}
+{% if paseo_activo.tiene_fotos_pendientes %}
 <div class="modal fade" id="modalFoto" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <form id="formFoto" method="post" enctype="multipart/form-data" class="modal-content" data-canigo-carga-manual>
@@ -520,17 +551,24 @@ un script de esta plantilla.
 
   var modalFoto = document.getElementById('modalFoto');
   if (modalFoto) {
-    // La URL trae un placeholder de texto en vez del momento real, porque
-    // Django arma la URL en tiempo de render con todos sus argumentos; el
-    // JS lo reemplaza segun el boton que abrio el modal.
-    var urlBase = "{% url 'paseos:subir_foto' paseo_activo.id_paseo 'MOMENTO_PLACEHOLDER' %}";
+    // INC-12 - dos URLs base: una por dueño (paseo con `recogidas`) y
+    // una legacy sin dueño (paseo de antes de ese campo, ver
+    // repository.agregar_foto()). Los placeholders son texto porque
+    // Django arma la URL en tiempo de render con todos sus argumentos;
+    // el JS los reemplaza segun el boton que abrio el modal.
+    var urlBasePorDueno = "{% url 'paseos:subir_foto' paseo_activo.id_paseo 'DUENO_PLACEHOLDER' 'MOMENTO_PLACEHOLDER' %}";
+    var urlBaseLegacy = "{% url 'paseos:subir_foto_legacy' paseo_activo.id_paseo 'MOMENTO_PLACEHOLDER' %}";
     var formFoto = document.getElementById('formFoto');
     var tituloFoto = document.getElementById('modalFotoTitulo');
     var momentoActual = null;
+    var idDuenoActual = null;
 
     modalFoto.addEventListener('show.bs.modal', function (event) {
       momentoActual = event.relatedTarget.getAttribute('data-momento');
-      formFoto.action = urlBase.replace('MOMENTO_PLACEHOLDER', momentoActual);
+      idDuenoActual = event.relatedTarget.getAttribute('data-id-dueno');
+      formFoto.action = idDuenoActual
+        ? urlBasePorDueno.replace('DUENO_PLACEHOLDER', idDuenoActual).replace('MOMENTO_PLACEHOLDER', momentoActual)
+        : urlBaseLegacy.replace('MOMENTO_PLACEHOLDER', momentoActual);
       tituloFoto.textContent = 'Foto de ' + momentoActual;
     });
 
@@ -560,10 +598,17 @@ un script de esta plantilla.
           var modal = bootstrap.Modal.getInstance(modalFoto);
           if (modal) modal.hide();
           formFoto.reset();
-          // Saca el boton de ESE momento (ya no queda pendiente) sin
-          // recargar - ver fotos-pendientes-contenedor arriba.
+          // Saca el boton de ESE momento, de ESE dueño (ya no queda
+          // pendiente) sin recargar - ver .fotos-pendientes-contenedor
+          // arriba. INC-12: ahora hay un contenedor por dueño (más el
+          // legacy sin dueño), así que hace falta acotar por
+          // data-id-dueno para no sacar el boton de otra tarjeta con el
+          // mismo momento.
+          var selectorContenedor = idDuenoActual
+            ? '.fotos-pendientes-contenedor[data-id-dueno="' + idDuenoActual + '"]'
+            : '.fotos-pendientes-contenedor:not([data-id-dueno])';
           var botonMomento = document.querySelector(
-            '#fotos-pendientes-contenedor button[data-momento="' + momentoActual + '"]'
+            selectorContenedor + ' button[data-momento="' + momentoActual + '"]'
           );
           if (botonMomento) botonMomento.remove();
           mostrarAviso(resultado.data.mensaje || 'Foto guardada correctamente.');

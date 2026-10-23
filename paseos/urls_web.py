@@ -20,7 +20,15 @@ urlpatterns = [
     path('paseador/historial/', views_web.historial_paseador, name='historial_paseador'),
     path('paseador/paseos/<str:id_paseo>/iniciar/', views_web.iniciar_paseo, name='iniciar_paseo'),
     path('paseador/paseos/<str:id_paseo>/finalizar/', views_web.finalizar_paseo, name='finalizar_paseo'),
-    path('paseador/paseos/<str:id_paseo>/fotos/<str:momento>/', views_web.subir_foto, name='subir_foto'),
+    path(
+        'paseador/paseos/<str:id_paseo>/recogidas/<str:id_dueno>/fotos/<str:momento>/',
+        views_web.subir_foto,
+        name='subir_foto',
+    ),
+    # INC-12 - antes de las recogidas por dueño, un paseo legacy (sin
+    # `recogidas`) sigue subiendo al arreglo viejo compartido; no tiene
+    # un dueño que elegir, de ahi esta segunda ruta sin id_dueno.
+    path('paseador/paseos/<str:id_paseo>/fotos/<str:momento>/', views_web.subir_foto, name='subir_foto_legacy'),
     # Incremento 4 fase 3, punto A2 - una recogida por dueño dentro del paseo.
     path(
         'paseador/paseos/<str:id_paseo>/recogidas/<str:id_dueno>/recoger/',

@@ -691,19 +691,54 @@ def incrementar_total_puntos(id_paseo):
     return resultado['total_puntos'] if resultado else None
 
 
-def agregar_foto(*, id_paseo, id_paseador, momento, url):
+def agregar_foto(*, id_paseo, id_paseador, id_dueno, momento, url):
     """
-    Agrega una foto (RF15) al arreglo `fotos` de un paseo propio y
-    "en_vivo". El filtro 'fotos.momento': {'$ne': momento} hace que sea
-    atomico y evite duplicar una foto del mismo momento (verificado
-    manualmente: en Mongo, $ne sobre un campo dentro de un array de
-    subdocumentos solo matchea si NINGUN elemento tiene ese valor).
+    Agrega una foto (RF15) por dueño - INC-12 (hallazgos de la prueba de
+    usabilidad, 22 de octubre): antes las 3 fotos (inicio/mitad/fin) eran
+    UNA sola para todo el paseo, compartida entre todos los dueños, aunque
+    llevara mascotas de varios (hasta 8, Ley Kiara) - un dueño veía fotos
+    de mascotas ajenas, problema de privacidad ademas del funcional. Ahora
+    se guardan en `recogidas[ese dueño].fotos`, mismo patrón
+    `array_filters` que marcar_recogida()/marcar_entrega() de más abajo.
+
+    Un paseo SIN `recogidas` (legacy, de antes del Incremento 4 fase 3 -
+    siempre de un solo dueño en ese entonces) sigue escribiendo en el
+    arreglo viejo `fotos` de arriba, ignorando `id_dueno` - nunca hubo mas
+    de un dueño ahi, no hace falta separar nada y así no se rompe un
+    paseo que ya estuviera "en_vivo" al desplegar este punto.
+
+    El filtro '...momento': {'$ne': momento} (en el array que corresponda)
+    hace que sea atomico y evite duplicar una foto del mismo momento
+    (verificado manualmente: en Mongo, $ne sobre un campo dentro de un
+    array de subdocumentos solo matchea si NINGUN elemento tiene ese
+    valor - tambien si el array todavia no existe en ese subdocumento).
     Devuelve el documento actualizado, o None si no se cumplen las
-    condiciones (no existe, no es suyo, no esta "en_vivo", o ya tiene una
-    foto de ese momento).
+    condiciones (no existe, no es suyo, no esta "en_vivo", el dueño no
+    tiene una recogida en este paseo, o ya tiene una foto de ese momento).
     """
     try:
         oid_paseo = ObjectId(id_paseo)
+    except (InvalidId, TypeError):
+        return None
+
+    paseo_actual = get_db().paseos.find_one({'_id': oid_paseo}, {'recogidas': 1})
+    if not paseo_actual:
+        return None
+
+    if 'recogidas' not in paseo_actual:
+        return get_db().paseos.find_one_and_update(
+            {
+                '_id': oid_paseo,
+                'id_paseador': id_paseador,
+                'estado': 'en_vivo',
+                'fotos.momento': {'$ne': momento},
+            },
+            {'$push': {'fotos': {'url': url, 'momento': momento}}},
+            return_document=ReturnDocument.AFTER,
+        )
+
+    try:
+        oid_dueno = ObjectId(id_dueno)
     except (InvalidId, TypeError):
         return None
 
@@ -712,11 +747,37 @@ def agregar_foto(*, id_paseo, id_paseador, momento, url):
             '_id': oid_paseo,
             'id_paseador': id_paseador,
             'estado': 'en_vivo',
-            'fotos.momento': {'$ne': momento},
+            'recogidas': {'$elemMatch': {'id_dueno': oid_dueno, 'fotos.momento': {'$ne': momento}}},
         },
-        {'$push': {'fotos': {'url': url, 'momento': momento}}},
+        {'$push': {'recogidas.$[entrada].fotos': {'url': url, 'momento': momento}}},
+        array_filters=[{'entrada.id_dueno': oid_dueno}],
         return_document=ReturnDocument.AFTER,
     )
+
+
+def fotos_visibles_para_dueno(paseo, id_dueno):
+    """
+    Fotos (RF15) que le corresponde ver a ESTE dueño - INC-12. Nunca las
+    de otro dueño en el mismo paseo.
+    - Paseo sin `recogidas` (legacy, siempre de un solo dueño en ese
+      entonces): `paseo.fotos` completo, sin filtrar - nunca hubo mas de
+      un dueño ahi, no hay nada que separar.
+    - Paseo con `recogidas`: las de `recogidas[ese dueño].fotos` (puede
+      ser [], si el paseador todavia no subio ninguna para el). Si ADEMAS
+      quedaron fotos viejas en `paseo.fotos` (de ANTES de este punto, con
+      el paseo ya "en_vivo" al desplegarlo) y el paseo tiene un unico
+      dueño, se siguen mostrando (nunca hubo fuga real ahi); con varios
+      dueños se ocultan a TODOS - no hay forma de saber de quien era cada
+      una. El dato no se borra ni se migra, solo deja de renderizarse.
+    """
+    if 'recogidas' not in paseo:
+        return paseo.get('fotos', [])
+    entrada = recogida_de_dueno(paseo, id_dueno)
+    fotos_nuevas = (entrada or {}).get('fotos', [])
+    fotos_viejas = []
+    if paseo.get('fotos') and len(paseo.get('id_duenos', [])) <= 1:
+        fotos_viejas = paseo['fotos']
+    return fotos_viejas + fotos_nuevas
 
 
 def marcar_emergencia(id_paseo):

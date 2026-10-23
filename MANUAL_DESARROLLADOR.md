@@ -2979,6 +2979,83 @@ diagnóstico del Wake Lock en iPhone pendiente del resultado real.
   vencido dejó de aparecer, confirmando que los enlaces de `3d13851`
   heredan la regla sin cambios propios.
 
+**Hallazgos de la prueba de usabilidad del 22 de octubre de 2026** - tres
+participantes reales: dos dueños (uno en iPhone, otro en Windows 11) y un
+paseador, que hizo un paseo con mascotas de los dos dueños mientras la
+autora observaba.
+
+- **INC-12 — las fotos del paseo se compartían entre todos los dueños**:
+  diagnóstico - `paseos.repository.agregar_foto()` filtraba solo por
+  `_id` + `id_paseador` + `estado='en_vivo'` + que no existiera ya una
+  foto de ese `momento`, sin ningún `id_dueno` - por diseño, UNA sola
+  foto por momento para TODO el paseo, sin importar cuántos dueños
+  tuviera (hasta 8, Ley Kiara). Se confirmó además que en `mapa.html` el
+  bloque de fotos vivía **fuera** del `if recogida_pendiente`/`else` - un
+  dueño las veía incluso antes de que le recogieran su propia mascota,
+  no solo compartidas sino también adelantadas.
+
+  Diseño aprobado por la autora (dos preguntas, antes de tocar código):
+  guardar las fotos **dentro de `recogidas[].fotos`** (mismo patrón
+  `array_filters`/`recogidas.$[entrada]` que ya usan
+  `marcar_recogida()`/`marcar_entrega()`/`inscribir_mascotas()` en este
+  mismo archivo, en vez de agregar `id_dueno` a `fotos[]` a secas); y
+  para los paseos ya existentes con fotos en el `fotos[]` viejo (de
+  ANTES de este punto): si el paseo tiene un único dueño se siguen
+  mostrando sin cambios (nunca hubo fuga real ahí), si tiene varios se
+  ocultan a TODOS (no hay forma de saber de quién era cada una) - el
+  dato **no se borra ni se migra**, solo deja de renderizarse.
+
+  Fix:
+  - `paseos.repository.agregar_foto()` ahora recibe `id_dueno`. Si el
+    paseo no tiene `recogidas` (legacy, de antes del Incremento 4 fase
+    3 - siempre de un solo dueño en ese entonces, o un paseo que ya
+    estaba `en_vivo` al desplegar este punto) sigue escribiendo en el
+    `fotos[]` de siempre, ignorando `id_dueno` - nada se rompe a mitad
+    de un paseo activo. Si tiene `recogidas`, escribe en
+    `recogidas.$[entrada].fotos` con `array_filters=[{'entrada.id_dueno':
+    oid_dueno}]`, mismo filtro atómico `{'$ne': momento}` de siempre
+    (ahora sobre `fotos.momento` dentro del `$elemMatch` de la
+    recogida) para no duplicar.
+  - `paseos.repository.fotos_visibles_para_dueno(paseo, id_dueno)`
+    (nueva, función pura): resuelve las tres ramas de arriba (legacy
+    sin `recogidas`, nuevo con `recogidas`, y el caso mixto de fotos
+    viejas en un paseo multi-dueño).
+  - `paseos:subir_foto` ahora lleva `id_dueno` en la URL
+    (`.../recogidas/<id_dueno>/fotos/<momento>/`); `paseos:
+    subir_foto_legacy` (sin `id_dueno`) cubre el caso legacy.
+  - `usuarios.views_web.bienvenida_paseador()`: `fotos_pendientes` se
+    calcula ahora DENTRO del loop de cada `recogida` (con `r.get('fotos',
+    [])`, no con el `fotos[]` del paseo completo); `fotos_pendientes_legacy`
+    (nuevo) solo tiene contenido para un paseo sin `recogidas`.
+    `bienvenida_paseador.html`: un botón "Foto de X" por recogida, con
+    `data-id-dueno`, dentro de la tarjeta de ESE dueño; el bloque legacy
+    (sin dueño) se mantiene aparte, para el caso sin `recogidas`. El
+    modal "Subir foto" (compartido) arma la URL con el `data-id-dueno`
+    del botón que lo abrió, o cae a la ruta legacy si no hay ninguno.
+  - `coordenadas.views_web.mapa_paseo()`: nueva `_grupos_de_fotos()` -
+    para un dueño, un solo grupo (`fotos_visibles_para_dueno()`); para
+    el paseador (sin restricción de privacidad, se los lleva a todos
+    juntos), un grupo por cada recogida con fotos (etiquetado con el
+    nombre de sus mascotas) más un grupo final sin etiqueta con el
+    `fotos[]` legacy si quedó algo ahí. `mapa.html` itera
+    `fotos_grupos` en vez de `paseo.fotos` directo.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real, paseo con DOS
+  dueños, P/D1/D2): el paseador sube 3 fotos para D1 y 3 para D2 (6
+  peticiones, las 6 con `200`); re-subir el mismo momento para el mismo
+  dueño responde `409` (no duplica, igual que antes); D1 ve en su propio
+  mapa la URL de SU foto y **nunca** la de D2 (comparación directa de
+  URLs en Mongo contra el HTML de cada mapa); D2 el caso simétrico; el
+  paseador ve las fotos de los dos, cada una bajo el nombre de la
+  mascota que corresponde. Caso legacy (paseo sin `recogidas`, construido
+  directo en Mongo con un solo dueño): subida por la ruta sin `id_dueno`
+  responde `200`, y ese único dueño sigue viendo "Fotos del paseo" en su
+  mapa sin cambios - sin regresión para un paseo de antes de esta fase.
+
+  **Solo leído en código**: ninguno de los hallazgos de este punto -
+  tanto el diagnóstico como el fix se verificaron con HTTP real contra
+  `canigo_dev`.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay

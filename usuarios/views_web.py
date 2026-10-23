@@ -589,8 +589,19 @@ def bienvenida_paseador(request):
             if duracion_min and r.get('hora_recogida'):
                 hora_limite_entrega = r['hora_recogida'] + timedelta(minutes=duracion_min)
                 entrega_vencida = r.get('estado') == 'recogida' and ahora_utc > hora_limite_entrega
+            # INC-12 (hallazgos de la prueba de usabilidad, 22 de
+            # octubre) - las 3 fotos (inicio/mitad/fin) son POR DUEÑO
+            # ahora (ver repository.agregar_foto()), ya no una sola
+            # compartida por todo el paseo - de ahi que esto se calcule
+            # DENTRO del loop de cada recogida, con las fotos de ESA
+            # entrada (r.get('fotos', [])), no con `fotos_existentes` de
+            # mas abajo (esa sigue siendo solo para el caso legacy).
+            fotos_existentes_dueno = {f['momento'] for f in r.get('fotos', [])}
             items_recogida.append({
                 'id_dueno': str(r['id_dueno']),
+                'fotos_pendientes': [
+                    m for m in paseos_repository.MOMENTOS_FOTO_VALIDOS if m not in fotos_existentes_dueno
+                ],
                 'dueno_nombre': (duenos_por_id.get(r['id_dueno']) or {}).get('nombre', 'Dueño'),
                 'mascotas_nombres': mascotas_repository.nombres_unidos(mascotas_recogida),
                 # Punto 4 (ajustes del 20 de octubre) - cada mascota
@@ -618,14 +629,30 @@ def bienvenida_paseador(request):
                 'entrega_vencida': entrega_vencida,
             })
 
+        # INC-12 - SOLO tiene sentido para un paseo legacy sin
+        # `recogidas` (ver repository.agregar_foto()); con `recogidas`,
+        # cada entrada ya calculó la suya arriba, con sus propias fotos.
+        fotos_pendientes_legacy = (
+            [m for m in paseos_repository.MOMENTOS_FOTO_VALIDOS if m not in fotos_existentes]
+            if 'recogidas' not in paseo else []
+        )
+
         paseo_activo = {
             'id_paseo': str(paseo['_id']),
             'estado': paseo['estado'],
             'mascota_nombre': mascotas_repository.nombres_unidos(mascotas_paseo) or None,
             'dueno_nombre': duenos_nombres or None,
-            'fotos_pendientes': [
-                m for m in paseos_repository.MOMENTOS_FOTO_VALIDOS if m not in fotos_existentes
-            ],
+            # INC-12 - SOLO para un paseo legacy sin `recogidas` (ver
+            # repository.agregar_foto()): [] en cualquier paseo con
+            # recogidas, donde cada entrada de `recogidas` ya trae su
+            # propio `fotos_pendientes` (ver el loop de arriba).
+            'fotos_pendientes_legacy': fotos_pendientes_legacy,
+            # Decide si el modal "Subir foto" (compartido por todas las
+            # tarjetas de recogida y por el caso legacy) se renderiza en
+            # absoluto - ver bienvenida_paseador.html.
+            'tiene_fotos_pendientes': (
+                bool(fotos_pendientes_legacy) or any(r.get('fotos_pendientes') for r in items_recogida)
+            ),
             # Certificados (Ley Kiara) - ver _certificados_de_mascotas_para_paseador().
             'mascotas_certificados': _certificados_de_mascotas_para_paseador(id_paseador, mascotas_paseo),
             # Ajustes del 19 de octubre, punto 1 - valor inicial, antes de

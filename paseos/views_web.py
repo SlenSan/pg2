@@ -850,14 +850,21 @@ def marcar_entrega(request, id_paseo, id_dueno):
 
 @require_POST
 @requiere_paseador
-def subir_foto(request, id_paseo, momento):
+def subir_foto(request, id_paseo, momento, id_dueno=None):
     """
     Registro fotografico del paseo (RF15) - distinto de la evidencia de
-    incidentes: son las 3 fotos normales de inicio/mitad/fin, guardadas
-    en paseos.fotos. Un boton explicito por momento (ver
-    bienvenida_paseador.html) en vez de adivinar el momento
-    automaticamente, para que el paseador siempre sepa exactamente que
-    esta subiendo.
+    incidentes: son las 3 fotos normales de inicio/mitad/fin. INC-12
+    (hallazgos de la prueba de usabilidad, 22 de octubre) - ahora son
+    POR DUEÑO (igual que la recogida/entrega), no una sola compartida
+    entre todos los dueños del paseo. `id_dueno` llega en la URL
+    (`paseos:subir_foto`) para un paseo con `recogidas`; `paseos:
+    subir_foto_legacy` (sin `id_dueno` en la URL, `id_dueno=None` aca)
+    es solo para un paseo de ANTES de ese campo, que repository.
+    agregar_foto() ya sabe tratar como compartido (ver su docstring).
+
+    Un boton explicito por momento (ver bienvenida_paseador.html) en vez
+    de adivinar el momento automaticamente, para que el paseador siempre
+    sepa exactamente que esta subiendo.
 
     Responde SIEMPRE en JSON (Incremento 4, punto D1): antes redirigia a
     "usuarios:bienvenida_paseador" - una recarga completa de pagina
@@ -883,7 +890,9 @@ def subir_foto(request, id_paseo, momento):
         return JsonResponse({'error': f'No se pudo subir la foto: {exc}'}, status=502)
 
     id_paseador = ObjectId(request.session['id_usuario'])
-    paseo = repository.agregar_foto(id_paseo=id_paseo, id_paseador=id_paseador, momento=momento, url=url)
+    paseo = repository.agregar_foto(
+        id_paseo=id_paseo, id_paseador=id_paseador, id_dueno=id_dueno, momento=momento, url=url,
+    )
     if not paseo:
         return JsonResponse({
             'error': 'No se pudo registrar la foto: el paseo ya no está activo o ya subiste una foto de ese momento.',

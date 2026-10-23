@@ -261,6 +261,41 @@ def _certificados_de_mascotas_para_paseador(id_paseador, mascotas):
     return resultado
 
 
+def _grupos_de_fotos(paseo, es_dueno, id_usuario, mascotas_por_id_mapa):
+    """
+    INC-12 (hallazgos de la prueba de usabilidad, 22 de octubre) - las
+    fotos del paseo (RF15) ya no son una sola tanda compartida entre
+    todos los dueños (ver paseos.repository.agregar_foto()); esto arma
+    lo que la plantilla necesita para mostrarlas sin mezclar dueños.
+
+    - Dueño: UN solo grupo (las suyas, ver
+      paseos_repository.fotos_visibles_para_dueno() - ya resuelve legacy
+      vs. nuevo, y el caso multi-dueño con fotos viejas sin id). Lista
+      vacía si no tiene ninguna, para que la plantilla no muestre nada.
+    - Paseador: no tiene restricción de privacidad (se los está llevando
+      a todos juntos) - un grupo por cada recogida que ya tenga fotos
+      (etiquetado con el nombre de sus mascotas), más un grupo final sin
+      etiqueta con `paseo.fotos` si quedó algo ahí de ANTES de este
+      punto (paseo legacy, o uno que ya estaba "en_vivo" al desplegarlo).
+    """
+    if es_dueno:
+        fotos = paseos_repository.fotos_visibles_para_dueno(paseo, id_usuario)
+        return [{'etiqueta': None, 'fotos': fotos}] if fotos else []
+
+    grupos = []
+    for r in paseo.get('recogidas', []):
+        if not r.get('fotos'):
+            continue
+        mascotas_r = mascotas_repository.resolver_lista(r.get('id_mascotas', []), mascotas_por_id_mapa)
+        grupos.append({
+            'etiqueta': mascotas_repository.nombres_unidos(mascotas_r) or None,
+            'fotos': r['fotos'],
+        })
+    if paseo.get('fotos'):
+        grupos.append({'etiqueta': None, 'fotos': paseo['fotos']})
+    return grupos
+
+
 def _fecha_iso_utc(valor):
     """
     Los datetimes que devuelve pymongo son naive (UTC sin tzinfo - ver
@@ -377,6 +412,10 @@ def mapa_paseo(request, id_paseo):
         'paseo': paseo,
         'id_paseo': str(paseo['_id']),
         'items_incidentes': items_incidentes,
+        # INC-12 - ver _grupos_de_fotos(). Reemplaza el uso directo de
+        # `paseo.fotos` en la plantilla (compartía las fotos entre
+        # todos los dueños del paseo, problema de privacidad).
+        'fotos_grupos': _grupos_de_fotos(paseo, es_dueno, id_usuario, mascotas_por_id_mapa),
         'mascotas': mascotas,
         'mascotas_certificados': mascotas_certificados,
         'paseador': paseador,

@@ -249,11 +249,24 @@ alarma).
 </p>
 {% endif %}
 
-{% if paseo.fotos %}
+{% comment %}
+INC-12 (hallazgos de la prueba de usabilidad, 22 de octubre) - las fotos
+ya no son `paseo.fotos` a secas (eso mezclaba las de todos los dueños del
+paseo, problema de privacidad ademas del funcional): `fotos_grupos` ya
+viene filtrado para quien esta mirando - ver coordenadas.views_web.
+_grupos_de_fotos(). Un grupo sin `etiqueta` (dueño con las suyas, o una
+tanda legacy que el paseador ve sin dueño identificado) no muestra
+subtitulo; con `etiqueta` (paseador viendo varios dueños), sí.
+{% endcomment %}
+{% if fotos_grupos %}
 <div class="mt-4">
   <h2 class="h5 mb-3">Fotos del paseo</h2>
-  <div class="row row-cols-2 row-cols-md-3 g-3">
-    {% for foto in paseo.fotos %}
+  {% for grupo in fotos_grupos %}
+  {% if grupo.etiqueta %}
+  <p class="small text-muted mb-2">{{ grupo.etiqueta }}</p>
+  {% endif %}
+  <div class="row row-cols-2 row-cols-md-3 g-3 mb-3">
+    {% for foto in grupo.fotos %}
     <div class="col">
       <div class="card h-100">
         <img
@@ -269,6 +282,7 @@ alarma).
     </div>
     {% endfor %}
   </div>
+  {% endfor %}
 </div>
 {% endif %}
 
