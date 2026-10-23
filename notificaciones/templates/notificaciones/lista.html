@@ -11,6 +11,15 @@
 {% endblock %}
 
 {% block content %}
+{% comment %}
+Mejora (hallazgos de la prueba de usabilidad, 22 de octubre) - la misma
+tarjeta "Activar notificaciones en este dispositivo" de los dos
+dashboards, para quien llega directo a esta pantalla sin pasar por ahí.
+Mismo include, se oculta sola si ya está activada o si el servidor no
+tiene Web Push configurado (ver notificaciones/_activar_push.html).
+{% endcomment %}
+{% include 'notificaciones/_activar_push.html' %}
+
 <div class="d-flex justify-content-between align-items-start mb-4">
   <div>
     <h1 class="h4 mb-1">Notificaciones</h1>

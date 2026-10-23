@@ -3117,6 +3117,16 @@ autora observaba.
   [WebKit Bugzilla #254545](https://bugs.webkit.org/show_bug.cgi?id=254545),
   [WebKit Bugzilla #255363](https://bugs.webkit.org/show_bug.cgi?id=255363).
 
+- **Mejora — activar notificaciones desde la pantalla "Notificaciones"**:
+  diagnóstico - `notificaciones/_activar_push.html` ya era un include
+  reutilizable y autocontenido (se oculta solo si `vapid_public_key` no
+  está configurado), y `vapid_public_key` ya llega a CUALQUIER plantilla
+  vía `core.context_processors.push` (registrado en
+  `TEMPLATES.OPTIONS.context_processors`, global). Cambio de una sola
+  línea: `{% include 'notificaciones/_activar_push.html' %}` agregado a
+  `notificaciones/templates/notificaciones/lista.html`, sin tocar
+  ninguna vista.
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
