@@ -102,9 +102,13 @@ valor real):
 | `DJANGO_DEBUG` | `True` en local, `False` en producción. |
 | `DJANGO_ALLOWED_HOSTS` | Hosts permitidos, separados por coma (`localhost,127.0.0.1` alcanza en local). |
 | `MONGO_URI` | Cadena de conexión de MongoDB Atlas. |
-| `MONGO_DB_NAME` | Nombre de la base de datos dentro del cluster (`canigo`). |
+| `MONGO_DB_NAME` | Nombre de la base de datos dentro del cluster (`canigo` en producción, `canigo_dev` en local). |
 | `CLOUDINARY_URL` | Credenciales de Cloudinary en formato `cloudinary://<api_key>:<api_secret>@<cloud_name>`. |
+| `CANIGO_ADMIN_EMAILS` | Correos (separados por coma) con acceso a `/administracion/verificacion/` — RF14. No crea un rol nuevo, deben ser correos de cuentas ya registradas (ver sección 8). |
 | `NOMINATIM_USER_AGENT` | User-Agent con un contacto real, exigido por la política de uso de Nominatim (dirección aproximada de un incidente - ver sección 7/9). |
+| `VAPID_PRIVATE_KEY` | Clave privada VAPID (Web Push, Incremento 4 fase 2) — generada con `python manage.py generar_claves_vapid`, un par nuevo por despliegue, nunca por usuario. |
+| `VAPID_PUBLIC_KEY` | Clave pública VAPID, la contraparte de la anterior — se expone al navegador para suscribirse a notificaciones push. |
+| `VAPID_CLAIMS_EMAIL` | Correo de contacto que exige la especificación VAPID, mismo criterio que `NOMINATIM_USER_AGENT`. |
 
 ## 4. Instalación y ejecución local
 
@@ -213,9 +217,9 @@ Responsabilidad de cada app:
 ## 6. Modelo de datos
 
 La fuente de verdad completa (todos los campos, tipos e índices) es
-[`CLAUDE.md`](CLAUDE.md#esquema-de-base-de-datos-mongodb--7-colecciones-en-servidor) —
+[`CLAUDE.md`](CLAUDE.md#esquema-de-base-de-datos-mongodb--8-colecciones-en-servidor) —
 no se duplica aquí campo por campo para no terminar con dos versiones del
-mismo esquema desincronizándose con el tiempo. Resumen de las 7 colecciones
+mismo esquema desincronizándose con el tiempo. Resumen de las 8 colecciones
 y cómo se relacionan:
 
 - **`usuarios`** — dueños y paseadores en la misma colección, distinguidos
@@ -245,9 +249,29 @@ y cómo se relacionan:
   + `id_duenos` como arrays), y desde la extensión de zonas de servicio,
   cada horario publicado puede llevar 0 o más zonas (`zonas: [String]`,
   lista fija de las 17 comunas de Bucaramanga — ver constante
-  `ZONAS_VALIDAS` en `paseos/repository.py`).
+  `ZONAS_VALIDAS` en `paseos/repository.py`). Cada entrada de
+  `recogidas[]` (una por dueño) tiene su propio `fotos: [{url, momento}]`
+  — INC-12 (22 de octubre): las 3 fotos del paseo (inicio/mitad/fin) son
+  por dueño, no una sola tanda compartida entre todos; cada dueño ve solo
+  las de `recogidas[su propia entrada].fotos`, nunca las de otro dueño
+  del mismo paseo (ver sección 7). El campo `fotos: [{url, momento}]` del
+  nivel de arriba del documento es el esquema **legado** (de antes de
+  `recogidas[]`, cuando un paseo era siempre de un solo dueño) — sigue
+  existiendo tal cual en los paseos viejos que ya lo tenían (no se migra
+  ni se borra), y un paseo `en_vivo` sin `recogidas` todavía escribe ahí
+  (compatibilidad); para un paseo con `recogidas` y varios dueños, ese
+  campo legado deja de mostrarse a cualquier DUEÑO (no hay forma de saber
+  de quién era cada foto vieja) — el paseador sigue viéndolo (no tiene
+  restricción de privacidad sobre su propio paseo).
 - **`coordenadas_detalle`** — un punto GPS por documento, referenciando el
-  paseo (`id_paseo`). Con retención de ~90 días vía índice TTL.
+  paseo (`id_paseo`). Con retención de ~90 días vía índice TTL. Un punto
+  se descarta al guardar si implica una velocidad > 30 km/h respecto al
+  último punto guardado de ese paseo
+  (`coordenadas/repository.py::velocidad_implicita_kmh()`) — la
+  `precision` reportada por el dispositivo no basta por sí sola para
+  detectar un salto geográfico imposible para un paseo a pie (un *fix*
+  de red/Wi-Fi puede reemplazar momentáneamente al GPS satelital con
+  buena precisión reportada pero en el lugar equivocado).
 - **`incidentes`** — referencia el paseo y, opcionalmente, una mascota
   específica afectada (`id_mascota`, `null` solo para `"accidente_paseador"`).
 - **`calificaciones`** — referencia el paseo, el dueño que calificó y el
@@ -255,7 +279,29 @@ y cómo se relacionan:
   con multi-dueño, cada dueño de un paseo compartido califica su propia
   experiencia por separado.
 - **`notificaciones`** — un documento por notificación, con su destinatario
-  (`id_usuario`) y tipo.
+  (`id_usuario`) y tipo. No tiene un campo `leida` — el estado de "leída/
+  no leída" se calcula comparando la `fecha` de cada notificación contra
+  una marca de "vista hasta" guardada en la sesión, no en la base de datos.
+- **`suscripciones_push`** — Incremento 4, fase 2 (Web Push): una
+  suscripción del navegador por dispositivo (`endpoint`, `keys`),
+  referenciando al usuario (`id_usuario`). Un usuario puede tener varias
+  (varios dispositivos). `endpoint` tiene índice único — el mismo
+  dispositivo se re-suscribe por upsert, no por insert nuevo.
+
+**Índices** (los 8 que crea `python manage.py crear_indices`, ver
+`core/management/commands/crear_indices.py` — comando idempotente,
+correrlo varias veces no duplica ni rompe nada):
+
+| # | Colección | Campo(s) | Tipo |
+|---|---|---|---|
+| 1 | `usuarios` | `correo` | único |
+| 2 | `paseos` | `id_paseador`, `estado` | compuesto |
+| 3 | `paseos` | `id_duenos` | simple |
+| 4 | `coordenadas_detalle` | `id_paseo` | simple |
+| 5 | `coordenadas_detalle` | `fecha_recepcion` | TTL, `expireAfterSeconds=7776000` (90 días) |
+| 6 | `calificaciones` | `id_paseo`, `id_dueno` | único, compuesto |
+| 7 | `notificaciones` | `id_usuario`, `fecha` | compuesto |
+| 8 | `suscripciones_push` | `endpoint` | único |
 
 No hay migraciones de esquema al estilo Django (no hay ORM sobre estas
 colecciones) — un campo nuevo simplemente empieza a escribirse desde el
@@ -3117,6 +3163,18 @@ autora observaba.
   [WebKit Bugzilla #254545](https://bugs.webkit.org/show_bug.cgi?id=254545),
   [WebKit Bugzilla #255363](https://bugs.webkit.org/show_bug.cgi?id=255363).
 
+  **Actualización (prueba de usabilidad, 23 de octubre) - SIGUE ABIERTO**:
+  en el mismo iPhone 14 Pro con iOS 27 y Safari, la pantalla se apagó
+  durante el paseo en las **3 sesiones** de la prueba con usuarios
+  reales, y hubo que configurar el celular a mano (quitar el apagado
+  automático) para completarlas. No cambia el diagnóstico de arriba -
+  las dos causas ya descartadas (`Permissions-Policy`, pérdida del
+  gesto del usuario) siguen descartadas, y las hipótesis siguen siendo
+  las mismas 3, ordenadas por probabilidad. El indicador
+  `#estado-wakelock`/`#aviso-wakelock-ayuda` (ya existente desde
+  `a94a4b2`) sigue siendo la única herramienta para distinguirlas en el
+  dispositivo real - no se agregó nada nuevo en este punto.
+
 - **Mejora — activar notificaciones desde la pantalla "Notificaciones"**:
   diagnóstico - `notificaciones/_activar_push.html` ya era un include
   reutilizable y autocontenido (se oculta solo si `vapid_public_key` no
@@ -3126,6 +3184,51 @@ autora observaba.
   línea: `{% include 'notificaciones/_activar_push.html' %}` agregado a
   `notificaciones/templates/notificaciones/lista.html`, sin tocar
   ninguna vista.
+
+**Filtro de salto geográfico en el registro de coordenadas GPS** -
+`coordenadas.views_web.registrar_coordenada()` valida la velocidad
+implícita de cada punto nuevo contra el último punto YA GUARDADO de ese
+paseo, además del filtro de 6s entre envíos ya existente (INC-03) - sin
+esto, un punto con una ubicación geográficamente imposible para un
+paseo a pie (p. ej. varios kilómetros en pocos segundos) se guardaba
+igual, con el único filtro existente (`precision`) sin poder detectarlo:
+un punto GPS puede reportar buena precisión y aun así estar
+completamente fuera de lugar (típico de un *fix* de red/Wi-Fi que
+reemplaza momentáneamente al GPS satelital).
+
+- **Filtro** (`coordenadas/repository.py`): `velocidad_implicita_kmh(
+  punto_anterior, latitud, longitud, fecha_captura)` (función pura) +
+  `VELOCIDAD_MAXIMA_RAZONABLE_KMH = 30` - muy por encima de cualquier
+  ritmo humano real a pie/trotando con un perro, muy por debajo de un
+  salto de varios km en pocos segundos. `registrar_coordenada()`
+  compara cada punto nuevo contra el ÚLTIMO PUNTO YA GUARDADO
+  (`obtener_ultimo_punto()`) ANTES de guardarlo - si la velocidad
+  implícita supera el umbral, se descarta en silencio (mismo patrón que
+  el filtro de 6s: responde `201` con el mismo cuerpo, para que el JS
+  no reintente ni muestre error - no es una falla del paseador).
+  `fecha_captura` se calcula UNA sola vez en la vista (antes se
+  recalculaba por separado al guardar) para que el chequeo y el valor
+  guardado sean exactamente el mismo instante.
+
+  **No se aplica al PRIMER punto de un paseo** (no hay punto anterior
+  con el que comparar) - queda como hueco real del filtro.
+  **Propuesta pendiente de decisión** (no implementada): no guardar el
+  primer punto de inmediato, sino esperar a que el SEGUNDO punto lo
+  confirme (si la velocidad implícita entre el primero y el segundo
+  también supera el umbral, descartar el primero y tratar al segundo
+  como el nuevo candidato) - evita además depender de una precisión
+  mínima arbitraria, que ya se decidió no usar como filtro de guardado
+  en la revisión de fase 1.
+
+  **Verificado ejecutando** (`canigo_dev`, HTTP real): secuencia de 9
+  puntos con un salto temprano (segundo punto real) y otro en medio
+  (~7km cada uno, pocos segundos de diferencia) - los 9 envíos
+  respondieron `201` (nunca un error visible), pero solo 7 quedaron en
+  `coordenadas_detalle` (los 2 saltos NUNCA se guardaron, confirmado
+  comparando coordenadas); `distancia_recorrida_m()` del paseo de
+  prueba dio 94 m (el recorrido real corto), no los ~7-14 km que habría
+  dado con los saltos adentro; los 7 puntos normales sobrevivieron
+  completos.
 
 ## 8. Convenciones del proyecto
 
@@ -3665,16 +3768,18 @@ dashboard):
 
 ## 10. Cómo correr las pruebas
 
-**Hallazgo al verificar esto contra el repositorio** (ver el mensaje que
-acompaña este manual): el proyecto **no tiene un suite de pruebas
-automatizadas dentro del repositorio**. Los archivos `tests.py` que trae
-cada app son el stub vacío de `startapp` (3 líneas, nunca se les agregó
-contenido) — confirmado en las 8 apps. Las verificaciones exhaustivas
-hechas durante el desarrollo (registro/login, ciclo de vida del paseo,
-multi-dueño, notificaciones en vivo, zonas de servicio, etc.) se hicieron
-con scripts sueltos de `requests.Session()` contra un servidor local
-corriendo, pero esos scripts vivieron en un directorio de trabajo temporal
-fuera del control de versiones — nunca se comitearon al repositorio.
+**El proyecto no tiene pruebas automatizadas.** Los archivos `tests.py`
+que trae cada app son el stub vacío de `startapp` (3 líneas, nunca se les
+agregó contenido) — confirmado en las 8 apps, ninguna excepción. La
+verificación de este proyecto es **manual**, siguiendo el plan de pruebas
+con formato IEEE 829 del documento de grado — ese documento, no este
+manual, es la fuente de verdad de qué se prueba y con qué criterio de
+aceptación. Las verificaciones exhaustivas hechas durante el desarrollo
+(registro/login, ciclo de vida del paseo, multi-dueño, notificaciones en
+vivo, zonas de servicio, etc.) se hicieron con scripts sueltos de
+`requests.Session()` contra un servidor local corriendo, pero esos
+scripts vivieron en un directorio de trabajo temporal fuera del control
+de versiones — nunca se comitearon al repositorio.
 
 Lo único que existe hoy como verificación automatizada dentro del repo es
 el chequeo de sistema de Django:
@@ -3684,10 +3789,11 @@ python manage.py check
 ```
 
 Esto valida configuración e imports (URLs, modelos, templates), pero no
-prueba ningún flujo de negocio real contra datos. Si se quiere evidencia
-formal de pruebas para el jurado, hace falta decidir un siguiente paso
-concreto — por ejemplo, migrar algunos de esos scripts de verificación a
-un módulo `tests.py` real por app (con `django.test.TestCase` o
-`pytest-django`), o documentar los escenarios probados manualmente como un
-plan de pruebas aparte. Este manual no asume ninguna de las dos opciones
-por decisión propia — es una decisión pendiente de tomar.
+prueba ningún flujo de negocio real contra datos — no reemplaza al plan
+IEEE 829. Si en el futuro se quiere además evidencia de pruebas
+automatizadas dentro del repositorio, un siguiente paso posible sería
+migrar algunos de esos scripts de verificación a un módulo `tests.py`
+real por app (con `django.test.TestCase` o `pytest-django`) — pero eso
+sería un AGREGADO al plan IEEE 829 ya existente, no un reemplazo; no es
+una decisión pendiente para que el proyecto tenga pruebas, sino una
+posible mejora futura sobre una base que ya está definida y cerrada.

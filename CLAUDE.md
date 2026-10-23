@@ -279,7 +279,18 @@ Un documento en la colección `paseos` transita por exactamente estos 3 estados
                             // al guardar - se guarda siempre, con su precision tal cual llegó.
                             // El umbral de 50m solo se aplica del lado del DIBUJO del mapa
                             // (UMBRAL_PRECISION_DIBUJO en coordenadas/templates/coordenadas/
-                            // mapa.html), nunca al escribir en esta colección.
+                            // mapa.html), nunca al escribir en esta colección. Por otro lado,
+                            // un punto SÍ se descarta al guardar si implica una velocidad
+                            // > 30 km/h respecto al ÚLTIMO PUNTO GUARDADO de este paseo
+                            // (coordenadas.repository.velocidad_implicita_kmh()/
+                            // VELOCIDAD_MAXIMA_RAZONABLE_KMH, aplicado en
+                            // coordenadas.views_web.registrar_coordenada()) - un punto GPS
+                            // puede reportar precision buena y aun así estar fuera de lugar
+                            // (típico de un fix de red/Wi-Fi reemplazando al GPS satelital),
+                            // así que precision sola no alcanza para este tipo de error. No
+                            // se aplica al PRIMER punto de un paseo (no hay punto anterior con
+                            // el que comparar) - ver MANUAL_DESARROLLADOR.md para la propuesta
+                            // pendiente de decisión sobre ese caso.
   fecha_captura: Date,     // capturado en el dispositivo
   fecha_recepcion: Date    // recibido por el servidor
 }
