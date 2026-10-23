@@ -3056,6 +3056,67 @@ autora observaba.
   tanto el diagnóstico como el fix se verificaron con HTTP real contra
   `canigo_dev`.
 
+- **INC-13 — la pantalla encendida no se mantiene en iPhone 14 Pro, iOS
+  27, Safari (sin instalar a inicio, sin modo de bajo consumo)**: no se
+  pudo confirmar la causa raíz sin el dispositivo - se descartaron dos
+  hipótesis y se investigó en fuentes externas (no solo de memoria),
+  citadas abajo.
+
+  **Descartado, confirmado**:
+  - Ningún `Permissions-Policy`/`Feature-Policy` bloqueando
+    `screen-wake-lock`: `config/settings.py` y el middleware del
+    proyecto nunca agregan ese encabezado, y se confirmó con
+    `curl -I` contra la URL real de producción
+    (`https://canigo-4ruf.onrender.com/cuentas/login/`) que la
+    respuesta tampoco lo trae (ni Render ni Cloudflare lo agregan por su
+    cuenta).
+  - El pedido YA se hace sin ningún `await` previo dentro del manejador
+    de `click` (`document.addEventListener('click', pedirWakeLock)`,
+    `core/templates/base.html`) - no hay pérdida de activación del
+    usuario de por medio.
+
+  **El indicador discreto del estado del Wake Lock que pide este punto
+  ya existía** - se agregó en el ajuste del 20 de octubre, punto 2
+  (`a94a4b2`): `#estado-wakelock` ("Pantalla activa: sí / no
+  (NotAllowedError) / no disponible / no (el sistema lo liberó)") y
+  `#aviso-wakelock-ayuda`, ambos en el panel del paseador. No se agregó
+  nada nuevo para esto - la autora debe revisar ESE texto, en su propio
+  iPhone, justo en el momento en que la pantalla empieza a apagarse, en
+  la próxima caminata real.
+
+  **Investigado en MDN/caniuse/WebKit Bugzilla**: Safari en iOS soporta
+  `navigator.wakeLock` desde la versión 16.4 en pestaña normal de Safari
+  (que es como se reprodujo la falla, no instalado en pantalla de
+  inicio). El bug de WebKit #254545 (API rota en apps instaladas en
+  pantalla de inicio, arreglado recién en iOS 18.4) no aplica aquí por
+  ese mismo motivo. Se encontró un bug relacionado, sin confirmación de
+  que esté resuelto: WebKit #255363, *"Wake Lock does not work after
+  visibilitychange event to re-acquire wake lock if user goes to home
+  screen"* - el evento `release` del `WakeLockSentinel` podría no
+  dispararse de forma confiable en Safari, dejando el código creyendo
+  que el lock sigue activo (`yaConcedido = true` trabado) mientras la
+  pantalla ya se apagó de verdad - en ese caso ningún toque posterior
+  volvería a pedirlo, porque el código no sabe que lo perdió.
+
+  **Hipótesis, ordenadas por probabilidad, y qué debe distinguir la
+  autora en su iPhone**: (1) el evento `release` no se dispara de forma
+  confiable en Safari - si `#estado-wakelock` sigue diciendo "sí"
+  justo cuando la pantalla empieza a apagarse, apunta a esto; (2) iOS
+  concede el lock pero no lo hace cumplir con la misma fuerza que
+  Chrome/Android (limitación de la implementación, no del código del
+  proyecto) - si el indicador cambia a otro texto distinto de "sí" en
+  ese momento, apunta a esto o a (3); (3) algo específico de iOS 27 que
+  no se puede investigar más sin el dispositivo.
+
+  **Sin cambios de código para este punto** - diagnóstico y revisión de
+  fuentes únicamente, como pide la tarea ("si no se puede confirmar sin
+  el dispositivo, las hipótesis ordenadas por probabilidad").
+
+  Fuentes consultadas: [caniuse - Screen Wake Lock API](https://caniuse.com/wake-lock),
+  [caniuse - Navigator API: wakeLock](https://caniuse.com/mdn-api_navigator_wakelock),
+  [WebKit Bugzilla #254545](https://bugs.webkit.org/show_bug.cgi?id=254545),
+  [WebKit Bugzilla #255363](https://bugs.webkit.org/show_bug.cgi?id=255363).
+
 ## 8. Convenciones del proyecto
 
 - **"Best effort" para una integración externa opcional, cuando ya hay
